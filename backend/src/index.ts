@@ -1,5 +1,4 @@
 import { serve } from '@hono/node-server'
-import { setupWSConnection } from '@y/websocket-server/utils'
 import { Hono } from 'hono'
 import { cors } from 'hono/cors'
 import { WebSocketServer } from 'ws'
@@ -7,6 +6,7 @@ import { WebSocketServer } from 'ws'
 import { auth } from './auth.js'
 import { initializeDatabase } from './db/init.js'
 import { env } from './env.js'
+import { setupWSConnection } from './y-websocket-server.js'
 
 type AppVariables = {
   user: typeof auth.$Infer.Session.user | null
