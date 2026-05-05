@@ -1,0 +1,31 @@
+{
+  "name": "yjs-test",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Realtime collaboration app with React, Hono, Better Auth, and Drizzle",
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
+  "scripts": {
+    "dev": "concurrently -n backend,frontend -c blue,green \"npm run dev -w backend\" \"npm run dev -w frontend\"",
+    "build": "npm run build -w backend && npm run build -w frontend",
+    "typecheck": "npm run typecheck -w backend && npm run typecheck -w frontend",
+    "db:init": "npm run db:init -w backend",
+    "db:generate": "npm run db:init -w backend",
+    "db:migrate": "npm run db:init -w backend"
+  },
+  "keywords": [
+    "yjs",
+    "hono",
+    "better-auth",
+    "drizzle",
+    "monaco"
+  ],
+  "author": "",
+  "license": "MIT",
+  "type": "module",
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  }
+}
