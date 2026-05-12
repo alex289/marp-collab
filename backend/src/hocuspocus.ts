@@ -56,7 +56,9 @@ export const attachCollabServer = (collabServer: Server, httpServer: HttpServer)
 			await hocuspocus.hooks("onUpgrade", { request, socket, head, instance: hocuspocus });
 			crossws.handleUpgrade(request, socket, head);
 		} catch (error) {
-			if (error) throw error;
+			if (error) {
+				throw error;
+			}
 		}
 	});
 };
