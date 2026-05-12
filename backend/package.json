@@ -15,11 +15,13 @@
 		"better-auth": "^1.6.10",
 		"better-sqlite3": "^12.9.0",
 		"hono": "^4.12.18",
+		"ws": "^8.20.0",
 		"yjs": "^13.6.30"
 	},
 	"devDependencies": {
 		"@types/better-sqlite3": "^7.6.13",
 		"@types/node": "^25.7.0",
+		"@types/ws": "^8.18.1",
 		"rolldown": "^1.0.0",
 		"typescript": "^6.0.3"
 	}

@@ -16,7 +16,7 @@ export const useFiles = () => {
 		setError(null);
 
 		try {
-			const response = await fetch(`${API_URL}/api/files`, {
+			const response = await fetch(`${API_URL}/files`, {
 				credentials: "include",
 			});
 

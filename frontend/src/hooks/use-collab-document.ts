@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { HocuspocusProvider } from "@hocuspocus/provider";
 import type { Awareness } from "y-protocols/awareness.js";
 import * as Y from "yjs";
-import { COLLAB_URL } from "@/lib/config";
+import { API_URL } from "@/lib/config";
 import type { PresenceUser, SessionUser } from "@/lib/types";
 
 type CollabState = {
@@ -64,7 +64,7 @@ export const useCollabDocument = (documentName: string | null, user: PresenceUse
 		const undoManager = new Y.UndoManager(yText);
 
 		const provider = new HocuspocusProvider({
-			url: COLLAB_URL,
+			url: `${API_URL}/collab`,
 			name: documentName,
 			document: yDoc,
 			token: JSON.stringify(user),

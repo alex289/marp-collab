@@ -1,6 +1,5 @@
-import { Server } from "@hocuspocus/server";
+import { Hocuspocus } from "@hocuspocus/server";
 import { randomUUID } from "node:crypto";
-import type { Server as HttpServer } from "node:http";
 import * as Y from "yjs";
 import { initialDocumentContent } from "./files.ts";
 
@@ -46,25 +45,8 @@ const parseAuthToken = (token?: string): CollabContext => {
 	return makeGuestContext();
 };
 
-export const attachCollabServer = (collabServer: Server, httpServer: HttpServer): void => {
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
-	const crossws = (collabServer as any).crossws;
-	const { hocuspocus } = collabServer;
-
-	httpServer.on("upgrade", async (request, socket, head) => {
-		try {
-			await hocuspocus.hooks("onUpgrade", { request, socket, head, instance: hocuspocus });
-			crossws.handleUpgrade(request, socket, head);
-		} catch (error) {
-			if (error) {
-				throw error;
-			}
-		}
-	});
-};
-
-export const createCollabServer = (): Server => {
-	return new Server<CollabContext>({
+export function createCollabServer() {
+	return new Hocuspocus({
 		timeout: 30_000,
 		async onAuthenticate({ token }: { token?: string }) {
 			return parseAuthToken(token);
@@ -86,4 +68,4 @@ export const createCollabServer = (): Server => {
 			persistedUpdates.set(documentName, Y.encodeStateAsUpdate(document));
 		},
 	});
-};
+}

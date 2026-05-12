@@ -1,9 +1,8 @@
-import { serve } from "@hono/node-server";
-import type { Server as HttpServer } from "node:http";
+import { serve, upgradeWebSocket } from "@hono/node-server";
 import { Hono } from "hono";
-import { auth, type AuthSession } from "./auth.ts";
+import { auth } from "./auth.ts";
 import { deckFiles, toDocumentName } from "./collab/files.ts";
-import { attachCollabServer, createCollabServer } from "./collab/hocuspocus.ts";
+import { createCollabServer } from "./collab/hocuspocus.ts";
 import { timeout } from "hono/timeout";
 import { trimTrailingSlash } from "hono/trailing-slash";
 import { secureHeaders } from "hono/secure-headers";
@@ -14,6 +13,7 @@ import { serveStatic } from "@hono/node-server/serve-static";
 import { isDev } from "./helpers/isDev.ts";
 import { runMigrations } from "./migrations/index.ts";
 import type { AppVariables } from "./types.ts";
+import { WebSocketServer } from "ws";
 
 runMigrations();
 
@@ -110,16 +110,45 @@ app.onError((err, c) => {
 	return c.json({ error: "Internal Server Error" }, 500);
 });
 
-const httpServer = serve(
+const collabServer = createCollabServer();
+
+app.get(
+	"/api/v1/collab",
+	upgradeWebSocket((c) => {
+		let clientConnection: ReturnType<typeof collabServer.handleConnection> | undefined;
+		return {
+			onOpen(_evt, ws) {
+				if (!ws.raw) {
+					throw new Error("WebSocket upgrade failed, raw WebSocket not available");
+				}
+				ws.raw.binaryType = "arraybuffer";
+				clientConnection = collabServer.handleConnection(ws.raw, c.req.raw, {});
+			},
+			onMessage(evt) {
+				clientConnection?.handleMessage(new Uint8Array(evt.data));
+			},
+			onClose() {
+				clientConnection?.handleClose();
+			},
+		};
+	}),
+);
+
+const wss = new WebSocketServer({ noServer: true });
+
+serve(
 	{
 		fetch: app.fetch,
 		port: Number(process.env.PORT ?? 8787),
 		hostname: process.env.HOSTNAME ?? undefined,
+		websocket: { server: wss },
 	},
 	(info) => {
+		collabServer.hooks("onListen", {
+			instance: collabServer,
+			configuration: collabServer.configuration,
+			port: info.port,
+		});
 		console.log(`Listening on http://localhost:${info.port} (HTTP + WebSocket)`);
 	},
 );
-
-const collabServer = createCollabServer();
-attachCollabServer(collabServer, httpServer as unknown as HttpServer);
