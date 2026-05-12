@@ -1,6 +1,7 @@
 # Realtime Marp Collaboration (MVP)
 
 Stack:
+
 - Backend: Hono, Better Auth, Hocuspocus, Yjs, TypeScript
 - Frontend: Vite, React, CodeMirror 6, Shadcn-style UI, Marp Core
 
@@ -14,6 +15,7 @@ npm run dev
 ```
 
 Backend URLs:
+
 - HTTP API: http://localhost:8787
 - WebSocket (Hocuspocus): ws://localhost:1234
 
@@ -27,6 +29,7 @@ npm run dev
 ```
 
 Frontend URL:
+
 - http://localhost:5173
 
 ## Features

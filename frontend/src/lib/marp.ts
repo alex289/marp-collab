@@ -1,9 +1,9 @@
 import { Marp } from "@marp-team/marp-core";
 
 const marp = new Marp({
-  html: true,
+	html: true,
 });
 
 export const renderMarp = (markdown: string) => {
-  return marp.render(markdown);
+	return marp.render(markdown);
 };

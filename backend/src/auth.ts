@@ -66,16 +66,16 @@ const webOrigin = process.env.WEB_ORIGIN ?? "http://localhost:5173";
 const authBaseURL = process.env.BETTER_AUTH_URL ?? "http://localhost:8787";
 
 export const auth = betterAuth({
-  baseURL: authBaseURL,
-  basePath: "/api/auth",
-  trustedOrigins: [webOrigin],
-  database: db,
-  emailAndPassword: {
-    enabled: true,
-  },
-  user: {
-    additionalFields: {},
-  },
+	baseURL: authBaseURL,
+	basePath: "/api/auth",
+	trustedOrigins: [webOrigin],
+	database: db,
+	emailAndPassword: {
+		enabled: true,
+	},
+	user: {
+		additionalFields: {},
+	},
 });
 
 export type AuthSession = typeof auth.$Infer.Session;

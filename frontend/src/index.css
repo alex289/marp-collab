@@ -5,47 +5,47 @@
 @tailwind utilities;
 
 @layer base {
-  :root {
-    --background: 193 52% 96%;
-    --foreground: 198 45% 12%;
-    --card: 0 0% 100%;
-    --card-foreground: 198 45% 12%;
-    --primary: 187 92% 30%;
-    --primary-foreground: 186 100% 97%;
-    --secondary: 39 100% 93%;
-    --secondary-foreground: 24 57% 22%;
-    --muted: 193 34% 92%;
-    --muted-foreground: 195 20% 36%;
-    --accent: 29 95% 67%;
-    --accent-foreground: 25 60% 16%;
-    --border: 193 30% 82%;
-    --input: 193 30% 82%;
-    --ring: 187 92% 30%;
-    --radius: 0.9rem;
-  }
+	:root {
+		--background: 193 52% 96%;
+		--foreground: 198 45% 12%;
+		--card: 0 0% 100%;
+		--card-foreground: 198 45% 12%;
+		--primary: 187 92% 30%;
+		--primary-foreground: 186 100% 97%;
+		--secondary: 39 100% 93%;
+		--secondary-foreground: 24 57% 22%;
+		--muted: 193 34% 92%;
+		--muted-foreground: 195 20% 36%;
+		--accent: 29 95% 67%;
+		--accent-foreground: 25 60% 16%;
+		--border: 193 30% 82%;
+		--input: 193 30% 82%;
+		--ring: 187 92% 30%;
+		--radius: 0.9rem;
+	}
 
-  * {
-    @apply border-border;
-  }
+	* {
+		@apply border-border;
+	}
 
-  body {
-    @apply min-h-screen bg-background font-sans text-foreground antialiased;
-    margin: 0;
-    background-image:
-      radial-gradient(circle at 10% 10%, rgba(14, 165, 233, 0.16), transparent 44%),
-      radial-gradient(circle at 90% 14%, rgba(251, 146, 60, 0.2), transparent 42%),
-      linear-gradient(180deg, rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0.96));
-    background-attachment: fixed;
-  }
+	body {
+		@apply min-h-screen bg-background font-sans text-foreground antialiased;
+		margin: 0;
+		background-image:
+			radial-gradient(circle at 10% 10%, rgba(14, 165, 233, 0.16), transparent 44%),
+			radial-gradient(circle at 90% 14%, rgba(251, 146, 60, 0.2), transparent 42%),
+			linear-gradient(180deg, rgba(255, 255, 255, 0.4), rgba(255, 255, 255, 0.96));
+		background-attachment: fixed;
+	}
 
-  h1,
-  h2,
-  h3,
-  h4 {
-    margin: 0;
-  }
+	h1,
+	h2,
+	h3,
+	h4 {
+		margin: 0;
+	}
 }
 
 #root {
-  min-height: 100vh;
+	min-height: 100vh;
 }
