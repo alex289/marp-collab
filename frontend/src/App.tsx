@@ -1,14 +1,14 @@
 import { useEffect, useState } from "react";
 import { CircleUserRound } from "lucide-react";
 import { AuthPanel } from "@/components/auth-panel";
-import { EditorPane } from "@/components/editor-pane";
 import { FileSidebar } from "@/components/file-sidebar";
 import { PreviewPane } from "@/components/preview-pane";
 import { Badge } from "@/components/ui/badge";
 import { useCollabDocument, usePresenceUser } from "@/hooks/use-collab-document";
 import { useFiles } from "@/hooks/use-files";
 import { useSession } from "@/lib/auth-client";
-import type { DeckFile, SessionUser } from "@/types";
+import type { DeckFile, SessionUser } from "@/lib/types";
+import { EditorPane } from "./components/editor-pane";
 
 type SessionPayload = {
 	user?: SessionUser;
@@ -86,7 +86,7 @@ const App = () => {
 					</div>
 
 					<div className="flex flex-wrap items-start justify-between gap-3">
-						<Badge variant="muted" className="text-xs">
+						<Badge variant="secondary" className="text-xs">
 							Workspace: main
 						</Badge>
 						<AuthPanel />

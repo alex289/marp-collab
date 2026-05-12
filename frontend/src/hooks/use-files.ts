@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 import { API_URL } from "@/lib/config";
-import type { DeckFile } from "@/types";
+import type { DeckFile } from "@/lib/types";
 
 type FilesResponse = {
 	files: DeckFile[];

@@ -4,7 +4,7 @@ import { EditorView, keymap } from "@codemirror/view";
 import { indentWithTab } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
 import { basicSetup } from "codemirror";
-import type { Awareness } from "y-protocols/awareness";
+import type { Awareness } from "y-protocols/awareness.js";
 import * as Y from "yjs";
 import { yCollab, yUndoManagerKeymap } from "y-codemirror.next";
 import { Badge } from "@/components/ui/badge";
@@ -53,7 +53,7 @@ export const EditorPane = ({ label, yText, awareness, undoManager, status }: Edi
 		}
 
 		if (status === "connecting") {
-			return "muted";
+			return "secondary";
 		}
 
 		return "outline";

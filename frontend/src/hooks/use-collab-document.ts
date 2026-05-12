@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import { HocuspocusProvider } from "@hocuspocus/provider";
-import type { Awareness } from "y-protocols/awareness";
+import type { Awareness } from "y-protocols/awareness.js";
 import * as Y from "yjs";
 import { COLLAB_URL } from "@/lib/config";
-import type { PresenceUser, SessionUser } from "@/types";
+import type { PresenceUser, SessionUser } from "@/lib/types";
 
 type CollabState = {
 	yText: Y.Text | null;
