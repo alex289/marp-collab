@@ -1,10 +1,11 @@
 import "dotenv/config";
 import { serve } from "@hono/node-server";
+import type { Server as HttpServer } from "node:http";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { auth, type AuthSession } from "./auth.js";
 import { deckFiles, toDocumentName } from "./files.js";
-import { createCollabServer } from "./hocuspocus.js";
+import { attachCollabServer, createCollabServer } from "./hocuspocus.js";
 
 type AppVariables = {
   user: AuthSession["user"] | null;
@@ -15,7 +16,6 @@ const app = new Hono<{ Variables: AppVariables }>();
 
 const webOrigin = process.env.WEB_ORIGIN ?? "http://localhost:5173";
 const httpPort = Number(process.env.PORT ?? 8787);
-const collabPort = Number(process.env.HOCUSPOCUS_PORT ?? 1234);
 
 app.use(
   "/api/*",
@@ -70,17 +70,15 @@ app.get("/api/files", (c) => {
 
 app.get("/", (c) => c.text("Marp realtime backend is running."));
 
-serve(
+const httpServer = serve(
   {
     fetch: app.fetch,
     port: httpPort,
   },
   (info) => {
-    console.log(`HTTP API listening on http://localhost:${info.port}`);
+    console.log(`Listening on http://localhost:${info.port} (HTTP + WebSocket)`);
   },
 );
 
-const collabServer = createCollabServer(collabPort);
-collabServer.listen();
-
-console.log(`Hocuspocus listening on ws://localhost:${collabPort}`);
+const collabServer = createCollabServer();
+attachCollabServer(collabServer, httpServer as unknown as HttpServer);

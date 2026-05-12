@@ -14,8 +14,8 @@
   "type": "module",
   "dependencies": {
     "@hocuspocus/server": "^4.0.0",
-    "@hono/node-server": "^2.0.1",
-    "better-auth": "^1.6.9",
+    "@hono/node-server": "^2.0.2",
+    "better-auth": "^1.6.10",
     "better-sqlite3": "^12.9.0",
     "dotenv": "^17.4.2",
     "hono": "^4.12.18",
@@ -23,7 +23,7 @@
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",
-    "@types/node": "^25.6.0",
+    "@types/node": "^25.7.0",
     "tsx": "^4.21.0",
     "typescript": "^6.0.3"
   }
