@@ -2,7 +2,7 @@ import { Server } from "@hocuspocus/server";
 import { randomUUID } from "node:crypto";
 import type { Server as HttpServer } from "node:http";
 import * as Y from "yjs";
-import { initialDocumentContent } from "./files.js";
+import { initialDocumentContent } from "./files.ts";
 
 type CollabContext = {
 	userId: string;
