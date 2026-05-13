@@ -9,6 +9,7 @@ import { useFiles } from "@/hooks/use-files";
 import type { DeckFile, SessionUser } from "@/lib/types";
 import { EditorPane } from "./editor-pane";
 import { cn } from "@/lib/utils";
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 
 export function MainScreen({ sessionUser }: { sessionUser: SessionUser }) {
 	const presenceUser = usePresenceUser(sessionUser);
@@ -57,32 +58,28 @@ export function MainScreen({ sessionUser }: { sessionUser: SessionUser }) {
 	return (
 		<div className="min-h-screen bg-halo pb-4 pt-6 text-foreground">
 			<div className="mx-auto flex w-[min(1440px,96vw)] flex-col gap-4">
-				<header className="rounded-xl border border-border bg-card/85 p-4 shadow-panel backdrop-blur">
-					<div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-						<div>
-							<h1 className="text-2xl font-bold tracking-tight md:text-3xl">Marp Collab</h1>
-							<p className="text-sm text-muted-foreground">
-								Collaborative Markdown editor for Marp decks
-							</p>
-						</div>
-
-						<div className="inline-flex items-center gap-2 rounded-full border border-border bg-background px-3 py-1.5 text-xs">
-							<CircleUserRound className="h-4 w-4" />
-							Presence as <strong>{presenceUser.userName}</strong>
-							<span
-								className="h-2.5 w-2.5 rounded-full"
-								style={{ backgroundColor: presenceUser.color }}
-							/>
-						</div>
-					</div>
-
-					<div className="flex flex-wrap items-start justify-between gap-3">
+				<Card>
+					<CardHeader>
+						<CardTitle>Marp Collab</CardTitle>
+						<CardDescription>Collaborative Markdown editor for Marp decks</CardDescription>
+						<CardAction>
+							<Badge variant="secondary" className="inline-flex items-center gap-2">
+								<CircleUserRound className="h-4 w-4" />
+								Presence as <strong>{presenceUser.userName}</strong>
+								<span
+									className="h-2.5 w-2.5 rounded-full"
+									style={{ backgroundColor: presenceUser.color }}
+								/>
+							</Badge>
+						</CardAction>
+					</CardHeader>
+					<CardContent className="flex justify-between">
 						<Badge variant="secondary" className="text-xs">
 							Workspace: main
 						</Badge>
 						<AuthPanel />
-					</div>
-				</header>
+					</CardContent>
+				</Card>
 
 				<main
 					className={cn(
