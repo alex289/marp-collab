@@ -8,7 +8,14 @@ import type { Awareness } from "y-protocols/awareness.js";
 import * as Y from "yjs";
 import { yCollab, yUndoManagerKeymap } from "y-codemirror.next";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardAction, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+	Card,
+	CardAction,
+	CardContent,
+	CardDescription,
+	CardHeader,
+	CardTitle,
+} from "@/components/ui/card";
 
 type Participant = {
 	id: string;
@@ -45,6 +52,9 @@ const editorTheme = EditorView.theme({
 	},
 	".cm-activeLineGutter": {
 		backgroundColor: "var(--secondary) !important",
+	},
+	"&.cm-focused": {
+		outline: "none",
 	},
 });
 
@@ -120,34 +130,36 @@ export const EditorPane = ({ label, yText, awareness, undoManager, status }: Edi
 
 	return (
 		<Card className="flex h-full min-h-0 flex-col overflow-hidden border-border/80">
-			<CardHeader>
+			<CardHeader className="border-b border-border">
 				<CardTitle>Editor</CardTitle>
-				<CardDescription>{label ?? "Bitte Datei wählen"}</CardDescription>
+				<CardDescription>
+					{label ?? "Bitte Datei wählen"}
+
+					<div className="flex flex-wrap items-center gap-2 px-4 py-2">
+						{participants.length === 0 ? (
+							<p className="text-xs text-muted-foreground">No active collaborators yet</p>
+						) : (
+							participants.map((participant) => (
+								<div
+									key={participant.id}
+									className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-2 py-1 text-xs"
+								>
+									<span
+										className="h-2 w-2 rounded-full"
+										style={{ backgroundColor: participant.color }}
+									/>
+									{participant.name}
+								</div>
+							))
+						)}
+					</div>
+				</CardDescription>
 				<CardAction>
 					<Badge variant={statusVariant}>{status}</Badge>
 				</CardAction>
 			</CardHeader>
 
-			<div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-2">
-				{participants.length === 0 ? (
-					<p className="text-xs text-muted-foreground">No active collaborators yet</p>
-				) : (
-					participants.map((participant) => (
-						<div
-							key={participant.id}
-							className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-2 py-1 text-xs"
-						>
-							<span
-								className="h-2 w-2 rounded-full"
-								style={{ backgroundColor: participant.color }}
-							/>
-							{participant.name}
-						</div>
-					))
-				)}
-			</div>
-
-			<div className="min-h-0 flex-1 bg-card">
+			<CardContent className="p-0">
 				{yText ? (
 					<div ref={mountRef} className="h-full" />
 				) : (
@@ -155,7 +167,7 @@ export const EditorPane = ({ label, yText, awareness, undoManager, status }: Edi
 						Choose a file on the left to get started.
 					</div>
 				)}
-			</div>
+			</CardContent>
 		</Card>
 	);
 };

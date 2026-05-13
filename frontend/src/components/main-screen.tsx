@@ -15,7 +15,7 @@ export function MainScreen({ sessionUser }: { sessionUser: SessionUser }) {
 	const presenceUser = usePresenceUser(sessionUser);
 	const { files, isLoading, error, reload } = useFiles();
 	const [selectedFile, setSelectedFile] = useState<DeckFile | null>(null);
-	const [sidebarOpen, setSidebarOpen] = useState(false);
+	const [sidebarOpen, setSidebarOpen] = useState(true);
 	const [markdown, setMarkdown] = useState("");
 
 	useEffect(() => {
