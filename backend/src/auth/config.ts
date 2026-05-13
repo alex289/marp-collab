@@ -1,14 +1,15 @@
 import type { GenericOAuthConfig } from "better-auth/plugins";
 import { logger } from "../helpers/logger.ts";
 
+const publicProviderInfo: { name: string; id: string }[] = [];
 let providers: GenericOAuthConfig[] | undefined = undefined;
 
-const envBaseName = "OAUTH_PROVIDER_";
+const envBaseName = "AUTH_PROVIDER_";
 
 function parseEnvName(envName: string) {
 	const parts = envName.substring(envBaseName.length).split("_");
 	const providerId = parts[0].toLowerCase();
-	const configKey = parts.slice(1).join("_").toLowerCase();
+	const configKey = parts.slice(1).join("_").toUpperCase();
 	return { providerId, configKey };
 }
 
@@ -18,7 +19,11 @@ export function loadAuthConfig() {
 	for (const key in process.env) {
 		if (key.startsWith(envBaseName)) {
 			const { providerId, configKey } = parseEnvName(key);
-			const value = process.env[key];
+			const value = process.env[key]?.trim();
+
+			if (!value) {
+				continue;
+			}
 
 			if (!parsedProviders.has(providerId)) {
 				parsedProviders.set(providerId, { providerId });
@@ -27,6 +32,9 @@ export function loadAuthConfig() {
 			const providerConfig = parsedProviders.get(providerId)!;
 
 			switch (configKey) {
+				case "NAME":
+					publicProviderInfo.push({ name: value, id: providerId });
+					break;
 				case "CLIENT_ID":
 					providerConfig.clientId = value;
 					break;
@@ -44,18 +52,29 @@ export function loadAuthConfig() {
 	providers = [];
 	for (const [providerId, config] of parsedProviders.entries()) {
 		if (!config.clientId) {
-			logger.error(`Missing client ID for provider ${providerId}. Skipping this provider.`);
+			logger.error(
+				`Missing CLIENT_ID environment variable for provider ${providerId}. Skipping this provider.`,
+			);
 			continue;
 		}
 
 		if (!config.clientSecret) {
-			logger.error(`Missing client secret for provider ${providerId}. Skipping this provider.`);
+			logger.error(
+				`Missing CLIENT_SECRET environment variable for provider ${providerId}. Skipping this provider.`,
+			);
 			continue;
 		}
 
 		if (!config.discoveryUrl) {
 			logger.error(
-				`Missing discovery URL for provider ${providerId}. Manual configuration of endpoints is not supported yet. Skipping this provider.`,
+				`Missing DISCOVERY_URL environment variable for provider ${providerId}. Manual configuration of endpoints is not supported yet. Skipping this provider.`,
+			);
+			continue;
+		}
+
+		if (!publicProviderInfo.some((info) => info.id === providerId)) {
+			logger.warn(
+				`Missing NAME environment variable for provider ${providerId}. Skipping this provider.`,
 			);
 			continue;
 		}
@@ -77,4 +96,8 @@ export function getAuthProviders(): GenericOAuthConfig[] {
 		}
 	}
 	return providers;
+}
+
+export function getPublicProviderInfo() {
+	return publicProviderInfo;
 }

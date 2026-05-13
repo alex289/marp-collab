@@ -39,7 +39,11 @@ app.on(["GET", "POST"], "/api/v1/auth/*", (c) => {
 
 app.use("/api/*", async (c, next) => {
 	// Routes without authentication
-	if (c.req.path.startsWith("/api/auth/") || c.req.path.startsWith("/api/health")) {
+	if (
+		c.req.path.startsWith("/api/auth/") ||
+		c.req.path.startsWith("/api/health") ||
+		c.req.path === "/api/v1/auth-providers"
+	) {
 		return next();
 	}
 
@@ -104,8 +108,8 @@ serve(
 		hostname: process.env.HOSTNAME ?? undefined,
 		websocket: { server: wss },
 	},
-	(info) => {
-		collabServer.hooks("onListen", {
+	async (info) => {
+		await collabServer.hooks("onListen", {
 			instance: collabServer,
 			configuration: collabServer.configuration,
 			port: info.port,
