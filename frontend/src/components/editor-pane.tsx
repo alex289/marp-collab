@@ -8,7 +8,7 @@ import type { Awareness } from "y-protocols/awareness.js";
 import * as Y from "yjs";
 import { yCollab, yUndoManagerKeymap } from "y-codemirror.next";
 import { Badge } from "@/components/ui/badge";
-import { Card } from "@/components/ui/card";
+import { Card, CardAction, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 type Participant = {
 	id: string;
@@ -27,19 +27,24 @@ type EditorPaneProps = {
 const editorTheme = EditorView.theme({
 	"&": {
 		height: "100%",
-		fontFamily: "'IBM Plex Mono', monospace",
+		fontFamily: "'Geist Mono Variable', monospace",
 		fontSize: "14px",
 	},
 	".cm-scroller": {
+		fontFamily: "'Geist Mono Variable', monospace",
 		overflow: "auto",
 	},
 	".cm-content": {
+		fontFamily: "'Geist Mono Variable', monospace",
 		minHeight: "100%",
 		padding: "16px",
 	},
 	".cm-gutters": {
 		borderRight: "1px solid hsl(var(--border))",
 		background: "hsl(var(--card))",
+	},
+	".cm-activeLineGutter": {
+		backgroundColor: "var(--secondary) !important",
 	},
 });
 
@@ -115,17 +120,17 @@ export const EditorPane = ({ label, yText, awareness, undoManager, status }: Edi
 
 	return (
 		<Card className="flex h-full min-h-0 flex-col overflow-hidden border-border/80">
-			<header className="flex items-center justify-between gap-2 border-b border-border px-4 py-2.5">
-				<div>
-					<p className="text-sm font-semibold">Editor</p>
-					<p className="text-xs text-muted-foreground">{label ?? "Bitte Datei wählen"}</p>
-				</div>
-				<Badge variant={statusVariant}>{status}</Badge>
-			</header>
+			<CardHeader>
+				<CardTitle>Editor</CardTitle>
+				<CardDescription>{label ?? "Bitte Datei wählen"}</CardDescription>
+				<CardAction>
+					<Badge variant={statusVariant}>{status}</Badge>
+				</CardAction>
+			</CardHeader>
 
 			<div className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-2">
 				{participants.length === 0 ? (
-					<p className="text-xs text-muted-foreground">Noch keine aktiven Collaborators</p>
+					<p className="text-xs text-muted-foreground">No active collaborators yet</p>
 				) : (
 					participants.map((participant) => (
 						<div
@@ -147,7 +152,7 @@ export const EditorPane = ({ label, yText, awareness, undoManager, status }: Edi
 					<div ref={mountRef} className="h-full" />
 				) : (
 					<div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-						Wähle links eine Datei, um zu starten.
+						Choose a file on the left to get started.
 					</div>
 				)}
 			</div>

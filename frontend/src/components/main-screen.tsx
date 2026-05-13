@@ -58,17 +58,15 @@ export function MainScreen({ sessionUser }: { sessionUser: SessionUser }) {
 				<header className="rounded-xl border border-border bg-card/85 p-4 shadow-panel backdrop-blur">
 					<div className="mb-4 flex flex-wrap items-center justify-between gap-3">
 						<div>
-							<h1 className="text-2xl font-bold tracking-tight md:text-3xl">
-								Marp Realtime Studio
-							</h1>
+							<h1 className="text-2xl font-bold tracking-tight md:text-3xl">Marp Collab</h1>
 							<p className="text-sm text-muted-foreground">
-								Better Auth + Hono + Hocuspocus + Yjs + CodeMirror 6
+								Collaborative Markdown editor for Marp decks
 							</p>
 						</div>
 
 						<div className="inline-flex items-center gap-2 rounded-full border border-border bg-background px-3 py-1.5 text-xs">
 							<CircleUserRound className="h-4 w-4" />
-							Presence als <strong>{presenceUser.userName}</strong>
+							Presence as <strong>{presenceUser.userName}</strong>
 							<span
 								className="h-2.5 w-2.5 rounded-full"
 								style={{ backgroundColor: presenceUser.color }}

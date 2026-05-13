@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Card } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { renderMarp } from "@/lib/marp";
 
 type PreviewPaneProps = {
@@ -41,16 +41,14 @@ export const PreviewPane = ({ markdown, label }: PreviewPaneProps) => {
 
 	return (
 		<Card className="flex h-full min-h-0 flex-col overflow-hidden border-border/80">
-			<header className="border-b border-border px-4 py-2.5">
-				<p className="text-sm font-semibold">Live Preview</p>
-				<p className="truncate text-xs text-muted-foreground">
-					{label ? `Aktive Datei: ${label}` : "Keine Datei ausgewählt"}
-				</p>
-			</header>
+			<CardHeader className="border-b border-border">
+				<CardTitle>Live Preview</CardTitle>
+				<CardDescription>{label ? `Active file: ${label}` : "No file selected"}</CardDescription>
+			</CardHeader>
 
-			<div className="min-h-0 flex-1 bg-[#101a1f]">
+			<CardContent className="min-h-0 flex-1">
 				<iframe title="Marp preview" srcDoc={srcDoc} className="h-full w-full border-0" />
-			</div>
+			</CardContent>
 		</Card>
 	);
 };
