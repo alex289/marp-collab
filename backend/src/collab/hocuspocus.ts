@@ -45,27 +45,25 @@ const parseAuthToken = (token?: string): CollabContext => {
 	return makeGuestContext();
 };
 
-export function createCollabServer() {
-	return new Hocuspocus({
-		timeout: 30_000,
-		async onAuthenticate({ token }: { token?: string }) {
-			return parseAuthToken(token);
-		},
-		async onLoadDocument({ documentName }: { documentName: string }) {
-			const persisted = persistedUpdates.get(documentName);
-			if (persisted) {
-				const doc = new Y.Doc();
-				Y.applyUpdate(doc, persisted);
-				return doc;
-			}
-
+export const collabServer = new Hocuspocus({
+	timeout: 30_000,
+	async onAuthenticate({ token }: { token?: string }) {
+		return parseAuthToken(token);
+	},
+	async onLoadDocument({ documentName }: { documentName: string }) {
+		const persisted = persistedUpdates.get(documentName);
+		if (persisted) {
 			const doc = new Y.Doc();
-			const text = doc.getText("content");
-			text.insert(0, initialDocumentContent.get(documentName) ?? "# Neue Datei\n");
+			Y.applyUpdate(doc, persisted);
 			return doc;
-		},
-		async onStoreDocument({ documentName, document }: { documentName: string; document: Y.Doc }) {
-			persistedUpdates.set(documentName, Y.encodeStateAsUpdate(document));
-		},
-	});
-}
+		}
+
+		const doc = new Y.Doc();
+		const text = doc.getText("content");
+		text.insert(0, initialDocumentContent.get(documentName) ?? "# Neue Datei\n");
+		return doc;
+	},
+	async onStoreDocument({ documentName, document }: { documentName: string; document: Y.Doc }) {
+		persistedUpdates.set(documentName, Y.encodeStateAsUpdate(document));
+	},
+});

@@ -1,8 +1,6 @@
-import { serve, upgradeWebSocket } from "@hono/node-server";
+import { serve } from "@hono/node-server";
 import { Hono } from "hono";
 import { auth } from "./auth.ts";
-import { deckFiles, toDocumentName } from "./collab/files.ts";
-import { createCollabServer } from "./collab/hocuspocus.ts";
 import { timeout } from "hono/timeout";
 import { trimTrailingSlash } from "hono/trailing-slash";
 import { secureHeaders } from "hono/secure-headers";
@@ -12,12 +10,15 @@ import { HTTPException } from "hono/http-exception";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { isDev } from "./helpers/isDev.ts";
 import { runMigrations } from "./migrations/index.ts";
-import type { AppVariables } from "./types.ts";
+import type { HonoVariables } from "./types.ts";
 import { WebSocketServer } from "ws";
+import { logger } from "./helpers/logger.ts";
+import apiRouter from "./routes/api.ts";
+import { collabServer } from "./collab/hocuspocus.ts";
 
 runMigrations();
 
-const app = new Hono<{ Variables: AppVariables }>();
+const app = new Hono<{ Variables: HonoVariables }>();
 
 app.use(timeout(30 * 1000)); // 30 seconds
 app.use(trimTrailingSlash());
@@ -32,16 +33,19 @@ app.use(
 );
 app.use(compress());
 
-app.use("*", async (c, next) => {
-	const session = await auth.api.getSession({
-		headers: c.req.raw.headers,
-	});
+app.on(["GET", "POST"], "/api/v1/auth/*", (c) => {
+	return auth.handler(c.req.raw);
+});
 
+app.use("/api/*", async (c, next) => {
+	// Routes without authentication
+	if (c.req.path.startsWith("/api/auth/") || c.req.path.startsWith("/api/health")) {
+		return next();
+	}
+
+	const session = await auth.api.getSession({ headers: c.req.raw.headers });
 	if (!session) {
-		c.set("user", null);
-		c.set("session", null);
-		await next();
-		return;
+		return c.json({ error: "Unauthorized" }, 401);
 	}
 
 	c.set("user", session.user);
@@ -49,31 +53,12 @@ app.use("*", async (c, next) => {
 	await next();
 });
 
-app.on(["GET", "POST"], "/api/v1/auth/*", (c) => {
-	return auth.handler(c.req.raw);
-});
+app.route("/api/v1", apiRouter);
 
-app.get("/api/v1/health", (c) => {
-	return c.json({ ok: true });
+// oxlint-disable-next-line require-await
+app.use("/api/*", async (c) => {
+	return c.json({ error: "Not Found" }, 404);
 });
-
-app.get("/api/v1/session", (c) => {
-	return c.json({
-		user: c.get("user"),
-		session: c.get("session"),
-	});
-});
-
-app.get("/api/v1/files", (c) => {
-	return c.json({
-		files: deckFiles.map((file) => ({
-			...file,
-			documentName: toDocumentName(file.id),
-		})),
-	});
-});
-
-app.get("/", (c) => c.text("Marp realtime backend is running."));
 
 // Production: serve static frontend files
 if (!isDev()) {
@@ -104,35 +89,11 @@ app.onError((err, c) => {
 		return c.json({ error: err.message }, err.status);
 	}
 
-	console.error("Unexpected error:", err);
+	logger.error(err);
 
 	// Do not expose internal error details
 	return c.json({ error: "Internal Server Error" }, 500);
 });
-
-const collabServer = createCollabServer();
-
-app.get(
-	"/api/v1/collab",
-	upgradeWebSocket((c) => {
-		let clientConnection: ReturnType<typeof collabServer.handleConnection> | undefined;
-		return {
-			onOpen(_evt, ws) {
-				if (!ws.raw) {
-					throw new Error("WebSocket upgrade failed, raw WebSocket not available");
-				}
-				ws.raw.binaryType = "arraybuffer";
-				clientConnection = collabServer.handleConnection(ws.raw, c.req.raw, {});
-			},
-			onMessage(evt) {
-				clientConnection?.handleMessage(new Uint8Array(evt.data));
-			},
-			onClose() {
-				clientConnection?.handleClose();
-			},
-		};
-	}),
-);
 
 const wss = new WebSocketServer({ noServer: true });
 
@@ -149,6 +110,6 @@ serve(
 			configuration: collabServer.configuration,
 			port: info.port,
 		});
-		console.log(`Listening on http://localhost:${info.port} (HTTP + WebSocket)`);
+		logger.info(`Listening on http://localhost:${info.port}`);
 	},
 );

@@ -1,5 +1,7 @@
 import { betterAuth } from "better-auth";
 import { db } from "./db.ts";
+import { genericOAuth } from "better-auth/plugins";
+import { getAuthProviders } from "./auth/config.ts";
 
 export const auth = betterAuth({
 	baseURL: process.env.URL,
@@ -9,7 +11,7 @@ export const auth = betterAuth({
 	session: {
 		cookieCache: {
 			enabled: true,
-			maxAge: 1 * 60, // Cache duration in seconds
+			maxAge: 1 * 60, // Cache duration in seconds, reduces db load
 		},
 	},
 	telemetry: {
@@ -33,6 +35,11 @@ export const auth = betterAuth({
 	user: {
 		additionalFields: {},
 	},
+	plugins: [
+		genericOAuth({
+			config: getAuthProviders(),
+		}),
+	],
 });
 
 export type AuthSession = typeof auth.$Infer.Session;

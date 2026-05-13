@@ -7,6 +7,7 @@
 	"rules": {
 		"no-alert": "error",
 		"no-empty": "error",
+		"no-console": "error",
 		"no-empty-function": "error",
 		"no-proto": "error",
 		"no-regex-spaces": "error",
