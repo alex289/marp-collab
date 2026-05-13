@@ -8,11 +8,13 @@ import { useCollabDocument, usePresenceUser } from "@/hooks/use-collab-document"
 import { useFiles } from "@/hooks/use-files";
 import type { DeckFile, SessionUser } from "@/lib/types";
 import { EditorPane } from "./editor-pane";
+import { cn } from "@/lib/utils";
 
 export function MainScreen({ sessionUser }: { sessionUser: SessionUser }) {
 	const presenceUser = usePresenceUser(sessionUser);
 	const { files, isLoading, error, reload } = useFiles();
 	const [selectedFile, setSelectedFile] = useState<DeckFile | null>(null);
+	const [sidebarOpen, setSidebarOpen] = useState(false);
 	const [markdown, setMarkdown] = useState("");
 
 	useEffect(() => {
@@ -82,7 +84,14 @@ export function MainScreen({ sessionUser }: { sessionUser: SessionUser }) {
 					</div>
 				</header>
 
-				<main className="grid min-h-[76vh] grid-cols-1 gap-3 xl:grid-cols-[280px_minmax(0,1fr)_minmax(320px,42%)]">
+				<main
+					className={cn(
+						"grid min-h-[76vh] gap-3 grid-cols-1",
+						sidebarOpen
+							? "xl:grid-cols-[250px_minmax(0,1fr)_minmax(320px,42%)]"
+							: "xl:grid-cols-[60px_minmax(0,1fr)_minmax(320px,42%)]",
+					)}
+				>
 					<FileSidebar
 						files={files}
 						selectedFileId={selectedFile?.id ?? null}
@@ -90,6 +99,8 @@ export function MainScreen({ sessionUser }: { sessionUser: SessionUser }) {
 						isLoading={isLoading}
 						error={error}
 						onRetry={reload}
+						sidebarOpen={sidebarOpen}
+						setSidebarOpen={setSidebarOpen}
 					/>
 
 					<EditorPane
