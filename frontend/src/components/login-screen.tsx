@@ -19,8 +19,6 @@ export function LoginScreen() {
 	const handleSignIn = async (providerId: string) => {
 		await authClient.signIn.oauth2({
 			providerId: providerId,
-			callbackURL: "/",
-			scopes: ["openid", "email", "profile"],
 		});
 	};
 

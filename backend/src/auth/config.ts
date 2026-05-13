@@ -44,6 +44,13 @@ export function loadAuthConfig() {
 				case "DISCOVERY_URL":
 					providerConfig.discoveryUrl = value;
 					break;
+				case "SCOPES":
+					providerConfig.scopes = value.split(",").map((s) => s.trim());
+					break;
+				default:
+					logger.warn(
+						`Unknown config key ${configKey} for provider ${providerId}. Ignoring this environment variable.`,
+					);
 			}
 		}
 	}
@@ -70,6 +77,10 @@ export function loadAuthConfig() {
 				`Missing DISCOVERY_URL environment variable for provider ${providerId}. Manual configuration of endpoints is not supported yet. Skipping this provider.`,
 			);
 			continue;
+		}
+
+		if (!config.scopes) {
+			config.scopes = ["openid", "email", "profile"];
 		}
 
 		if (!publicProviderInfo.some((info) => info.id === providerId)) {
