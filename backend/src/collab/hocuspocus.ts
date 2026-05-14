@@ -1,7 +1,7 @@
 import { Hocuspocus } from "@hocuspocus/server";
 import { randomUUID } from "node:crypto";
 import * as Y from "yjs";
-import { initialDocumentContent } from "./files.ts";
+import { getInitialDocumentContent, saveDocumentContent } from "./files.ts";
 
 type CollabContext = {
 	userId: string;
@@ -51,7 +51,6 @@ export const collabServer = new Hocuspocus({
 	async onAuthenticate({ token }: { token?: string }) {
 		return parseAuthToken(token);
 	},
-	// oxlint-disable-next-line require-await
 	async onLoadDocument({ documentName }: { documentName: string }) {
 		const persisted = persistedUpdates.get(documentName);
 		if (persisted) {
@@ -62,11 +61,12 @@ export const collabServer = new Hocuspocus({
 
 		const doc = new Y.Doc();
 		const text = doc.getText("content");
-		text.insert(0, initialDocumentContent.get(documentName) ?? "# Neue Datei\n");
+		const initialContent = await getInitialDocumentContent(documentName);
+		text.insert(0, initialContent ?? "# Neue Datei\n");
 		return doc;
 	},
-	// oxlint-disable-next-line require-await
 	async onStoreDocument({ documentName, document }: { documentName: string; document: Y.Doc }) {
 		persistedUpdates.set(documentName, Y.encodeStateAsUpdate(document));
+		await saveDocumentContent(documentName, document.getText("content").toString());
 	},
 });

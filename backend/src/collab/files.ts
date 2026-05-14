@@ -1,3 +1,6 @@
+import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, extname, isAbsolute, relative, resolve, sep } from "node:path";
+
 export type DeckFile = {
 	id: string;
 	label: string;
@@ -5,52 +8,106 @@ export type DeckFile = {
 
 export const PROJECT_ID = "main";
 const FILE_PREFIX = `project/${PROJECT_ID}/`;
+const dataDir = resolve(process.cwd(), process.env.DATA_PATH ?? "data");
+const presentationsDir = resolve(dataDir, "presentations");
+const markdownExtensions = new Set([".md", ".markdown"]);
 
-export const deckFiles: DeckFile[] = [
-	{ id: "slides/welcome.md", label: "slides/welcome.md" },
-	{ id: "slides/agenda.md", label: "slides/agenda.md" },
-	{ id: "notes/speaker-notes.md", label: "notes/speaker-notes.md" },
-];
+const toUnixPath = (value: string): string => value.split(sep).join("/");
 
-const initialFileContent: Record<string, string> = {
-	"slides/welcome.md": `---
-marp: true
-theme: default
-paginate: true
----
+const fromDocumentName = (documentName: string): string | null => {
+	if (!documentName.startsWith(FILE_PREFIX)) {
+		return null;
+	}
 
-# Realtime Marp Collaboration
+	const fileId = documentName.slice(FILE_PREFIX.length);
+	return fileId.length > 0 ? fileId : null;
+};
 
-Willkommen im gemeinsamen Deck.
+const toPresentationPath = (fileId: string): string => {
+	const normalizedFileId = toUnixPath(fileId).replace(/^\/+/, "");
+	const absolutePath = resolve(presentationsDir, normalizedFileId);
+	const relativePath = relative(presentationsDir, absolutePath);
 
----
+	if (relativePath.startsWith("..") || isAbsolute(relativePath)) {
+		throw new Error(`Invalid presentation file id: ${fileId}`);
+	}
 
-## Presence
+	return absolutePath;
+};
 
-- Jede Cursor-Position ist live sichtbar
-- Änderungen werden sofort synchronisiert
-`,
-	"slides/agenda.md": `---
-marp: true
-paginate: true
----
+const isMissingFileError = (error: unknown): boolean => {
+	if (typeof error !== "object" || error === null || !("code" in error)) {
+		return false;
+	}
 
-# Agenda
+	return (error as NodeJS.ErrnoException).code === "ENOENT";
+};
 
-1. Authentifizierung
-2. Realtime Editor
-3. Live Preview
-4. Q&A
-`,
-	"notes/speaker-notes.md": `# Speaker Notes
+const listMarkdownFileIds = async (directory: string, prefix = ""): Promise<string[]> => {
+	const entries = await readdir(directory, { withFileTypes: true });
+	const fileIds: string[] = [];
 
-- Vor dem Talk: Check der Demo
-- Während des Talks: Cursor-Presence zeigen
-`,
+	for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
+		if (entry.name.startsWith(".")) {
+			continue;
+		}
+
+		const entryPath = resolve(directory, entry.name);
+		const nextPrefix = prefix ? `${prefix}/${entry.name}` : entry.name;
+
+		if (entry.isDirectory()) {
+			const nestedFileIds = await listMarkdownFileIds(entryPath, nextPrefix);
+			fileIds.push(...nestedFileIds);
+			continue;
+		}
+
+		if (entry.isFile() && markdownExtensions.has(extname(entry.name).toLowerCase())) {
+			fileIds.push(toUnixPath(nextPrefix));
+		}
+	}
+
+	return fileIds;
+};
+
+const ensurePresentationsDir = async (): Promise<void> => {
+	await mkdir(presentationsDir, { recursive: true });
 };
 
 export const toDocumentName = (fileId: string): string => `${FILE_PREFIX}${fileId}`;
 
-export const initialDocumentContent = new Map<string, string>(
-	deckFiles.map((file) => [toDocumentName(file.id), initialFileContent[file.id] ?? ""]),
-);
+export const getDeckFiles = async (): Promise<DeckFile[]> => {
+	await ensurePresentationsDir();
+
+	const fileIds = await listMarkdownFileIds(presentationsDir);
+	return fileIds.map((id) => ({ id, label: id }));
+};
+
+export const getInitialDocumentContent = async (
+	documentName: string,
+): Promise<string | undefined> => {
+	const fileId = fromDocumentName(documentName);
+	if (!fileId) {
+		return undefined;
+	}
+
+	try {
+		return await readFile(toPresentationPath(fileId), "utf8");
+	} catch (error) {
+		if (isMissingFileError(error)) {
+			return undefined;
+		}
+
+		throw error;
+	}
+};
+
+export const saveDocumentContent = async (documentName: string, content: string): Promise<void> => {
+	const fileId = fromDocumentName(documentName);
+	if (!fileId) {
+		return;
+	}
+
+	const filePath = toPresentationPath(fileId);
+	await mkdir(dirname(filePath), { recursive: true });
+	await writeFile(filePath, content, "utf8");
+};
