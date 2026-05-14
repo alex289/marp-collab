@@ -47,9 +47,11 @@ const parseAuthToken = (token?: string): CollabContext => {
 
 export const collabServer = new Hocuspocus({
 	timeout: 30_000,
+	// oxlint-disable-next-line require-await
 	async onAuthenticate({ token }: { token?: string }) {
 		return parseAuthToken(token);
 	},
+	// oxlint-disable-next-line require-await
 	async onLoadDocument({ documentName }: { documentName: string }) {
 		const persisted = persistedUpdates.get(documentName);
 		if (persisted) {
@@ -63,6 +65,7 @@ export const collabServer = new Hocuspocus({
 		text.insert(0, initialDocumentContent.get(documentName) ?? "# Neue Datei\n");
 		return doc;
 	},
+	// oxlint-disable-next-line require-await
 	async onStoreDocument({ documentName, document }: { documentName: string; document: Y.Doc }) {
 		persistedUpdates.set(documentName, Y.encodeStateAsUpdate(document));
 	},

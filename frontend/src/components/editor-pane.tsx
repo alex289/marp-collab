@@ -80,6 +80,7 @@ export const EditorPane = ({ label, yText, awareness, undoManager, status }: Edi
 		}
 
 		const state = EditorState.create({
+			// oxlint-disable-next-line no-base-to-string
 			doc: yText.toString(),
 			extensions: [
 				basicSetup,

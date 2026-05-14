@@ -44,6 +44,7 @@ export function MainScreen({ sessionUser }: { sessionUser: SessionUser }) {
 		}
 
 		const sync = () => {
+			// oxlint-disable-next-line no-base-to-string
 			setMarkdown(collab.yText?.toString() ?? "");
 		};
 
