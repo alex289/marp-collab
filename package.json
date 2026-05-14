@@ -9,7 +9,8 @@
 		"lint": "oxlint --type-aware --deny-warnings",
 		"format": "oxfmt --write",
 		"format:check": "oxfmt --check",
-		"build": "npm run build --workspaces"
+		"build": "npm run build --workspaces",
+		"typecheck": "npm run typecheck --workspaces"
 	},
 	"dependencies": {
 		"oxfmt": "^0.49.0",

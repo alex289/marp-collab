@@ -7,7 +7,7 @@
 		"start": "node dist/app.js",
 		"dev": "node --watch --env-file=.env src/app.ts",
 		"build": "rolldown --config",
-		"check": "tsc --noEmit"
+		"typecheck": "tsc --noEmit"
 	},
 	"dependencies": {
 		"@hocuspocus/server": "^4.0.0",
