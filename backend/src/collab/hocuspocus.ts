@@ -67,6 +67,7 @@ export const collabServer = new Hocuspocus({
 	},
 	async onStoreDocument({ documentName, document }: { documentName: string; document: Y.Doc }) {
 		persistedUpdates.set(documentName, Y.encodeStateAsUpdate(document));
+		// oxlint-disable-next-line no-base-to-string
 		await saveDocumentContent(documentName, document.getText("content").toString());
 	},
 });
