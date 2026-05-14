@@ -1,0 +1,10 @@
+services:
+  marp-collab:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: marp-collab-dev
+    ports:
+      - "127.0.0.1:8787:8787"
+    volumes:
+      - ./data:/app/data
