@@ -1,3 +1,4 @@
+import { createFileRoute } from "@tanstack/react-router";
 import { LogIn } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
@@ -5,12 +6,16 @@ import { Card } from "@/components/ui/card";
 import { API_URL } from "@/lib/config";
 import { fetcher } from "@/lib/fetcher";
 import useSWR from "swr";
-import { LoadingScreen } from "./loading-screen";
-import ErrorAlert from "./alerts/error-alert";
+import { LoadingScreen } from "@/components/loading-screen";
+import ErrorAlert from "@/components/alerts/error-alert";
+
+export const Route = createFileRoute("/login")({
+	component: LoginRoute,
+});
 
 type Provider = { name: string; id: string };
 
-export function LoginScreen() {
+function LoginRoute() {
 	const { data, error, isLoading } = useSWR<{ providers: Provider[] }>(
 		`${API_URL}/auth-providers`,
 		fetcher,

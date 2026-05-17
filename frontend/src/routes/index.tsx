@@ -1,3 +1,4 @@
+import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { CircleUserRound } from "lucide-react";
 import { AuthPanel } from "@/components/auth-panel";
@@ -6,13 +7,26 @@ import { PreviewPane } from "@/components/preview-pane";
 import { Badge } from "@/components/ui/badge";
 import { useCollabDocument, usePresenceUser } from "@/hooks/use-collab-document";
 import { useFiles } from "@/hooks/use-files";
-import type { DeckFile, SessionUser } from "@/lib/types";
-import { EditorPane } from "./editor-pane";
+import type { DeckFile } from "@/lib/types";
+import { EditorPane } from "@/components/editor-pane";
 import { cn } from "@/lib/utils";
-import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
+import {
+	Card,
+	CardAction,
+	CardContent,
+	CardDescription,
+	CardHeader,
+	CardTitle,
+} from "@/components/ui/card";
 
-export function MainScreen({ sessionUser }: { sessionUser: SessionUser }) {
-	const presenceUser = usePresenceUser(sessionUser);
+export const Route = createFileRoute("/")({
+	component: RootComponent,
+});
+
+export function RootComponent() {
+	const { session } = Route.useRouteContext();
+
+	const presenceUser = usePresenceUser(session?.user);
 	const { files, isLoading, error, reload } = useFiles();
 	const [selectedFile, setSelectedFile] = useState<DeckFile | null>(null);
 	const [sidebarOpen, setSidebarOpen] = useState(true);

@@ -22,5 +22,12 @@
 		"no-warning-comments": "error",
 		"no-duplicate-imports": "error"
 	},
-	"ignorePatterns": ["dist/", "node_modules/", "build/", "**/routeTree.gen.ts", ".tanstack/"]
+	"ignorePatterns": [
+		"dist/",
+		"node_modules/",
+		"build/",
+		"**/routeTree.gen.ts",
+		".tanstack/",
+		"data/"
+	]
 }
