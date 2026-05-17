@@ -26,7 +26,7 @@ export const Route = createFileRoute("/")({
 export function RootComponent() {
 	const { session } = Route.useRouteContext();
 
-	const presenceUser = usePresenceUser(session?.user);
+	const presenceUser = usePresenceUser(session?.user ?? null);
 	const { files, isLoading, error, reload } = useFiles();
 	const [selectedFile, setSelectedFile] = useState<DeckFile | null>(null);
 	const [sidebarOpen, setSidebarOpen] = useState(true);

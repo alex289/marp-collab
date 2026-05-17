@@ -1,13 +1,9 @@
+import type { authClient } from "./auth-client";
+
 export type DeckFile = {
 	id: string;
 	label: string;
 	documentName: string;
-};
-
-export type SessionUser = {
-	id: string;
-	name: string;
-	email: string;
 };
 
 export type PresenceUser = {
@@ -15,3 +11,5 @@ export type PresenceUser = {
 	userName: string;
 	color: string;
 };
+
+export type SessionUser = typeof authClient.$Infer.Session.user;
