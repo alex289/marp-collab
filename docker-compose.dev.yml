@@ -4,6 +4,7 @@ services:
       context: .
       dockerfile: Dockerfile
     container_name: marp-collab-dev
+    env_file: ./backend/.env
     ports:
       - "127.0.0.1:8787:8787"
     volumes:

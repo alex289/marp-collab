@@ -2,10 +2,17 @@ import path from "path";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
+import { compression } from "vite-plugin-compression2";
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => ({
-	plugins: [react(), tailwindcss()],
+	plugins: [
+		react(),
+		tailwindcss(),
+		compression({
+			algorithms: ["gzip", "brotli", "zstd"],
+		}),
+	],
 	resolve: {
 		alias: {
 			"@": path.resolve(__dirname, "./src"),
@@ -22,5 +29,9 @@ export default defineConfig(({ mode }) => ({
 				},
 			},
 		}),
+	},
+	build: {
+		outDir: "../dist/frontend",
+		emptyOutDir: true,
 	},
 }));

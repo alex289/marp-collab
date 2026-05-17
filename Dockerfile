@@ -1,18 +1,24 @@
-FROM node:25-trixie-slim AS builder
+FROM node:26-trixie-slim AS builder
 
 WORKDIR /app
 
 COPY package*.json ./
+COPY frontend/package.json ./frontend/
+COPY backend/package.json ./backend/
+RUN npm ci
+COPY . .
+RUN node --run build
 
-RUN npm ci --ignore-scripts
+FROM node:26-trixie-slim
 
-COPY ./ ./
+USER node
+WORKDIR /app
+ENV NODE_ENV=production
 
-RUN npm run build
+COPY --from=builder --chown=node:node /app/dist/ ./
 
-RUN mv frontend/dist dist/frontend
+RUN echo '{ "type": "module" }' > package.json
 
 EXPOSE 8787
 
-CMD ["node", "dist/app.js"]
-
+CMD ["node", "./app.js"]

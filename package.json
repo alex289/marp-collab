@@ -5,6 +5,7 @@
 		"frontend",
 		"backend"
 	],
+	"type": "module",
 	"scripts": {
 		"lint": "oxlint --type-aware --deny-warnings",
 		"format": "oxfmt --write",
