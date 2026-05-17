@@ -3,6 +3,7 @@ import { LogOut } from "lucide-react";
 import { signOut, useSession } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
 import type { SessionUser } from "@/lib/types";
+import { useRouter } from "@tanstack/react-router";
 
 type SessionPayload = {
 	user?: SessionUser;
@@ -12,6 +13,7 @@ export const AuthPanel = () => {
 	const { data, refetch } = useSession();
 	const session = data as SessionPayload | null;
 	const user = session?.user ?? null;
+	const router = useRouter();
 
 	const [busy, setBusy] = useState(false);
 
@@ -20,6 +22,7 @@ export const AuthPanel = () => {
 		try {
 			await signOut();
 			await refetch();
+			await router.invalidate();
 		} finally {
 			setBusy(false);
 		}

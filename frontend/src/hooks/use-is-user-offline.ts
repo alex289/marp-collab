@@ -1,15 +1,15 @@
-import { useState } from 'react';
+import { useState } from "react";
 
 export default function useIsUserOffline() {
-    const [isUserOffline, setIsUserOffline] = useState(!navigator.onLine);
+	const [isUserOffline, setIsUserOffline] = useState(!navigator.onLine);
 
-    window.addEventListener('online', () => {
-        setIsUserOffline(false);
-    });
+	window.addEventListener("online", () => {
+		setIsUserOffline(false);
+	});
 
-    window.addEventListener('offline', () => {
-        setIsUserOffline(true);
-    });
+	window.addEventListener("offline", () => {
+		setIsUserOffline(true);
+	});
 
-    return isUserOffline;
+	return isUserOffline;
 }
