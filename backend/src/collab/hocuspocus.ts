@@ -1,7 +1,7 @@
 import { Hocuspocus } from "@hocuspocus/server";
 import { randomUUID } from "node:crypto";
 import * as Y from "yjs";
-import { getInitialDocumentContent, saveDocumentContent } from "./files.ts";
+import { getDocumentContent, saveDocumentContent } from "./files.ts";
 
 type CollabContext = {
 	userId: string;
@@ -61,7 +61,7 @@ export const collabServer = new Hocuspocus({
 
 		const doc = new Y.Doc();
 		const text = doc.getText("content");
-		const initialContent = await getInitialDocumentContent(documentName);
+		const initialContent = await getDocumentContent(documentName);
 		text.insert(0, initialContent ?? "# Neue Datei\n");
 		return doc;
 	},

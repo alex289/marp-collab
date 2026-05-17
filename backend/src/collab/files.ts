@@ -1,97 +1,72 @@
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, extname, isAbsolute, relative, resolve, sep } from "node:path";
+import { glob, mkdir, readFile, writeFile } from "node:fs/promises";
+import { dirname, isAbsolute, resolve } from "node:path";
 
 export type DeckFile = {
 	id: string;
 	label: string;
 };
 
-export const PROJECT_ID = "main";
-const FILE_PREFIX = `project/${PROJECT_ID}/`;
 const dataDir = resolve(process.cwd(), process.env.DATA_PATH ?? "data");
 const presentationsDir = resolve(dataDir, "presentations");
-const markdownExtensions = new Set([".md", ".markdown"]);
 
-const toUnixPath = (value: string): string => value.split(sep).join("/");
+// To-Do: Implement project system
+export const PROJECT_ID = "main";
+const FILE_PREFIX = `project/${PROJECT_ID}/`;
 
-const fromDocumentName = (documentName: string): string | null => {
+function resolveDocumentPath(documentName: string): string | null {
 	if (!documentName.startsWith(FILE_PREFIX)) {
 		return null;
 	}
 
 	const fileId = documentName.slice(FILE_PREFIX.length);
-	return fileId.length > 0 ? fileId : null;
-};
+	if (!fileId) {
+		return null;
+	}
 
-const toPresentationPath = (fileId: string): string => {
-	const normalizedFileId = toUnixPath(fileId).replace(/^\/+/, "");
-	const absolutePath = resolve(presentationsDir, normalizedFileId);
-	const relativePath = relative(presentationsDir, absolutePath);
-
-	if (relativePath.startsWith("..") || isAbsolute(relativePath)) {
+	if (isAbsolute(fileId) || fileId.split("/").includes("..")) {
 		throw new Error(`Invalid presentation file id: ${fileId}`);
 	}
 
-	return absolutePath;
-};
+	return resolve(presentationsDir, fileId);
+}
 
-const isMissingFileError = (error: unknown): boolean => {
-	if (typeof error !== "object" || error === null || !("code" in error)) {
-		return false;
-	}
+function isMissingFileError(error: unknown): boolean {
+	return error instanceof Error && "code" in error && error.code === "ENOENT";
+}
 
-	return (error as NodeJS.ErrnoException).code === "ENOENT";
-};
+async function listMarkdownFiles(): Promise<string[]> {
+	const files = await Array.fromAsync(
+		glob("**/*.{md,markdown}", {
+			cwd: presentationsDir,
+			exclude: (p) => p.split("/").some((part) => part.startsWith(".")),
+		}),
+	);
+	return files.sort((a, b) => a.localeCompare(b));
+}
 
-const listMarkdownFileIds = async (directory: string, prefix = ""): Promise<string[]> => {
-	const entries = await readdir(directory, { withFileTypes: true });
-	const fileIds: string[] = [];
-
-	for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
-		if (entry.name.startsWith(".")) {
-			continue;
-		}
-
-		const entryPath = resolve(directory, entry.name);
-		const nextPrefix = prefix ? `${prefix}/${entry.name}` : entry.name;
-
-		if (entry.isDirectory()) {
-			const nestedFileIds = await listMarkdownFileIds(entryPath, nextPrefix);
-			fileIds.push(...nestedFileIds);
-			continue;
-		}
-
-		if (entry.isFile() && markdownExtensions.has(extname(entry.name).toLowerCase())) {
-			fileIds.push(toUnixPath(nextPrefix));
-		}
-	}
-
-	return fileIds;
-};
-
-const ensurePresentationsDir = async (): Promise<void> => {
+async function ensurePresentationsDir(): Promise<void> {
 	await mkdir(presentationsDir, { recursive: true });
-};
+}
 
-export const toDocumentName = (fileId: string): string => `${FILE_PREFIX}${fileId}`;
+export function toDocumentName(fileId: string): string {
+	return `${FILE_PREFIX}${fileId}`;
+}
 
-export const getDeckFiles = async (): Promise<DeckFile[]> => {
+export async function getDeckFiles(): Promise<DeckFile[]> {
 	await ensurePresentationsDir();
 
-	const fileIds = await listMarkdownFileIds(presentationsDir);
+	const fileIds = await listMarkdownFiles();
 	return fileIds.map((id) => ({ id, label: id }));
-};
+}
 
-export const getInitialDocumentContent = async (
-	documentName: string,
-): Promise<string | undefined> => {
-	const fileId = fromDocumentName(documentName);
-	if (!fileId) {
+export async function getDocumentContent(documentName: string): Promise<string | undefined> {
+	const filePath = resolveDocumentPath(documentName);
+	if (!filePath) {
 		return undefined;
 	}
 
 	try {
-		return await readFile(toPresentationPath(fileId), "utf8");
+		return await readFile(filePath, "utf8");
 	} catch (error) {
 		if (isMissingFileError(error)) {
 			return undefined;
@@ -99,15 +74,14 @@ export const getInitialDocumentContent = async (
 
 		throw error;
 	}
-};
+}
 
-export const saveDocumentContent = async (documentName: string, content: string): Promise<void> => {
-	const fileId = fromDocumentName(documentName);
-	if (!fileId) {
+export async function saveDocumentContent(documentName: string, content: string): Promise<void> {
+	const filePath = resolveDocumentPath(documentName);
+	if (!filePath) {
 		return;
 	}
 
-	const filePath = toPresentationPath(fileId);
 	await mkdir(dirname(filePath), { recursive: true });
 	await writeFile(filePath, content, "utf8");
-};
+}
