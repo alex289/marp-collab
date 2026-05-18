@@ -9,7 +9,7 @@ import { compress } from "hono/compress";
 import { HTTPException } from "hono/http-exception";
 import { serveStatic } from "@hono/node-server/serve-static";
 import { isDev } from "./helpers/isDev.ts";
-import { runMigrations } from "./migrations/index.ts";
+import { runMigrations } from "./db/migrations/index.ts";
 import type { HonoVariables } from "./types.ts";
 import { WebSocketServer } from "ws";
 import { logger } from "./helpers/logger.ts";

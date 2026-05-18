@@ -1,5 +1,5 @@
 import { betterAuth } from "better-auth";
-import { db } from "./db.ts";
+import { db } from "./db/db.ts";
 import { genericOAuth } from "better-auth/plugins";
 import { getAuthProviders } from "./auth/config.ts";
 

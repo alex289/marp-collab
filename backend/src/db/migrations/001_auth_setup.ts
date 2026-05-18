@@ -13,5 +13,6 @@ create index if not exists "verification_identifier_idx" on "verification" ("ide
 }
 
 export default {
+	name: "001_auth_setup",
 	up,
 };
