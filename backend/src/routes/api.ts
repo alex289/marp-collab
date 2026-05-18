@@ -1,6 +1,5 @@
 import { Hono } from "hono";
 import type { HonoVariables } from "../types.ts";
-import fileRouter from "./api/files.ts";
 import collabRouter from "./api/collab.ts";
 import authProvidersRouter from "./api/auth-providers.ts";
 import projectsRouter from "./api/projects.ts";
@@ -12,7 +11,6 @@ app.get("/health", (c) => {
 });
 
 app.route("/collab", collabRouter);
-app.route("/files", fileRouter);
 app.route("/auth-providers", authProvidersRouter);
 app.route("/projects", projectsRouter);
 

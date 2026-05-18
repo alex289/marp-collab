@@ -1,5 +1,5 @@
 import { glob, mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, isAbsolute, resolve } from "node:path";
+import { dirname, isAbsolute, resolve, sep } from "node:path";
 
 export type DeckFile = {
 	id: string;
@@ -9,16 +9,23 @@ export type DeckFile = {
 const dataDir = resolve(process.cwd(), process.env.DATA_PATH ?? "data");
 const presentationsDir = resolve(dataDir, "presentations");
 
-// To-Do: Implement project system
-export const PROJECT_ID = "main";
-const FILE_PREFIX = `project/${PROJECT_ID}/`;
+const projectIdRegex = new RegExp("^[a-zA-Z0-9-]+$");
+function isValidProjectId(projectId: string): boolean {
+	return projectIdRegex.test(projectId);
+}
 
 function resolveDocumentPath(documentName: string): string | null {
-	if (!documentName.startsWith(FILE_PREFIX)) {
+	const parts = documentName.split("/");
+	if (parts.length < 3 || parts[0] !== "project") {
 		return null;
 	}
 
-	const fileId = documentName.slice(FILE_PREFIX.length);
+	const projectId = parts[1];
+	if (!projectId || !isValidProjectId(projectId)) {
+		return null;
+	}
+
+	const fileId = parts.slice(2).join("/");
 	if (!fileId) {
 		return null;
 	}
@@ -27,35 +34,47 @@ function resolveDocumentPath(documentName: string): string | null {
 		throw new Error(`Invalid presentation file id: ${fileId}`);
 	}
 
-	return resolve(presentationsDir, fileId);
+	const filePath = resolve(presentationsDir, projectId, fileId);
+	if (!filePath.startsWith(presentationsDir + sep)) {
+		throw new Error(`Path traversal detected: ${fileId}`);
+	}
+
+	return filePath;
 }
 
 function isMissingFileError(error: unknown): boolean {
 	return error instanceof Error && "code" in error && error.code === "ENOENT";
 }
 
-async function listMarkdownFiles(): Promise<string[]> {
+async function listMarkdownFiles(projectId: string): Promise<string[]> {
+	if (!isValidProjectId(projectId)) {
+		throw new Error(`Invalid project id: ${projectId}`);
+	}
+	const projectDir = resolve(presentationsDir, projectId);
 	const files = await Array.fromAsync(
 		glob("**/*.{md,markdown}", {
-			cwd: presentationsDir,
+			cwd: projectDir,
 			exclude: (p) => p.split("/").some((part) => part.startsWith(".")),
 		}),
 	);
 	return files.sort((a, b) => a.localeCompare(b));
 }
 
-async function ensurePresentationsDir(): Promise<void> {
-	await mkdir(presentationsDir, { recursive: true });
+async function ensurePresentationsDir(projectId: string): Promise<void> {
+	if (!isValidProjectId(projectId)) {
+		throw new Error(`Invalid project id: ${projectId}`);
+	}
+	await mkdir(resolve(presentationsDir, projectId), { recursive: true });
 }
 
-export function toDocumentName(fileId: string): string {
-	return `${FILE_PREFIX}${fileId}`;
+export function toDocumentName(projectId: string, fileId: string): string {
+	return `project/${projectId}/${fileId}`;
 }
 
-export async function getDeckFiles(): Promise<DeckFile[]> {
-	await ensurePresentationsDir();
+export async function getDeckFiles(projectId: string): Promise<DeckFile[]> {
+	await ensurePresentationsDir(projectId);
 
-	const fileIds = await listMarkdownFiles();
+	const fileIds = await listMarkdownFiles(projectId);
 	return fileIds.map((id) => ({ id, label: id }));
 }
 

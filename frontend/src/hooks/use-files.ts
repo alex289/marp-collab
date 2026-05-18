@@ -6,7 +6,7 @@ type FilesResponse = {
 	files: DeckFile[];
 };
 
-export const useFiles = () => {
+export const useFiles = (projectId: string) => {
 	const [files, setFiles] = useState<DeckFile[]>([]);
 	const [isLoading, setIsLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
@@ -16,7 +16,7 @@ export const useFiles = () => {
 		setError(null);
 
 		try {
-			const response = await fetch(`${API_URL}/files`, {
+			const response = await fetch(`${API_URL}/projects/${projectId}/files`, {
 				credentials: "include",
 			});
 
@@ -31,7 +31,7 @@ export const useFiles = () => {
 		} finally {
 			setIsLoading(false);
 		}
-	}, []);
+	}, [projectId]);
 
 	useEffect(() => {
 		void loadFiles();

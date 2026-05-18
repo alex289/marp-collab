@@ -24,8 +24,9 @@ export const Route = createFileRoute("/presentations/$id")({
 function RouteComponent() {
 	const { session } = Route.useRouteContext();
 
+	const { id } = Route.useParams();
 	const presenceUser = usePresenceUser(session?.user ?? null);
-	const { files, isLoading, error, reload } = useFiles();
+	const { files, isLoading, error, reload } = useFiles(id);
 	const [selectedFile, setSelectedFile] = useState<DeckFile | null>(null);
 	const [sidebarOpen, setSidebarOpen] = useState(true);
 	const [markdown, setMarkdown] = useState("");
