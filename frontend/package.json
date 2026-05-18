@@ -36,7 +36,8 @@
 		"vite-plugin-compression2": "^2.5.3",
 		"y-codemirror.next": "^0.3.5",
 		"y-protocols": "^1.0.7",
-		"yjs": "^13.6.30"
+		"yjs": "^13.6.30",
+		"zod": "^4.4.3"
 	},
 	"devDependencies": {
 		"@tanstack/router-plugin": "^1.167.35",

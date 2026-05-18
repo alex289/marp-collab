@@ -49,7 +49,7 @@ const preparedStatements = {
     `),
 	deleteProject: db.prepare(`
         delete from project
-        where id = ?
+        where id = ? and ownerId = ?
     `),
 };
 
@@ -67,14 +67,14 @@ export function getProjectsByOwnerId(ownerId: string): Project[] {
 }
 
 export function createProject(project: Omit<Project, "createdAt" | "updatedAt">) {
-	const now = new Date();
+	const now = new Date().toISOString();
 	return preparedStatements.createProject.run(project.id, project.name, now, now, project.ownerId);
 }
 
 export function updateProject(project: Pick<Project, "id" | "name">) {
-	return preparedStatements.updateProject.run(project.name, new Date(), project.id);
+	return preparedStatements.updateProject.run(project.name, new Date().toISOString(), project.id);
 }
 
-export function deleteProject(projectId: string) {
-	return preparedStatements.deleteProject.run(projectId);
+export function deleteProject(projectId: string, ownerId: string) {
+	return preparedStatements.deleteProject.run(projectId, ownerId);
 }

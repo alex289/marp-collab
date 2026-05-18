@@ -86,7 +86,7 @@ export function addCollaborator(collaborator: Omit<ProjectCollaborator, "created
 		collaborator.projectId,
 		collaborator.userId,
 		collaborator.readOnly ? 1 : 0,
-		new Date(),
+		new Date().toISOString(),
 	);
 }
 
