@@ -33,14 +33,8 @@ const hashString = (value: string): number => {
 export const usePresenceUser = (sessionUser: SessionUser | null): PresenceUser => {
 	return useMemo(() => {
 		if (!sessionUser) {
-			const guestId = `guest-${crypto.randomUUID()}`;
-			return {
-				userId: guestId,
-				userName: `Guest ${guestId.slice(-4)}`,
-				color: palette[hashString(guestId) % palette.length] ?? "#0ea5e9",
-			};
+			return { userId: "", userName: "", color: "#0ea5e9" };
 		}
-
 		const seed = sessionUser.id ?? sessionUser.email;
 		return {
 			userId: sessionUser.id,
@@ -50,11 +44,15 @@ export const usePresenceUser = (sessionUser: SessionUser | null): PresenceUser =
 	}, [sessionUser]);
 };
 
-export const useCollabDocument = (documentName: string | null, user: PresenceUser): CollabState => {
+export const useCollabDocument = (
+	documentName: string | null,
+	sessionUser: SessionUser | null,
+	user: PresenceUser,
+): CollabState => {
 	const [state, setState] = useState<CollabState>(defaultState);
 
 	useEffect(() => {
-		if (!documentName) {
+		if (!documentName || !sessionUser) {
 			setState(defaultState);
 			return;
 		}
@@ -67,7 +65,6 @@ export const useCollabDocument = (documentName: string | null, user: PresenceUse
 			url: `${API_URL}/collab`,
 			name: documentName,
 			document: yDoc,
-			token: JSON.stringify(user),
 			onStatus: ({ status }) => {
 				setState((current) => ({
 					...current,
@@ -94,7 +91,7 @@ export const useCollabDocument = (documentName: string | null, user: PresenceUse
 			yDoc.destroy();
 			setState(defaultState);
 		};
-	}, [documentName, user]);
+	}, [documentName, user, sessionUser]);
 
 	return state;
 };

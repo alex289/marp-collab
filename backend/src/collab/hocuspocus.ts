@@ -1,7 +1,7 @@
 import { Hocuspocus } from "@hocuspocus/server";
-import { randomUUID } from "node:crypto";
 import * as Y from "yjs";
 import { getDocumentContent, saveDocumentContent } from "./files.ts";
+import { auth } from "../auth.ts";
 
 type CollabContext = {
 	userId: string;
@@ -11,45 +11,30 @@ type CollabContext = {
 
 const fallbackColors = ["#f97316", "#16a34a", "#0ea5e9", "#e11d48", "#7c3aed", "#db2777"];
 
+const hashString = (value: string): number => {
+	let hash = 0;
+	for (let i = 0; i < value.length; i++) {
+		hash = (hash << 5) - hash + value.charCodeAt(i);
+		hash |= 0;
+	}
+	return Math.abs(hash);
+};
+
 const persistedUpdates = new Map<string, Uint8Array>();
-
-const makeGuestContext = (): CollabContext => {
-	const color = fallbackColors[Math.floor(Math.random() * fallbackColors.length)] ?? "#0ea5e9";
-	const guestId = randomUUID();
-
-	return {
-		userId: guestId,
-		userName: `Guest-${guestId.slice(0, 4)}`,
-		color,
-	};
-};
-
-const parseAuthToken = (token?: string): CollabContext => {
-	if (!token) {
-		return makeGuestContext();
-	}
-
-	try {
-		const parsed = JSON.parse(token) as Partial<CollabContext>;
-		if (parsed.userId && parsed.userName && parsed.color) {
-			return {
-				userId: parsed.userId,
-				userName: parsed.userName,
-				color: parsed.color,
-			};
-		}
-	} catch {
-		return makeGuestContext();
-	}
-
-	return makeGuestContext();
-};
 
 export const collabServer = new Hocuspocus({
 	timeout: 30_000,
-	// oxlint-disable-next-line require-await
-	async onAuthenticate({ token }: { token?: string }) {
-		return parseAuthToken(token);
+	async onAuthenticate({ requestHeaders }: { requestHeaders: Headers }) {
+		const session = await auth.api.getSession({ headers: requestHeaders });
+		if (!session) {
+			throw new Error("Unauthorized");
+		}
+		const seed = session.user.id;
+		return {
+			userId: session.user.id,
+			userName: session.user.name || session.user.email,
+			color: fallbackColors[hashString(seed) % fallbackColors.length] ?? "#0ea5e9",
+		} satisfies CollabContext;
 	},
 	async onLoadDocument({ documentName }: { documentName: string }) {
 		const persisted = persistedUpdates.get(documentName);

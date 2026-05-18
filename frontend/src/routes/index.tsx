@@ -23,7 +23,7 @@ export const Route = createFileRoute("/")({
 	component: RootComponent,
 });
 
-export function RootComponent() {
+function RootComponent() {
 	const { session } = Route.useRouteContext();
 
 	const presenceUser = usePresenceUser(session?.user ?? null);
@@ -49,7 +49,11 @@ export function RootComponent() {
 		}
 	}, [files, selectedFile]);
 
-	const collab = useCollabDocument(selectedFile?.documentName ?? null, presenceUser);
+	const collab = useCollabDocument(
+		selectedFile?.documentName ?? null,
+		session?.user ?? null,
+		presenceUser,
+	);
 
 	useEffect(() => {
 		if (!collab.yText) {
