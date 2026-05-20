@@ -8,6 +8,7 @@ import {
 	getDeckFiles,
 	getProjectFile,
 	isMarkdownFileId,
+	moveProjectFile,
 	saveDocumentContent,
 	saveProjectFile,
 	toDocumentName,
@@ -292,6 +293,45 @@ app.get("/:projectId/files/:fileId{.+}", async (c) => {
 			"Cache-Control": "private, max-age=3600",
 		},
 	});
+});
+
+const moveFileSchema = z.object({
+	destination: z
+		.string()
+		.max(255)
+		.refine((d) => !d.split("/").includes(".."), "Path traversal not allowed")
+		.refine((d) => !d.startsWith("/"), "Absolute paths not allowed"),
+});
+
+app.patch("/:projectId/files/:fileId{.+}", async (c) => {
+	const user = c.get("user");
+	if (!user) {
+		return c.json({ error: "Unauthorized" }, 401);
+	}
+
+	const { projectId } = c.req.param();
+	const access = getUserProjectAccess(projectId, user.id);
+	if (!access) {
+		return c.json({ error: "Project not found or access denied" }, 403);
+	}
+	if (access.readOnly) {
+		return c.json({ error: "You do not have write access to this project" }, 403);
+	}
+
+	const fileId = decodeURIComponent(c.req.param("fileId"));
+	const body = await c.req.json();
+	const parseResult = moveFileSchema.safeParse(body);
+	if (!parseResult.success) {
+		return c.json({ error: z.prettifyError(parseResult.error) }, 400);
+	}
+
+	const { destination } = parseResult.data;
+	const newFileId = await moveProjectFile(projectId, fileId, destination);
+	if (!newFileId) {
+		return c.json({ error: "File not found or invalid destination" }, 404);
+	}
+
+	return c.json({ newFileId });
 });
 
 app.delete("/:projectId/folders/:folderPath{.+}", async (c) => {

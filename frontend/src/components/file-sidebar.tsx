@@ -1,5 +1,5 @@
 // oxlint-disable no-warning-comments
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
 	RefreshCw,
 	File,
@@ -32,6 +32,7 @@ import { CreateFileDialog } from "@/components/dialog/create-file";
 import { CreateFolderDialog } from "@/components/dialog/create-folder";
 import { UploadFileDialog } from "@/components/dialog/upload-file";
 import { DeleteFileDialog } from "@/components/dialog/delete-file";
+import { API_URL } from "@/lib/config";
 
 type NestedFileNode = {
 	name: string;
@@ -132,6 +133,12 @@ const getAncestorFolderPaths = (fileId: string): string[] => {
 	return ancestors;
 };
 
+const getParentFolder = (fileId: string): string => {
+	const normalized = normalizePath(fileId);
+	const lastSlash = normalized.lastIndexOf("/");
+	return lastSlash === -1 ? "" : normalized.slice(0, lastSlash);
+};
+
 const SidebarHeaderAction = ({
 	onClick,
 	title,
@@ -151,6 +158,11 @@ const SidebarHeaderAction = ({
 	</button>
 );
 
+type DragState = {
+	draggingFileId: string | null;
+	dragOverPath: string | null;
+};
+
 type NestedFileItemProps = {
 	node: NestedFileNode;
 	selectedFileId: string | null;
@@ -158,6 +170,11 @@ type NestedFileItemProps = {
 	onDeleteFile: (file: DeckFile) => void;
 	openFolders: Record<string, boolean>;
 	setFolderOpen: (path: string, open: boolean) => void;
+	dragState: DragState;
+	onDragStart: (fileId: string) => void;
+	onDragEnd: () => void;
+	onDragOverPath: (path: string | null) => void;
+	onDropOnPath: (destinationFolder: string) => void;
 };
 
 const NestedFileItem = ({
@@ -167,6 +184,11 @@ const NestedFileItem = ({
 	onDeleteFile,
 	openFolders,
 	setFolderOpen,
+	dragState,
+	onDragStart,
+	onDragEnd,
+	onDragOverPath,
+	onDropOnPath,
 }: NestedFileItemProps) => {
 	const isFolder = node.children.length > 0 || node.file?.type === "folder";
 
@@ -176,11 +198,21 @@ const NestedFileItem = ({
 		}
 
 		const file = node.file;
+		const isDragging = dragState.draggingFileId === file.id;
+
+		const dragProps = {
+			draggable: true,
+			onDragStart: (e: React.DragEvent) => {
+				e.dataTransfer.effectAllowed = "move";
+				onDragStart(file.id);
+			},
+			onDragEnd: onDragEnd,
+		};
 
 		if (file.type === "asset") {
 			return (
-				<SidebarMenuItem>
-					<SidebarMenuButton tooltip={file.id}>
+				<SidebarMenuItem className={isDragging ? "opacity-40" : undefined}>
+					<SidebarMenuButton tooltip={file.id} {...dragProps}>
 						<Image />
 						{node.name}
 					</SidebarMenuButton>
@@ -197,12 +229,13 @@ const NestedFileItem = ({
 		}
 
 		return (
-			<SidebarMenuItem>
+			<SidebarMenuItem className={isDragging ? "opacity-40" : undefined}>
 				<SidebarMenuButton
 					isActive={selectedFileId === file.id}
 					className="data-[active=true]:bg-primary data-[active=true]:text-primary-foreground hover:bg-accent hover:text-accent-foreground"
 					onClick={() => onSelectFile(file)}
 					tooltip={file.id}
+					{...dragProps}
 				>
 					<File />
 					{node.name}
@@ -224,6 +257,7 @@ const NestedFileItem = ({
 	);
 	const isOpen = openFolders[node.path] ?? false;
 	const folderFile = node.file?.type === "folder" ? node.file : null;
+	const isDragOver = dragState.dragOverPath === node.path && dragState.draggingFileId !== null;
 
 	return (
 		<SidebarMenuItem>
@@ -233,7 +267,27 @@ const NestedFileItem = ({
 				className="group/collapsible [&[data-state=open]>[data-sidebar=menu-button]>svg:first-child]:rotate-90"
 			>
 				<CollapsibleTrigger asChild>
-					<SidebarMenuButton isActive={isActiveBranch} tooltip={node.path}>
+					<SidebarMenuButton
+						isActive={isActiveBranch}
+						tooltip={node.path}
+						className={isDragOver ? "ring-2 ring-primary ring-inset" : undefined}
+						onDragOver={(e) => {
+							e.preventDefault();
+							e.stopPropagation();
+							e.dataTransfer.dropEffect = "move";
+							onDragOverPath(node.path);
+						}}
+						onDragLeave={(e) => {
+							if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+								onDragOverPath(null);
+							}
+						}}
+						onDrop={(e) => {
+							e.preventDefault();
+							e.stopPropagation();
+							onDropOnPath(node.path);
+						}}
+					>
 						<ChevronRight className="transition-transform" />
 						<Folder />
 						{node.name}
@@ -260,6 +314,11 @@ const NestedFileItem = ({
 								onDeleteFile={onDeleteFile}
 								openFolders={openFolders}
 								setFolderOpen={setFolderOpen}
+								dragState={dragState}
+								onDragStart={onDragStart}
+								onDragEnd={onDragEnd}
+								onDragOverPath={onDragOverPath}
+								onDropOnPath={onDropOnPath}
 							/>
 						))}
 					</SidebarMenuSub>
@@ -298,6 +357,12 @@ export const FileSidebar = ({
 	const [createFolderOpen, setCreateFolderOpen] = useState(false);
 	const [uploadFileOpen, setUploadFileOpen] = useState(false);
 	const [fileToDelete, setFileToDelete] = useState<DeckFile | null>(null);
+	const [dragState, setDragState] = useState<DragState>({
+		draggingFileId: null,
+		dragOverPath: null,
+	});
+	const dragStateRef = useRef(dragState);
+	dragStateRef.current = dragState;
 
 	useEffect(() => {
 		if (!selectedFileId) {
@@ -336,6 +401,58 @@ export const FileSidebar = ({
 			};
 		});
 	};
+
+	const handleDragStart = (fileId: string) => {
+		setDragState({ draggingFileId: fileId, dragOverPath: null });
+	};
+
+	const handleDragEnd = () => {
+		setDragState({ draggingFileId: null, dragOverPath: null });
+	};
+
+	const handleDragOverPath = (path: string | null) => {
+		setDragState((prev) => (prev.dragOverPath === path ? prev : { ...prev, dragOverPath: path }));
+	};
+
+	const handleDropOnPath = async (destinationFolder: string) => {
+		const fileId = dragStateRef.current.draggingFileId;
+		setDragState({ draggingFileId: null, dragOverPath: null });
+
+		if (!fileId) {
+			return;
+		}
+
+		if (getParentFolder(fileId) === destinationFolder) {
+			return;
+		}
+
+		const res = await fetch(
+			`${API_URL}/projects/${projectId}/files/${encodeURIComponent(fileId)}`,
+			{
+				method: "PATCH",
+				credentials: "include",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ destination: destinationFolder }),
+			},
+		);
+
+		if (!res.ok) {
+			return;
+		}
+
+		const { newFileId } = (await res.json()) as { newFileId: string };
+
+		if (selectedFileId === fileId) {
+			const movedFile = files.find((f) => f.id === fileId);
+			if (movedFile) {
+				onSelectFile({ ...movedFile, id: newFileId });
+			}
+		}
+
+		onRetry();
+	};
+
+	const isRootDragOver = dragState.dragOverPath === "" && dragState.draggingFileId !== null;
 
 	return (
 		<>
@@ -394,45 +511,72 @@ export const FileSidebar = ({
 									</div>
 								</SidebarGroupLabel>
 								<SidebarGroupContent>
-									<SidebarMenu>
-										{isLoading ? (
-											<SidebarMenuButton disabled>
-												<RefreshCw className="animate-spin" />
-												Loading files...
-											</SidebarMenuButton>
-										) : null}
-
-										{error ? (
-											<SidebarMenuButton
-												className="bg-destructive/10 text-destructive hover:bg-destructive/20"
-												onClick={onRetry}
-											>
-												<RefreshCw />
-												Retry
-											</SidebarMenuButton>
-										) : null}
-
-										{!isLoading && !error && nestedFileTree.length === 0 ? (
-											<SidebarMenuItem>
+									<div
+										className={
+											isRootDragOver ? "rounded-md ring-2 ring-primary ring-inset" : undefined
+										}
+										onDragOver={(e) => {
+											if (dragState.draggingFileId) {
+												e.preventDefault();
+												e.dataTransfer.dropEffect = "move";
+												handleDragOverPath("");
+											}
+										}}
+										onDragLeave={(e) => {
+											if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+												handleDragOverPath(null);
+											}
+										}}
+										onDrop={(e) => {
+											e.preventDefault();
+											void handleDropOnPath("");
+										}}
+									>
+										<SidebarMenu>
+											{isLoading ? (
 												<SidebarMenuButton disabled>
-													<File />
-													No files yet
+													<RefreshCw className="animate-spin" />
+													Loading files...
 												</SidebarMenuButton>
-											</SidebarMenuItem>
-										) : null}
+											) : null}
 
-										{nestedFileTree.map((node) => (
-											<NestedFileItem
-												key={node.path}
-												node={node}
-												selectedFileId={selectedFileId}
-												onSelectFile={onSelectFile}
-												onDeleteFile={setFileToDelete}
-												openFolders={openFolders}
-												setFolderOpen={setFolderOpen}
-											/>
-										))}
-									</SidebarMenu>
+											{error ? (
+												<SidebarMenuButton
+													className="bg-destructive/10 text-destructive hover:bg-destructive/20"
+													onClick={onRetry}
+												>
+													<RefreshCw />
+													Retry
+												</SidebarMenuButton>
+											) : null}
+
+											{!isLoading && !error && nestedFileTree.length === 0 ? (
+												<SidebarMenuItem>
+													<SidebarMenuButton disabled>
+														<File />
+														No files yet
+													</SidebarMenuButton>
+												</SidebarMenuItem>
+											) : null}
+
+											{nestedFileTree.map((node) => (
+												<NestedFileItem
+													key={node.path}
+													node={node}
+													selectedFileId={selectedFileId}
+													onSelectFile={onSelectFile}
+													onDeleteFile={setFileToDelete}
+													openFolders={openFolders}
+													setFolderOpen={setFolderOpen}
+													dragState={dragState}
+													onDragStart={handleDragStart}
+													onDragEnd={handleDragEnd}
+													onDragOverPath={handleDragOverPath}
+													onDropOnPath={handleDropOnPath}
+												/>
+											))}
+										</SidebarMenu>
+									</div>
 								</SidebarGroupContent>
 							</SidebarGroup>
 						</SidebarContent>

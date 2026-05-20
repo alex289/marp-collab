@@ -1,4 +1,4 @@
-import { glob, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { glob, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, extname, isAbsolute, resolve, sep } from "node:path";
 import { getFileType, MARKDOWN_EXTENSIONS } from "../helpers/file-allowlist.ts";
 
@@ -184,6 +184,28 @@ export async function getProjectFile(
 		}
 		throw error;
 	}
+}
+
+export async function moveProjectFile(
+	projectId: string,
+	fileId: string,
+	destinationFolder: string,
+): Promise<string | null> {
+	const sourcePath = resolveProjectFilePath(projectId, fileId);
+	if (!sourcePath) {
+		return null;
+	}
+
+	const basename = fileId.split("/").pop()!;
+	const newFileId = destinationFolder ? `${destinationFolder}/${basename}` : basename;
+
+	const destPath = resolveProjectFilePath(projectId, newFileId);
+	if (!destPath) {
+		return null;
+	}
+
+	await rename(sourcePath, destPath);
+	return newFileId;
 }
 
 export async function deleteProjectFile(projectId: string, fileId: string): Promise<boolean> {
