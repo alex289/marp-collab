@@ -1,6 +1,7 @@
 import { Hocuspocus } from "@hocuspocus/server";
 import * as Y from "yjs";
 import { getDocumentContent, saveDocumentContent } from "./files.ts";
+import { isEditableExtension } from "../helpers/file-allowlist.ts";
 import { auth } from "../auth.ts";
 import { getUserProjectAccess } from "../helpers/project-auth.ts";
 
@@ -43,6 +44,10 @@ export const collabServer = new Hocuspocus({
 			throw new Error("Invalid document name");
 		}
 		const projectId = parts[1];
+		const fileId = parts.slice(2).join("/");
+		if (!isEditableExtension(fileId)) {
+			throw new Error("Only text files can be opened in the editor");
+		}
 
 		const access = getUserProjectAccess(projectId, session.user.id);
 		if (!access) {

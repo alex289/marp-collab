@@ -1,6 +1,6 @@
 // oxlint-disable no-warning-comments
 import { useEffect, useMemo, useState } from "react";
-import { RefreshCw, File, ChevronRight, Folder } from "lucide-react";
+import { RefreshCw, File, ChevronRight, Folder, FilePlus, Upload, Image } from "lucide-react";
 import type { DeckFile } from "@/lib/types";
 import {
 	Sidebar,
@@ -17,6 +17,8 @@ import {
 } from "@/components/ui/sidebar";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { TooltipProvider } from "./ui/tooltip";
+import { CreateFileDialog } from "@/components/dialog/create-file";
+import { UploadFileDialog } from "@/components/dialog/upload-file";
 
 type NestedFileNode = {
 	name: string;
@@ -136,6 +138,17 @@ const NestedFileItem = ({
 
 		const file = node.file;
 
+		if (file.type === "asset") {
+			return (
+				<SidebarMenuItem>
+					<SidebarMenuButton tooltip={file.id}>
+						<Image />
+						{node.name}
+					</SidebarMenuButton>
+				</SidebarMenuItem>
+			);
+		}
+
 		return (
 			<SidebarMenuItem>
 				<SidebarMenuButton
@@ -191,6 +204,7 @@ const NestedFileItem = ({
 };
 
 type FileSidebarProps = {
+	projectId: string;
 	files: DeckFile[];
 	selectedFileId: string | null;
 	onSelectFile: (file: DeckFile) => void;
@@ -202,6 +216,7 @@ type FileSidebarProps = {
 };
 
 export const FileSidebar = ({
+	projectId,
 	files,
 	selectedFileId,
 	onSelectFile,
@@ -213,6 +228,8 @@ export const FileSidebar = ({
 }: FileSidebarProps) => {
 	const nestedFileTree = useMemo(() => buildNestedFileTree(files), [files]);
 	const [openFolders, setOpenFolders] = useState<Record<string, boolean>>({});
+	const [createFileOpen, setCreateFileOpen] = useState(false);
+	const [uploadFileOpen, setUploadFileOpen] = useState(false);
 
 	useEffect(() => {
 		if (!selectedFileId) {
@@ -253,57 +270,91 @@ export const FileSidebar = ({
 	};
 
 	return (
-		<SidebarProvider open={sidebarOpen} onOpenChange={setSidebarOpen}>
-			<TooltipProvider>
-				<Sidebar variant="floating" collapsible="icon" className="static pt-0">
-					<SidebarContent>
-						<SidebarGroup>
-							<SidebarGroupLabel>Files</SidebarGroupLabel>
-							<SidebarGroupContent>
-								<SidebarMenu>
-									{isLoading ? (
-										<SidebarMenuButton disabled>
-											<RefreshCw className="animate-spin" />
-											Loading files...
-										</SidebarMenuButton>
-									) : null}
-
-									{error ? (
-										<SidebarMenuButton
-											className="bg-destructive/10 text-destructive hover:bg-destructive/20"
-											onClick={onRetry}
+		<>
+			<CreateFileDialog
+				projectId={projectId}
+				open={createFileOpen}
+				onOpenChange={setCreateFileOpen}
+				onCreated={onRetry}
+			/>
+			<UploadFileDialog
+				projectId={projectId}
+				open={uploadFileOpen}
+				onOpenChange={setUploadFileOpen}
+				onUploaded={onRetry}
+			/>
+			<SidebarProvider open={sidebarOpen} onOpenChange={setSidebarOpen}>
+				<TooltipProvider>
+					<Sidebar variant="floating" collapsible="icon" className="static pt-0">
+						<SidebarContent>
+							<SidebarGroup>
+								<SidebarGroupLabel className="flex items-center justify-between pr-1">
+									<span>Files</span>
+									<div className="flex items-center gap-0.5">
+										<button
+											type="button"
+											onClick={() => setCreateFileOpen(true)}
+											title="New file"
+											className="flex h-5 w-5 items-center justify-center rounded-md text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground [&>svg]:size-4"
 										>
-											<RefreshCw />
-											Retry
-										</SidebarMenuButton>
-									) : null}
-
-									{!isLoading && !error && nestedFileTree.length === 0 ? (
-										<SidebarMenuItem>
+											<FilePlus />
+										</button>
+										<button
+											type="button"
+											onClick={() => setUploadFileOpen(true)}
+											title="Upload file"
+											className="flex h-5 w-5 items-center justify-center rounded-md text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground [&>svg]:size-4"
+										>
+											<Upload />
+										</button>
+									</div>
+								</SidebarGroupLabel>
+								<SidebarGroupContent>
+									<SidebarMenu>
+										{isLoading ? (
 											<SidebarMenuButton disabled>
-												<File />
-												No markdown files found
+												<RefreshCw className="animate-spin" />
+												Loading files...
 											</SidebarMenuButton>
-										</SidebarMenuItem>
-									) : null}
+										) : null}
 
-									{nestedFileTree.map((node) => (
-										<NestedFileItem
-											key={node.path}
-											node={node}
-											selectedFileId={selectedFileId}
-											onSelectFile={onSelectFile}
-											openFolders={openFolders}
-											setFolderOpen={setFolderOpen}
-										/>
-									))}
-								</SidebarMenu>
-							</SidebarGroupContent>
-						</SidebarGroup>
-					</SidebarContent>
-					<SidebarRail />
-				</Sidebar>
-			</TooltipProvider>
-		</SidebarProvider>
+										{error ? (
+											<SidebarMenuButton
+												className="bg-destructive/10 text-destructive hover:bg-destructive/20"
+												onClick={onRetry}
+											>
+												<RefreshCw />
+												Retry
+											</SidebarMenuButton>
+										) : null}
+
+										{!isLoading && !error && nestedFileTree.length === 0 ? (
+											<SidebarMenuItem>
+												<SidebarMenuButton disabled>
+													<File />
+													No files yet
+												</SidebarMenuButton>
+											</SidebarMenuItem>
+										) : null}
+
+										{nestedFileTree.map((node) => (
+											<NestedFileItem
+												key={node.path}
+												node={node}
+												selectedFileId={selectedFileId}
+												onSelectFile={onSelectFile}
+												openFolders={openFolders}
+												setFolderOpen={setFolderOpen}
+											/>
+										))}
+									</SidebarMenu>
+								</SidebarGroupContent>
+							</SidebarGroup>
+						</SidebarContent>
+						<SidebarRail />
+					</Sidebar>
+				</TooltipProvider>
+			</SidebarProvider>
+		</>
 	);
 };

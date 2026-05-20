@@ -3,7 +3,8 @@ import type { authClient } from "./auth-client";
 export type DeckFile = {
 	id: string;
 	label: string;
-	documentName: string;
+	type: "markdown" | "asset";
+	documentName?: string;
 };
 
 export type PresenceUser = {

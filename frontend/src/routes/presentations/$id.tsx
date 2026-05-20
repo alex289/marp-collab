@@ -37,19 +37,25 @@ function RouteComponent() {
 			return;
 		}
 
+		const preferredDefault = () =>
+			files.find((f) => f.id === "presentation.md") ??
+			files.find((f) => f.type === "markdown") ??
+			files[0] ??
+			null;
+
 		if (!selectedFile) {
-			setSelectedFile(files[0] ?? null);
+			setSelectedFile(preferredDefault());
 			return;
 		}
 
 		const stillAvailable = files.some((file) => file.id === selectedFile.id);
 		if (!stillAvailable) {
-			setSelectedFile(files[0] ?? null);
+			setSelectedFile(preferredDefault());
 		}
 	}, [files, selectedFile]);
 
 	const collab = useCollabDocument(
-		selectedFile?.documentName ?? null,
+		selectedFile?.type === "markdown" ? (selectedFile.documentName ?? null) : null,
 		session?.user ?? null,
 		presenceUser,
 	);
@@ -86,6 +92,7 @@ function RouteComponent() {
 					)}
 				>
 					<FileSidebar
+						projectId={id}
 						files={files}
 						selectedFileId={selectedFile?.id ?? null}
 						onSelectFile={setSelectedFile}
