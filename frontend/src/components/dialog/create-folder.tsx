@@ -23,16 +23,14 @@ type Props = {
 };
 
 export function CreateFolderDialog({ projectId, open, onOpenChange, onCreated }: Props) {
-	const [folderName, setFolderName] = useState("");
-	const [fileName, setFileName] = useState("slides.md");
+	const [name, setName] = useState("");
 	const [error, setError] = useState<string | null>(null);
 	const [isSubmitting, setIsSubmitting] = useState(false);
 
 	function handleOpenChange(next: boolean) {
 		onOpenChange(next);
 		if (!next) {
-			setFolderName("");
-			setFileName("slides.md");
+			setName("");
 			setError(null);
 			setIsSubmitting(false);
 		}
@@ -43,14 +41,12 @@ export function CreateFolderDialog({ projectId, open, onOpenChange, onCreated }:
 		setIsSubmitting(true);
 		setError(null);
 
-		const name = `${folderName.trim()}/${fileName.trim()}`;
-
 		try {
-			const res = await fetch(`${API_URL}/projects/${projectId}/files`, {
+			const res = await fetch(`${API_URL}/projects/${projectId}/folders`, {
 				method: "POST",
 				credentials: "include",
 				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ name }),
+				body: JSON.stringify({ name: name.trim() }),
 			});
 
 			if (!res.ok) {
@@ -75,7 +71,7 @@ export function CreateFolderDialog({ projectId, open, onOpenChange, onCreated }:
 					<DialogHeader>
 						<DialogTitle>New Folder</DialogTitle>
 						<DialogDescription>
-							Folders must contain at least one file. You can add more files later.
+							Use <code>/</code> to create nested folders.
 						</DialogDescription>
 					</DialogHeader>
 					<FieldGroup>
@@ -85,19 +81,8 @@ export function CreateFolderDialog({ projectId, open, onOpenChange, onCreated }:
 								id="folder-name"
 								name="folder-name"
 								placeholder="assets"
-								value={folderName}
-								onChange={(e) => setFolderName(e.target.value)}
-								required
-							/>
-						</Field>
-						<Field>
-							<Label htmlFor="first-file-name">First file name</Label>
-							<Input
-								id="first-file-name"
-								name="first-file-name"
-								placeholder="slides.md"
-								value={fileName}
-								onChange={(e) => setFileName(e.target.value)}
+								value={name}
+								onChange={(e) => setName(e.target.value)}
 								required
 							/>
 						</Field>

@@ -3,6 +3,7 @@ import type { HonoVariables } from "../../types.ts";
 import { createProject, deleteProject, getProjectsByOwnerId } from "../../db/models/project.ts";
 import { getUserProjectAccess } from "../../helpers/project-auth.ts";
 import {
+	createProjectDir,
 	deleteProjectFile,
 	getDeckFiles,
 	getProjectFile,
@@ -153,6 +154,46 @@ app.post("/:projectId/files", async (c) => {
 	});
 });
 
+const createFolderSchema = z.object({
+	name: z
+		.string()
+		.trim()
+		.min(1)
+		.max(255)
+		.regex(
+			/^[\w\-. /]+$/,
+			"Folder name must contain only letters, numbers, spaces, hyphens, underscores, dots, or slashes",
+		)
+		.refine((name) => !name.split("/").includes(".."), "Path traversal not allowed")
+		.refine((name) => !name.startsWith("/"), "Absolute paths not allowed"),
+});
+
+app.post("/:projectId/folders", async (c) => {
+	const user = c.get("user");
+	if (!user) {
+		return c.json({ error: "Unauthorized" }, 401);
+	}
+
+	const { projectId } = c.req.param();
+	const access = getUserProjectAccess(projectId, user.id);
+	if (!access) {
+		return c.json({ error: "Project not found or access denied" }, 403);
+	}
+	if (access.readOnly) {
+		return c.json({ error: "You do not have write access to this project" }, 403);
+	}
+
+	const body = await c.req.json();
+	const parseResult = createFolderSchema.safeParse(body);
+	if (!parseResult.success) {
+		return c.json({ error: z.prettifyError(parseResult.error) }, 400);
+	}
+
+	await createProjectDir(projectId, parseResult.data.name);
+
+	return c.json({ success: true });
+});
+
 app.post("/:projectId/files/upload", async (c) => {
 	const user = c.get("user");
 	if (!user) {
@@ -251,6 +292,31 @@ app.get("/:projectId/files/:fileId{.+}", async (c) => {
 			"Cache-Control": "private, max-age=3600",
 		},
 	});
+});
+
+app.delete("/:projectId/folders/:folderPath{.+}", async (c) => {
+	const user = c.get("user");
+	if (!user) {
+		return c.json({ error: "Unauthorized" }, 401);
+	}
+
+	const { projectId } = c.req.param();
+	const access = getUserProjectAccess(projectId, user.id);
+	if (!access) {
+		return c.json({ error: "Project not found or access denied" }, 403);
+	}
+	if (access.readOnly) {
+		return c.json({ error: "You do not have write access to this project" }, 403);
+	}
+
+	const folderPath = decodeURIComponent(c.req.param("folderPath"));
+	const deleted = await deleteProjectFile(projectId, `${folderPath}/.keep`);
+
+	if (!deleted) {
+		return c.json({ error: "Folder not found" }, 404);
+	}
+
+	return c.json({ success: true });
 });
 
 app.delete("/:projectId/files/:fileId{.+}", async (c) => {

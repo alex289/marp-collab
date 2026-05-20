@@ -41,10 +41,11 @@ export function DeleteFileDialog({ projectId, file, open, onOpenChange, onDelete
 		setError(null);
 
 		try {
-			const res = await fetch(
-				`${API_URL}/projects/${projectId}/files/${encodeURIComponent(file.id)}`,
-				{ method: "DELETE", credentials: "include" },
-			);
+			const endpoint =
+				file.type === "folder"
+					? `${API_URL}/projects/${projectId}/folders/${encodeURIComponent(file.id)}`
+					: `${API_URL}/projects/${projectId}/files/${encodeURIComponent(file.id)}`;
+			const res = await fetch(endpoint, { method: "DELETE", credentials: "include" });
 
 			if (!res.ok) {
 				const data = (await res.json()) as { error?: string };
@@ -61,15 +62,18 @@ export function DeleteFileDialog({ projectId, file, open, onOpenChange, onDelete
 		}
 	}
 
+	const isFolder = file?.type === "folder";
+	const displayName = file?.id;
+
 	return (
 		<Dialog open={open} onOpenChange={handleOpenChange}>
 			<DialogContent className="sm:max-w-sm">
 				<DialogHeader>
-					<DialogTitle>Delete File</DialogTitle>
+					<DialogTitle>{isFolder ? "Delete Folder" : "Delete File"}</DialogTitle>
 					<DialogDescription>
 						Are you sure you want to delete{" "}
-						<span className="font-medium text-foreground">{file?.id}</span>? This action cannot be
-						undone.
+						<span className="font-medium text-foreground">{displayName}</span>? This action cannot
+						be undone.
 					</DialogDescription>
 				</DialogHeader>
 				{error && <ErrorAlert title="Failed to delete file" description={error} />}

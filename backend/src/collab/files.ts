@@ -5,7 +5,7 @@ import { getFileType, MARKDOWN_EXTENSIONS } from "../helpers/file-allowlist.ts";
 export type DeckFile = {
 	id: string;
 	label: string;
-	type: "markdown" | "asset";
+	type: "markdown" | "asset" | "folder";
 };
 
 const dataDir = resolve(process.cwd(), process.env.DATA_PATH ?? "data");
@@ -54,9 +54,9 @@ async function listProjectFiles(projectId: string): Promise<string[]> {
 	}
 	const projectDir = resolve(presentationsDir, projectId);
 	const files = await Array.fromAsync(
-		glob("**/*.{md,markdown,jpg,jpeg,png,gif,webp,svg,bmp,tiff,css}", {
+		glob("**/{*.{md,markdown,jpg,jpeg,png,gif,webp,svg,bmp,tiff,css},.keep}", {
 			cwd: projectDir,
-			exclude: (p) => p.split("/").some((part) => part.startsWith(".")),
+			exclude: (p) => p.split("/").some((part) => part.startsWith(".") && part !== ".keep"),
 		}),
 	);
 	return files.sort((a, b) => a.localeCompare(b));
@@ -77,7 +77,32 @@ export async function getDeckFiles(projectId: string): Promise<DeckFile[]> {
 	await ensurePresentationsDir(projectId);
 
 	const fileIds = await listProjectFiles(projectId);
-	return fileIds.map((id) => ({ id, label: id, type: getFileType(id) ?? "asset" }));
+	return fileIds.map((rawId) => {
+		const id = rawId.replace(/\\/g, "/");
+		if (id.endsWith("/.keep")) {
+			const folderPath = id.slice(0, -"/.keep".length);
+			return { id: folderPath, label: folderPath, type: "folder" as const };
+		}
+		return { id, label: id, type: getFileType(id) ?? ("asset" as const) };
+	});
+}
+
+export async function createProjectDir(projectId: string, dirPath: string): Promise<void> {
+	if (!isValidProjectId(projectId)) {
+		throw new Error(`Invalid project id: ${projectId}`);
+	}
+
+	if (!dirPath || isAbsolute(dirPath) || dirPath.split("/").includes("..")) {
+		throw new Error(`Invalid dir path: ${dirPath}`);
+	}
+
+	const dir = resolve(presentationsDir, projectId, dirPath);
+	if (!dir.startsWith(presentationsDir + sep)) {
+		throw new Error(`Path traversal detected: ${dirPath}`);
+	}
+
+	await mkdir(dir, { recursive: true });
+	await writeFile(resolve(dir, ".keep"), "");
 }
 
 export async function getDocumentContent(documentName: string): Promise<string | undefined> {

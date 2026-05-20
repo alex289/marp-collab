@@ -58,8 +58,10 @@ const toNestedNodes = (nodeMap: Map<string, MutableNestedFileNode>): NestedFileN
 	}));
 
 	nodes.sort((left, right) => {
-		const leftIsFolder = left.children.length > 0 || left.file === null;
-		const rightIsFolder = right.children.length > 0 || right.file === null;
+		const leftIsFolder =
+			left.children.length > 0 || left.file === null || left.file?.type === "folder";
+		const rightIsFolder =
+			right.children.length > 0 || right.file === null || right.file?.type === "folder";
 
 		if (leftIsFolder !== rightIsFolder) {
 			return leftIsFolder ? -1 : 1;
@@ -76,6 +78,9 @@ const buildNestedFileTree = (files: DeckFile[]): NestedFileNode[] => {
 
 	for (const file of files) {
 		const normalizedId = normalizePath(file.id);
+		if (normalizedId.split("/").pop() === ".keep") {
+			continue;
+		}
 		if (!normalizedId) {
 			continue;
 		}
@@ -163,7 +168,7 @@ const NestedFileItem = ({
 	openFolders,
 	setFolderOpen,
 }: NestedFileItemProps) => {
-	const isFolder = node.children.length > 0;
+	const isFolder = node.children.length > 0 || node.file?.type === "folder";
 
 	if (!isFolder) {
 		if (!node.file) {
@@ -218,13 +223,14 @@ const NestedFileItem = ({
 		selectedFileId && (selectedFileId === node.path || selectedFileId.startsWith(`${node.path}/`)),
 	);
 	const isOpen = openFolders[node.path] ?? false;
+	const folderFile = node.file?.type === "folder" ? node.file : null;
 
 	return (
 		<SidebarMenuItem>
 			<Collapsible
 				open={isOpen}
 				onOpenChange={(open) => setFolderOpen(node.path, open)}
-				className="group/collapsible [&[data-state=open]>button>svg:first-child]:rotate-90"
+				className="group/collapsible [&[data-state=open]>[data-sidebar=menu-button]>svg:first-child]:rotate-90"
 			>
 				<CollapsibleTrigger asChild>
 					<SidebarMenuButton isActive={isActiveBranch} tooltip={node.path}>
@@ -233,7 +239,16 @@ const NestedFileItem = ({
 						{node.name}
 					</SidebarMenuButton>
 				</CollapsibleTrigger>
-
+				{folderFile && (
+					<SidebarMenuAction
+						showOnHover
+						onClick={() => onDeleteFile(folderFile)}
+						title="Delete folder"
+						className="text-muted-foreground hover:text-destructive"
+					>
+						<Trash2 />
+					</SidebarMenuAction>
+				)}
 				<CollapsibleContent>
 					<SidebarMenuSub>
 						{node.children.map((child) => (
