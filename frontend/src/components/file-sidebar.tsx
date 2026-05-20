@@ -1,6 +1,16 @@
 // oxlint-disable no-warning-comments
 import { useEffect, useMemo, useState } from "react";
-import { RefreshCw, File, ChevronRight, Folder, FilePlus, Upload, Image } from "lucide-react";
+import {
+	RefreshCw,
+	File,
+	ChevronRight,
+	Folder,
+	FilePlus,
+	FolderPlus,
+	Upload,
+	Image,
+	Trash2,
+} from "lucide-react";
 import type { DeckFile } from "@/lib/types";
 import {
 	Sidebar,
@@ -9,6 +19,7 @@ import {
 	SidebarGroupContent,
 	SidebarGroupLabel,
 	SidebarMenu,
+	SidebarMenuAction,
 	SidebarMenuButton,
 	SidebarMenuItem,
 	SidebarMenuSub,
@@ -18,7 +29,9 @@ import {
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { TooltipProvider } from "./ui/tooltip";
 import { CreateFileDialog } from "@/components/dialog/create-file";
+import { CreateFolderDialog } from "@/components/dialog/create-folder";
 import { UploadFileDialog } from "@/components/dialog/upload-file";
+import { DeleteFileDialog } from "@/components/dialog/delete-file";
 
 type NestedFileNode = {
 	name: string;
@@ -114,10 +127,30 @@ const getAncestorFolderPaths = (fileId: string): string[] => {
 	return ancestors;
 };
 
+const SidebarHeaderAction = ({
+	onClick,
+	title,
+	children,
+}: {
+	onClick: () => void;
+	title: string;
+	children: React.ReactNode;
+}) => (
+	<button
+		type="button"
+		onClick={onClick}
+		title={title}
+		className="flex h-5 w-5 items-center justify-center rounded-md text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground [&>svg]:size-4"
+	>
+		{children}
+	</button>
+);
+
 type NestedFileItemProps = {
 	node: NestedFileNode;
 	selectedFileId: string | null;
 	onSelectFile: (file: DeckFile) => void;
+	onDeleteFile: (file: DeckFile) => void;
 	openFolders: Record<string, boolean>;
 	setFolderOpen: (path: string, open: boolean) => void;
 };
@@ -126,6 +159,7 @@ const NestedFileItem = ({
 	node,
 	selectedFileId,
 	onSelectFile,
+	onDeleteFile,
 	openFolders,
 	setFolderOpen,
 }: NestedFileItemProps) => {
@@ -145,6 +179,14 @@ const NestedFileItem = ({
 						<Image />
 						{node.name}
 					</SidebarMenuButton>
+					<SidebarMenuAction
+						showOnHover
+						onClick={() => onDeleteFile(file)}
+						title="Delete file"
+						className="text-muted-foreground hover:text-destructive"
+					>
+						<Trash2 />
+					</SidebarMenuAction>
 				</SidebarMenuItem>
 			);
 		}
@@ -160,6 +202,14 @@ const NestedFileItem = ({
 					<File />
 					{node.name}
 				</SidebarMenuButton>
+				<SidebarMenuAction
+					showOnHover
+					onClick={() => onDeleteFile(file)}
+					title="Delete file"
+					className="text-muted-foreground hover:text-destructive"
+				>
+					<Trash2 />
+				</SidebarMenuAction>
 			</SidebarMenuItem>
 		);
 	}
@@ -192,6 +242,7 @@ const NestedFileItem = ({
 								node={child}
 								selectedFileId={selectedFileId}
 								onSelectFile={onSelectFile}
+								onDeleteFile={onDeleteFile}
 								openFolders={openFolders}
 								setFolderOpen={setFolderOpen}
 							/>
@@ -229,7 +280,9 @@ export const FileSidebar = ({
 	const nestedFileTree = useMemo(() => buildNestedFileTree(files), [files]);
 	const [openFolders, setOpenFolders] = useState<Record<string, boolean>>({});
 	const [createFileOpen, setCreateFileOpen] = useState(false);
+	const [createFolderOpen, setCreateFolderOpen] = useState(false);
 	const [uploadFileOpen, setUploadFileOpen] = useState(false);
+	const [fileToDelete, setFileToDelete] = useState<DeckFile | null>(null);
 
 	useEffect(() => {
 		if (!selectedFileId) {
@@ -277,11 +330,28 @@ export const FileSidebar = ({
 				onOpenChange={setCreateFileOpen}
 				onCreated={onRetry}
 			/>
+			<CreateFolderDialog
+				projectId={projectId}
+				open={createFolderOpen}
+				onOpenChange={setCreateFolderOpen}
+				onCreated={onRetry}
+			/>
 			<UploadFileDialog
 				projectId={projectId}
 				open={uploadFileOpen}
 				onOpenChange={setUploadFileOpen}
 				onUploaded={onRetry}
+			/>
+			<DeleteFileDialog
+				projectId={projectId}
+				file={fileToDelete}
+				open={fileToDelete !== null}
+				onOpenChange={(open) => {
+					if (!open) {
+						setFileToDelete(null);
+					}
+				}}
+				onDeleted={onRetry}
 			/>
 			<SidebarProvider open={sidebarOpen} onOpenChange={setSidebarOpen}>
 				<TooltipProvider>
@@ -291,22 +361,21 @@ export const FileSidebar = ({
 								<SidebarGroupLabel className="flex items-center justify-between pr-1">
 									<span>Files</span>
 									<div className="flex items-center gap-0.5">
-										<button
-											type="button"
-											onClick={() => setCreateFileOpen(true)}
-											title="New file"
-											className="flex h-5 w-5 items-center justify-center rounded-md text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground [&>svg]:size-4"
-										>
+										<SidebarHeaderAction onClick={() => setCreateFileOpen(true)} title="New file">
 											<FilePlus />
-										</button>
-										<button
-											type="button"
+										</SidebarHeaderAction>
+										<SidebarHeaderAction
+											onClick={() => setCreateFolderOpen(true)}
+											title="New folder"
+										>
+											<FolderPlus />
+										</SidebarHeaderAction>
+										<SidebarHeaderAction
 											onClick={() => setUploadFileOpen(true)}
 											title="Upload file"
-											className="flex h-5 w-5 items-center justify-center rounded-md text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground [&>svg]:size-4"
 										>
 											<Upload />
-										</button>
+										</SidebarHeaderAction>
 									</div>
 								</SidebarGroupLabel>
 								<SidebarGroupContent>
@@ -343,6 +412,7 @@ export const FileSidebar = ({
 												node={node}
 												selectedFileId={selectedFileId}
 												onSelectFile={onSelectFile}
+												onDeleteFile={setFileToDelete}
 												openFolders={openFolders}
 												setFolderOpen={setFolderOpen}
 											/>
