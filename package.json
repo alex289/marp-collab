@@ -10,12 +10,13 @@
 		"lint": "oxlint --type-aware --deny-warnings",
 		"format": "oxfmt --write",
 		"format:check": "oxfmt --check",
-		"build": "npm run build --workspaces",
-		"typecheck": "npm run typecheck --workspaces"
+		"build": "pnpm -r build",
+		"typecheck": "pnpm -r typecheck"
 	},
 	"dependencies": {
 		"oxfmt": "^0.49.0",
 		"oxlint": "^1.64.0",
 		"oxlint-tsgolint": "^0.22.1"
-	}
+	},
+	"packageManager": "pnpm@11.1.1"
 }

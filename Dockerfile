@@ -1,11 +1,15 @@
-FROM node:26-trixie-slim AS builder
+FROM ghcr.io/pnpm/pnpm:11.1.1 AS builder
+RUN pnpm runtime set node 26 -g
 
 WORKDIR /app
-
-COPY package*.json ./
+COPY package.json ./
 COPY frontend/package.json ./frontend/
 COPY backend/package.json ./backend/
-RUN npm ci
+COPY pnpm-lock.yaml ./
+COPY pnpm-workspace.yaml ./
+RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
+    pnpm i --frozen-lockfile --store-dir /pnpm/store
+
 COPY . .
 RUN node --run build
 

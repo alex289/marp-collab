@@ -8,15 +8,15 @@ Stack:
 ## 1) Backend starten
 
 ```bash
-npm install
+pnpm install
 cd backend
 cp .env.example .env
-npm run dev
+pnpm dev
 ```
 
 ## 2) Frontend starten
 
 ```bash
 cd frontend
-npm run dev
+pnpm dev
 ```
