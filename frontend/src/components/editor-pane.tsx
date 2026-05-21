@@ -3,6 +3,7 @@ import { EditorState } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 import { indentWithTab } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
+import { css } from "@codemirror/lang-css";
 import { basicSetup } from "codemirror";
 import type { Awareness } from "y-protocols/awareness.js";
 import * as Y from "yjs";
@@ -79,12 +80,14 @@ export const EditorPane = ({ label, yText, awareness, undoManager, status }: Edi
 			return;
 		}
 
+		const languageExtension = label?.endsWith(".css") ? css() : markdown();
+
 		const state = EditorState.create({
 			// oxlint-disable-next-line no-base-to-string
 			doc: yText.toString(),
 			extensions: [
 				basicSetup,
-				markdown(),
+				languageExtension,
 				EditorView.lineWrapping,
 				keymap.of([indentWithTab, ...yUndoManagerKeymap]),
 				yCollab(yText, awareness, { undoManager }),
@@ -100,7 +103,7 @@ export const EditorPane = ({ label, yText, awareness, undoManager, status }: Edi
 		return () => {
 			view.destroy();
 		};
-	}, [yText, awareness, undoManager]);
+	}, [yText, awareness, undoManager, label]);
 
 	useEffect(() => {
 		if (!awareness) {
