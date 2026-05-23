@@ -27,7 +27,7 @@ jobs:
           cache: "pnpm"
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile
+        run: pnpm install --frozen-lockfile && cd backend && pnpm rebuild better-sqlite3
 
       - name: Run Linter
         run: node --run lint
