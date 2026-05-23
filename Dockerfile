@@ -1,4 +1,4 @@
-FROM ghcr.io/pnpm/pnpm:11.1.1 AS builder
+FROM ghcr.io/pnpm/pnpm:11.2.1 AS builder
 RUN pnpm runtime set node 26 -g
 
 WORKDIR /app
@@ -8,7 +8,7 @@ COPY backend/package.json ./backend/
 COPY pnpm-lock.yaml ./
 COPY pnpm-workspace.yaml ./
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
-    pnpm i --frozen-lockfile --store-dir /pnpm/store
+    pnpm i --frozen-lockfile --store-dir /pnpm/store && cd backend && pnpm rebuild better-sqlite3
 
 COPY . .
 RUN node --run build

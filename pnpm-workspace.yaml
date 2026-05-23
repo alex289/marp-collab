@@ -10,4 +10,5 @@ ignoreScripts: true
 publicHoistPattern:
   - "@shikijs/*"
 allowBuilds:
-  msw: false
+  better-sqlite3: true
+  integer: true
