@@ -7,7 +7,7 @@ function copyNativeAddonsPlugin(): Plugin {
 		name: "copy-native-addons",
 		writeBundle: async () => {
 			const distDir = join(import.meta.dirname, "../dist");
-			const sqliteDir = join(import.meta.dirname, "../node_modules/better-sqlite3");
+			const sqliteDir = join(import.meta.dirname, "./node_modules/better-sqlite3");
 			await cp(join(sqliteDir, "build", "Release"), join(distDir, "build", "Release"), {
 				recursive: true,
 			});
