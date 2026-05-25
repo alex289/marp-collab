@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { HocuspocusProvider } from "@hocuspocus/provider";
 import type { Awareness } from "y-protocols/awareness.js";
 import * as Y from "yjs";
@@ -48,8 +48,11 @@ export const useCollabDocument = (
 	documentName: string | null,
 	sessionUser: SessionUser | null,
 	user: PresenceUser,
+	onStatelessMessage?: (payload: string) => void,
 ): CollabState => {
 	const [state, setState] = useState<CollabState>(defaultState);
+	const onStatelessMessageRef = useRef(onStatelessMessage);
+	onStatelessMessageRef.current = onStatelessMessage;
 
 	useEffect(() => {
 		if (!documentName || !sessionUser) {
@@ -70,6 +73,9 @@ export const useCollabDocument = (
 					...current,
 					status,
 				}));
+			},
+			onStateless: ({ payload }: { payload: string }) => {
+				onStatelessMessageRef.current?.(payload);
 			},
 		});
 

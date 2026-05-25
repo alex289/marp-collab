@@ -16,9 +16,10 @@ import {
 import {
 	getFileType,
 	getMimeType,
-	isAllowedMarkdownUpload,
 	isAllowedUpload,
+	isEditableExtension,
 } from "../../helpers/file-allowlist.ts";
+import { broadcastFilesChanged } from "../../collab/project-events.ts";
 import z from "zod";
 import { randomUUID } from "node:crypto";
 import { extname } from "node:path";
@@ -144,6 +145,7 @@ app.post("/:projectId/files", async (c) => {
 	const { name } = parseResult.data;
 	const documentName = toDocumentName(projectId, name);
 	await saveDocumentContent(documentName, `\n`);
+	broadcastFilesChanged(projectId);
 
 	return c.json({
 		file: {
@@ -191,6 +193,7 @@ app.post("/:projectId/folders", async (c) => {
 	}
 
 	await createProjectDir(projectId, parseResult.data.name);
+	broadcastFilesChanged(projectId);
 
 	return c.json({ success: true });
 });
@@ -216,8 +219,8 @@ app.post("/:projectId/files/upload", async (c) => {
 		return c.json({ error: "No file provided" }, 400);
 	}
 
-	const isMarkdown = isAllowedMarkdownUpload(uploadedFile.name);
-	if (!isMarkdown && !isAllowedUpload(uploadedFile.name, uploadedFile.type)) {
+	const isEditable = isEditableExtension(uploadedFile.name);
+	if (!isEditable && !isAllowedUpload(uploadedFile.name, uploadedFile.type)) {
 		return c.json(
 			{ error: "File type not allowed. Only images, CSS, and Markdown files are permitted." },
 			400,
@@ -237,10 +240,11 @@ app.post("/:projectId/files/upload", async (c) => {
 		return c.json({ error: "Invalid file name" }, 400);
 	}
 
-	if (isMarkdown) {
+	if (isEditable) {
 		const content = await uploadedFile.text();
 		const documentName = toDocumentName(projectId, sanitized);
 		await saveDocumentContent(documentName, content);
+		broadcastFilesChanged(projectId);
 		return c.json({
 			file: {
 				id: sanitized,
@@ -253,6 +257,7 @@ app.post("/:projectId/files/upload", async (c) => {
 
 	const data = new Uint8Array(await uploadedFile.arrayBuffer());
 	await saveProjectFile(projectId, sanitized, data);
+	broadcastFilesChanged(projectId);
 
 	return c.json({
 		file: {
@@ -331,6 +336,7 @@ app.patch("/:projectId/files/:fileId{.+}", async (c) => {
 		return c.json({ error: "File not found or invalid destination" }, 404);
 	}
 
+	broadcastFilesChanged(projectId);
 	return c.json({ newFileId });
 });
 
@@ -356,6 +362,7 @@ app.delete("/:projectId/folders/:folderPath{.+}", async (c) => {
 		return c.json({ error: "Folder not found" }, 404);
 	}
 
+	broadcastFilesChanged(projectId);
 	return c.json({ success: true });
 });
 
@@ -381,6 +388,7 @@ app.delete("/:projectId/files/:fileId{.+}", async (c) => {
 		return c.json({ error: "File not found" }, 404);
 	}
 
+	broadcastFilesChanged(projectId);
 	return c.json({ success: true });
 });
 

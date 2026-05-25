@@ -46,11 +46,6 @@ export function isAllowedUpload(filename: string, mimeType: string): boolean {
 	return ALLOWED_ASSET_EXTENSIONS.has(ext) && ALLOWED_ASSET_MIME_TYPES.has(mimeType);
 }
 
-export function isAllowedMarkdownUpload(filename: string): boolean {
-	const ext = extname(filename).toLowerCase();
-	return MARKDOWN_EXTENSIONS.has(ext);
-}
-
 export function getFileType(filename: string): "markdown" | "asset" | null {
 	const ext = extname(filename).toLowerCase();
 	if (EDITABLE_EXTENSIONS.has(ext)) {

@@ -58,9 +58,18 @@ function RouteComponent() {
 		selectedFile?.type === "markdown" ? (selectedFile.documentName ?? null) : null,
 		session?.user ?? null,
 		presenceUser,
+		(payload) => {
+			if (payload === "files-changed") {
+				void reload();
+			}
+		},
 	);
 
 	useEffect(() => {
+		if (selectedFile?.id.endsWith(".css")) {
+			return;
+		}
+
 		if (!collab.yText) {
 			setMarkdown("");
 			return;
@@ -77,7 +86,7 @@ function RouteComponent() {
 		return () => {
 			collab.yText?.unobserve(sync);
 		};
-	}, [collab.yText]);
+	}, [collab.yText, selectedFile?.id]);
 
 	return (
 		<div className="min-h-screen bg-halo pb-4 pt-6 text-foreground">
