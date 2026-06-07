@@ -46,7 +46,12 @@ export const PreviewPane = ({ markdown, label }: PreviewPaneProps) => {
 			</CardHeader>
 
 			<CardContent className="min-h-0 flex-1">
-				<iframe title="Marp preview" srcDoc={srcDoc} className="h-full w-full border" />
+				<iframe
+					title="Marp preview"
+					srcDoc={srcDoc}
+					className="h-full w-full border"
+					sandbox="allow-scripts"
+				/>
 			</CardContent>
 		</Card>
 	);

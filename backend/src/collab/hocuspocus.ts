@@ -1,4 +1,4 @@
-import { Hocuspocus } from "@hocuspocus/server";
+import { type ConnectionConfiguration, Hocuspocus } from "@hocuspocus/server";
 import * as Y from "yjs";
 import { getDocumentContent, saveDocumentContent } from "./files.ts";
 import { isEditableExtension } from "../helpers/file-allowlist.ts";
@@ -30,9 +30,11 @@ export const collabServer = new Hocuspocus({
 	async onAuthenticate({
 		requestHeaders,
 		documentName,
+		connectionConfig,
 	}: {
 		requestHeaders: Headers;
 		documentName: string;
+		connectionConfig: ConnectionConfiguration;
 	}) {
 		const session = await auth.api.getSession({ headers: requestHeaders });
 		if (!session) {
@@ -53,6 +55,8 @@ export const collabServer = new Hocuspocus({
 		if (!access) {
 			throw new Error("Forbidden");
 		}
+
+		connectionConfig.readOnly = access.readOnly;
 
 		return {
 			userId: session.user.id,
