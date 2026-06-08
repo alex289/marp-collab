@@ -1,6 +1,11 @@
 import { type ConnectionConfiguration, Hocuspocus } from "@hocuspocus/server";
 import * as Y from "yjs";
-import { getDocumentContent, saveDocumentContent } from "./files.ts";
+import {
+	getDocumentBinary,
+	getDocumentContent,
+	saveDocumentBinary,
+	saveDocumentContent,
+} from "./files.ts";
 import { isEditableExtension } from "../helpers/file-allowlist.ts";
 import { auth } from "../auth.ts";
 import { getUserProjectAccess } from "../helpers/project-auth.ts";
@@ -22,8 +27,6 @@ const hashString = (value: string): number => {
 	}
 	return Math.abs(hash);
 };
-
-const persistedUpdates = new Map<string, Uint8Array>();
 
 export const collabServer = new Hocuspocus({
 	timeout: 30_000,
@@ -66,10 +69,10 @@ export const collabServer = new Hocuspocus({
 		} satisfies CollabContext;
 	},
 	async onLoadDocument({ documentName }: { documentName: string }) {
-		const persisted = persistedUpdates.get(documentName);
-		if (persisted) {
+		const binary = await getDocumentBinary(documentName);
+		if (binary) {
 			const doc = new Y.Doc();
-			Y.applyUpdate(doc, persisted);
+			Y.applyUpdate(doc, binary);
 			return doc;
 		}
 
@@ -80,8 +83,11 @@ export const collabServer = new Hocuspocus({
 		return doc;
 	},
 	async onStoreDocument({ documentName, document }: { documentName: string; document: Y.Doc }) {
-		persistedUpdates.set(documentName, Y.encodeStateAsUpdate(document));
+		const binary = Y.encodeStateAsUpdate(document);
 		// oxlint-disable-next-line no-base-to-string
-		await saveDocumentContent(documentName, document.getText("content").toString());
+		await Promise.all([
+			saveDocumentBinary(documentName, binary),
+			saveDocumentContent(documentName, document.getText("content").toString()),
+		]);
 	},
 });

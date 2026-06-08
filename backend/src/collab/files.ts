@@ -122,6 +122,24 @@ export async function getDocumentContent(documentName: string): Promise<string |
 	}
 }
 
+export async function getDocumentBinary(documentName: string): Promise<Uint8Array | undefined> {
+	const filePath = resolveDocumentPath(documentName);
+	if (!filePath) {
+		return undefined;
+	}
+
+	try {
+		const buf = await readFile(`${filePath}.yjs`);
+		return new Uint8Array(buf);
+	} catch (error) {
+		if (isMissingFileError(error)) {
+			return undefined;
+		}
+
+		throw error;
+	}
+}
+
 export async function saveDocumentContent(documentName: string, content: string): Promise<void> {
 	const filePath = resolveDocumentPath(documentName);
 	if (!filePath) {
@@ -130,6 +148,16 @@ export async function saveDocumentContent(documentName: string, content: string)
 
 	await mkdir(dirname(filePath), { recursive: true });
 	await writeFile(filePath, content, "utf8");
+}
+
+export async function saveDocumentBinary(documentName: string, data: Uint8Array): Promise<void> {
+	const filePath = resolveDocumentPath(documentName);
+	if (!filePath) {
+		return;
+	}
+
+	await mkdir(dirname(filePath), { recursive: true });
+	await writeFile(`${filePath}.yjs`, data);
 }
 
 function resolveProjectFilePath(projectId: string, fileId: string): string | null {
