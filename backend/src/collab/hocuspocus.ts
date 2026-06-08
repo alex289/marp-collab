@@ -84,10 +84,9 @@ export const collabServer = new Hocuspocus({
 	},
 	async onStoreDocument({ documentName, document }: { documentName: string; document: Y.Doc }) {
 		const binary = Y.encodeStateAsUpdate(document);
-		// oxlint-disable-next-line no-base-to-string
 		await Promise.all([
 			saveDocumentBinary(documentName, binary),
-			saveDocumentContent(documentName, document.getText("content").toString()),
+			saveDocumentContent(documentName, document.getText("content").toJSON()),
 		]);
 	},
 });
