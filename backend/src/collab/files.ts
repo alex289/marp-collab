@@ -48,15 +48,24 @@ function isMissingFileError(error: unknown): boolean {
 	return error instanceof Error && "code" in error && error.code === "ENOENT";
 }
 
+const EXCLUDED_FILE_EXTENSIONS = new Set([".yjs"]);
+
 async function listProjectFiles(projectId: string): Promise<string[]> {
 	if (!isValidProjectId(projectId)) {
 		throw new Error(`Invalid project id: ${projectId}`);
 	}
 	const projectDir = resolve(presentationsDir, projectId);
 	const files = await Array.fromAsync(
-		glob("**/{*.{md,markdown,jpg,jpeg,png,gif,webp,svg,bmp,tiff,css},.keep}", {
+		glob("**/*", {
 			cwd: projectDir,
-			exclude: (p) => p.split("/").some((part) => part.startsWith(".") && part !== ".keep"),
+			exclude: (p) => {
+				const parts = p.split("/");
+				const filename = parts.at(-1) ?? "";
+				return (
+					parts.some((part) => part.startsWith(".") && part !== ".keep") ||
+					EXCLUDED_FILE_EXTENSIONS.has(filename.slice(filename.lastIndexOf(".")))
+				);
+			},
 		}),
 	);
 	return files.sort((a, b) => a.localeCompare(b));

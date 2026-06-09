@@ -10,6 +10,7 @@ import {
 	Upload,
 	Image,
 	Trash2,
+	Type,
 } from "lucide-react";
 import type { DeckFile } from "@/lib/types";
 import {
@@ -210,10 +211,11 @@ const NestedFileItem = ({
 		};
 
 		if (file.type === "asset") {
+			const isFontFile = /\.(woff2?|ttf|otf)$/i.test(node.name);
 			return (
 				<SidebarMenuItem className={isDragging ? "opacity-40" : undefined}>
 					<SidebarMenuButton tooltip={file.id} {...dragProps}>
-						<Image />
+						{isFontFile ? <Type /> : <Image />}
 						{node.name}
 					</SidebarMenuButton>
 					<SidebarMenuAction

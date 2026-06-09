@@ -11,6 +11,8 @@ export const ALLOWED_ASSET_MIME_TYPES = new Set([
 	"text/css",
 ]);
 
+export const FONT_EXTENSIONS = new Set([".woff", ".woff2", ".ttf", ".otf"]);
+
 export const ALLOWED_ASSET_EXTENSIONS = new Set([
 	".jpg",
 	".jpeg",
@@ -21,6 +23,10 @@ export const ALLOWED_ASSET_EXTENSIONS = new Set([
 	".bmp",
 	".tiff",
 	".css",
+	".woff",
+	".woff2",
+	".ttf",
+	".otf",
 ]);
 
 export const MARKDOWN_EXTENSIONS = new Set([".md", ".markdown"]);
@@ -39,10 +45,20 @@ const EXTENSION_TO_MIME: Record<string, string> = {
 	".css": "text/css",
 	".md": "text/markdown",
 	".markdown": "text/markdown",
+	".woff": "font/woff",
+	".woff2": "font/woff2",
+	".ttf": "font/ttf",
+	".otf": "font/otf",
 };
 
 export function isAllowedUpload(filename: string, mimeType: string): boolean {
 	const ext = extname(filename).toLowerCase();
+	if (FONT_EXTENSIONS.has(ext)) {
+		// Font MIME types are unreliable across browsers and operating systems
+		// Some report a generic "application/octet-stream" MIME type, while others report
+		// font/* or application/font-* or application/x-font-* MIME types.
+		return true;
+	}
 	return ALLOWED_ASSET_EXTENSIONS.has(ext) && ALLOWED_ASSET_MIME_TYPES.has(mimeType);
 }
 
