@@ -7,6 +7,7 @@
 	],
 	"type": "module",
 	"scripts": {
+		"dev": "pnpm -r --parallel dev",
 		"lint": "oxlint --type-aware --deny-warnings",
 		"format": "oxfmt --write",
 		"format:check": "oxfmt --check",
