@@ -2,7 +2,7 @@
 
 ## Projektidee & Motivation
 
-Marp-Collab ist eine Erweiterung für Marp, die es ermöglicht, Präsentationen in Echtzeit mit mehreren Personen zu erstellen und zu bearbeiten. Die Idee entstand aus der Notwendigkeit, während der Erstellung von Präsentationen effektiver zusammenzuarbeiten und Feedback in Echtzeit zu erhalten.
+Marp-Collab ist eine WebApp für Marp, die es ermöglicht, Präsentationen in Echtzeit mit mehreren Personen zu erstellen und zu bearbeiten. Die Idee entstand aus der Notwendigkeit, während der Erstellung von Präsentationen effektiver zusammenzuarbeiten und Feedback in Echtzeit zu erhalten.
 
 ## Technologien
 
