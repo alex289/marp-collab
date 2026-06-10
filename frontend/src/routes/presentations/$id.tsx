@@ -1,14 +1,15 @@
 import { throw404OnError, cn } from "@/lib/utils";
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod/v4-mini";
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { FileSidebar } from "@/components/file-sidebar";
-import { PreviewPane } from "@/components/preview-pane";
 import { useCollabDocument, usePresenceUser } from "@/hooks/use-collab-document";
 import { useFiles } from "@/hooks/use-files";
 import type { DeckFile } from "@/lib/types";
-import { EditorPane } from "@/components/editor-pane";
 import Navbar from "@/components/navbar";
+
+const EditorPane = lazy(() => import("@/components/editor-pane").then((m) => ({ default: m.EditorPane })));
+const PreviewPane = lazy(() => import("@/components/preview-pane").then((m) => ({ default: m.PreviewPane })));
 
 const paramsValidator = z.object({
 	id: z.uuid(),
@@ -112,15 +113,19 @@ function RouteComponent() {
 						setSidebarOpen={setSidebarOpen}
 					/>
 
-					<EditorPane
-						label={selectedFile?.label ?? null}
-						yText={collab.yText}
-						awareness={collab.awareness}
-						undoManager={collab.undoManager}
-						status={collab.status}
-					/>
+					<Suspense>
+						<EditorPane
+							label={selectedFile?.label ?? null}
+							yText={collab.yText}
+							awareness={collab.awareness}
+							undoManager={collab.undoManager}
+							status={collab.status}
+						/>
+					</Suspense>
 
-					<PreviewPane markdown={markdown} label={selectedFile?.label ?? null} />
+					<Suspense>
+						<PreviewPane markdown={markdown} label={selectedFile?.label ?? null} />
+					</Suspense>
 				</main>
 			</div>
 		</div>

@@ -19,6 +19,11 @@ export default defineConfig(({ mode }) => ({
 			devOptions: {
 				enabled: true,
 			},
+			...(mode !== "development" && {
+				workbox: {
+					globPatterns: ["**/*.{html,ico,png,svg,woff2,webmanifest}", "assets/*.css"],
+				},
+			}),
 			manifest: {
 				name: "Marp Collab",
 				short_name: "Marp Collab",
