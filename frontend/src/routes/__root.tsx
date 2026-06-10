@@ -1,4 +1,5 @@
 import { LoadingScreen } from "@/components/loading-screen";
+import { ThemeProvider } from "@/components/theme-provider";
 import { Button } from "@/components/ui/button";
 import { useAuthSync } from "@/hooks/use-auth-sync";
 import { useHealthCheck } from "@/hooks/use-health-check";
@@ -21,7 +22,7 @@ export const Route = createRootRoute({
 
 		return { session };
 	},
-	component: RootComponent,
+	component: RootWrapper,
 	pendingComponent: () => <LoadingScreen />,
 	notFoundComponent: () => (
 		<div className="text-center mt-50">
@@ -44,6 +45,14 @@ export const Route = createRootRoute({
 		</div>
 	),
 });
+
+function RootWrapper() {
+	return (
+		<ThemeProvider defaultTheme="system" storageKey="marp-collab-theme">
+			<RootComponent />
+		</ThemeProvider>
+	);
+}
 
 function RootComponent() {
 	const isUserOffline = useIsUserOffline();

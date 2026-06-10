@@ -20,6 +20,7 @@
 		"@hocuspocus/provider": "^4.1.0",
 		"@marp-team/marp-core": "^4.3.0",
 		"@tailwindcss/vite": "^4.3.0",
+		"@tanstack/react-hotkeys": "^0.10.0",
 		"@tanstack/react-router": "^1.170.15",
 		"@uiw/react-codemirror": "^4.25.10",
 		"better-auth": "^1.6.14",
