@@ -8,12 +8,14 @@ import { useFiles } from "@/hooks/use-files";
 import type { DeckFile } from "@/lib/types";
 import Navbar from "@/components/navbar";
 
-const EditorPane = lazy(() =>
-	import("@/components/editor-pane").then((m) => ({ default: m.EditorPane })),
-);
-const PreviewPane = lazy(() =>
-	import("@/components/preview-pane").then((m) => ({ default: m.PreviewPane })),
-);
+const EditorPane = lazy(async () => {
+	const m = await import("@/components/editor-pane");
+	return { default: m.EditorPane };
+});
+const PreviewPane = lazy(async () => {
+	const m = await import("@/components/preview-pane");
+	return { default: m.PreviewPane };
+});
 
 const paramsValidator = z.object({
 	id: z.uuid(),
