@@ -11,6 +11,7 @@ import {
 	Image,
 	Trash2,
 	Type,
+	PanelLeft,
 } from "lucide-react";
 import type { DeckFile } from "@/lib/types";
 import {
@@ -26,6 +27,7 @@ import {
 	SidebarMenuSub,
 	SidebarProvider,
 	SidebarRail,
+	useSidebar,
 } from "@/components/ui/sidebar";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { TooltipProvider } from "./ui/tooltip";
@@ -34,6 +36,7 @@ import { CreateFolderDialog } from "@/components/dialog/create-folder";
 import { UploadFileDialog } from "@/components/dialog/upload-file";
 import { DeleteFileDialog } from "@/components/dialog/delete-file";
 import { API_URL } from "@/lib/config";
+import { Button } from "@/components/ui/button";
 
 type NestedFileNode = {
 	name: string;
@@ -158,6 +161,24 @@ const SidebarHeaderAction = ({
 		{children}
 	</button>
 );
+
+const MobileSidebarToggle = () => {
+	const { setOpenMobile } = useSidebar();
+
+	return (
+		<div className="md:hidden">
+			<Button
+				type="button"
+				variant="outline"
+				className="w-full justify-start gap-2"
+				onClick={() => setOpenMobile(true)}
+			>
+				<PanelLeft className="h-4 w-4" />
+				Dateien
+			</Button>
+		</div>
+	);
+};
 
 type DragState = {
 	draggingFileId: string | null;
@@ -487,7 +508,12 @@ export const FileSidebar = ({
 				}}
 				onDeleted={onRetry}
 			/>
-			<SidebarProvider open={sidebarOpen} onOpenChange={setSidebarOpen}>
+			<SidebarProvider
+				open={sidebarOpen}
+				onOpenChange={setSidebarOpen}
+				className="md:min-h-svh min-h-fit"
+			>
+				<MobileSidebarToggle />
 				<TooltipProvider>
 					<Sidebar variant="floating" collapsible="icon" className="static pt-0">
 						<SidebarContent>
