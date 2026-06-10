@@ -14,7 +14,7 @@ app.get(
 				if (!ws.raw) {
 					throw new Error("WebSocket upgrade failed, raw WebSocket not available");
 				}
-				ws.raw.binaryType = "arraybuffer";
+				ws.binaryType = "arraybuffer";
 				clientConnection = collabServer.handleConnection(ws.raw, c.req.raw, {});
 			},
 			onMessage(evt) {
