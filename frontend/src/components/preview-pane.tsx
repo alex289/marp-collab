@@ -1,13 +1,17 @@
 import { useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { renderMarp } from "@/lib/marp";
+import { Link } from "@tanstack/react-router";
+import { Button } from "@/components/ui/button";
 
 type PreviewPaneProps = {
 	markdown: string;
 	label: string | null;
+	projectId: string;
+	selectedFileId: string | null;
 };
 
-export const PreviewPane = ({ markdown, label }: PreviewPaneProps) => {
+export const PreviewPane = ({ markdown, label, projectId, selectedFileId }: PreviewPaneProps) => {
 	const rendered = useMemo(() => {
 		try {
 			return renderMarp(markdown);
@@ -40,8 +44,28 @@ export const PreviewPane = ({ markdown, label }: PreviewPaneProps) => {
 
 	return (
 		<Card className="flex h-full min-h-0 flex-col overflow-hidden border-border/80">
-			<CardHeader className="border-b border-border">
-				<CardTitle>Live Preview</CardTitle>
+			<CardHeader className="border-b border-border gap-2">
+				<div className="flex items-center justify-between gap-2">
+					<CardTitle>Live Preview</CardTitle>
+					{label ? (
+						<Button asChild variant="outline" size="sm">
+							<Link
+								to="/presentations/$id"
+								params={{ id: projectId }}
+								search={{
+									mode: "present",
+									file: selectedFileId ?? undefined,
+								}}
+							>
+								Start presentation
+							</Link>
+						</Button>
+					) : (
+						<Button variant="outline" size="sm" disabled>
+							Start presentation
+						</Button>
+					)}
+				</div>
 				<CardDescription>{label ? `Active file: ${label}` : "No file selected"}</CardDescription>
 			</CardHeader>
 
