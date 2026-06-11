@@ -207,17 +207,17 @@ export function PresentationFrame({
 
 	return (
 		<div className={className ?? "h-full w-full"}>
-			<div className="grid h-full w-full grid-cols-[minmax(0,1fr)_minmax(280px,24vw)] gap-3 bg-zinc-950 p-4 text-white">
-				<div className="min-h-0 overflow-hidden rounded-md border border-white/10 bg-black shadow-2xl">
+			<div className="grid h-full w-full grid-cols-1 gap-3  p-4 md:grid-cols-[minmax(0,1fr)_minmax(280px,24vw)]">
+				<div className="min-h-0 overflow-hidden rounded-md border border-white/10 shadow-2xl">
 					{iframe}
 				</div>
-				<aside className="flex min-h-0 flex-col overflow-hidden rounded-md border border-white/10 bg-zinc-900/95 shadow-2xl">
-					<div className="border-b border-white/10 px-4 py-3">
+				<aside className="flex min-h-0 flex-col overflow-hidden rounded-md border border-white/10 shadow-2xl">
+					<div className="border-b border-black/10 dark:border-white/10 px-4 py-3">
 						<h2 className="text-sm font-semibold">Speaker notes</h2>
 					</div>
 					<div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
 						{hasSpeakerNotes ? (
-							<div className="space-y-3 text-sm leading-6 text-zinc-100">
+							<div className="space-y-3 text-sm leading-6">
 								{activeComments.map((comment, index) => {
 									const trimmed = comment.trim();
 
