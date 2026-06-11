@@ -11,10 +11,6 @@ Herausforderungen:
 
 - Kommunikation zwischen popup tab und parent tab
 
-Erkenntnisse:
+KI Unterstützung:
 
-- ...
-
-Nächste Woche:
-
-- ...
+- Präsentationsmodus: GPT-5.3-Codex 64,6 Credits

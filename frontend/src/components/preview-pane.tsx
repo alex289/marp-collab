@@ -1,5 +1,12 @@
 import { useMemo } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+	Card,
+	CardAction,
+	CardContent,
+	CardDescription,
+	CardHeader,
+	CardTitle,
+} from "@/components/ui/card";
 import { renderMarp } from "@/lib/marp";
 import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
@@ -45,8 +52,8 @@ export const PreviewPane = ({ markdown, label, projectId, selectedFileId }: Prev
 	return (
 		<Card className="flex h-full min-h-0 flex-col overflow-hidden border-border/80">
 			<CardHeader className="border-b border-border gap-2">
-				<div className="flex items-center justify-between gap-2">
-					<CardTitle>Live Preview</CardTitle>
+				<CardTitle>Live Preview</CardTitle>
+				<CardAction>
 					{label ? (
 						<Button asChild variant="outline" size="sm">
 							<Link
@@ -65,7 +72,7 @@ export const PreviewPane = ({ markdown, label, projectId, selectedFileId }: Prev
 							Start presentation
 						</Button>
 					)}
-				</div>
+				</CardAction>
 				<CardDescription>{label ? `Active file: ${label}` : "No file selected"}</CardDescription>
 			</CardHeader>
 
