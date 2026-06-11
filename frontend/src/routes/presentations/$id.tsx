@@ -43,7 +43,11 @@ function parseSlideSyncMessage(data: unknown): PresentationSlideSyncMessage | nu
 
 	const payload = data as Partial<PresentationSlideSyncMessage>;
 	const slideIndex = payload.slideIndex;
-	if (payload.type !== "presentation-slide" || typeof slideIndex !== "number" || !Number.isFinite(slideIndex)) {
+	if (
+		payload.type !== "presentation-slide" ||
+		typeof slideIndex !== "number" ||
+		!Number.isFinite(slideIndex)
+	) {
 		return null;
 	}
 
@@ -58,7 +62,12 @@ function normalizeSearchSlide(slide: unknown) {
 		return null;
 	}
 
-	const index = typeof slide === "number" ? slide : typeof slide === "string" ? Number.parseInt(slide, 10) : Number.NaN;
+	const index =
+		typeof slide === "number"
+			? slide
+			: typeof slide === "string"
+				? Number.parseInt(slide, 10)
+				: Number.NaN;
 	return Number.isFinite(index) ? Math.max(0, index) : null;
 }
 
@@ -327,79 +336,76 @@ function RouteComponent() {
 
 	if (isPresentation) {
 		const viewerUrl = `/presentations/${id}?mode=viewer&slide=${slideIndex}${selectedFile?.id ? `&file=${encodeURIComponent(selectedFile.id)}` : ""}`;
+		const frame = (
+			<PresentationFrame
+				markdown={markdown}
+				slideIndex={slideIndex}
+				onMetaChange={({ active, total }) => {
+					setSlideIndex(active);
+					setSlideCount(Math.max(total, 1));
+				}}
+				showSpeakerNotes={!isViewer}
+				className="h-full w-full"
+			/>
+		);
+
+		if (isViewer) {
+			return <div className="h-screen w-screen overflow-hidden bg-black text-white">{frame}</div>;
+		}
 
 		return (
-			<div className="relative h-screen w-screen overflow-hidden bg-black text-white">
-				<PresentationFrame
-					markdown={markdown}
-					slideIndex={slideIndex}
-					onMetaChange={({ active, total }) => {
-						setSlideIndex(active);
-						setSlideCount(Math.max(total, 1));
-					}}
-					className="h-full w-full"
-				/>
+			<div className="grid h-screen w-screen grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden bg-zinc-950 text-white">
+				<div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
+					<Button variant="secondary" size="sm" onClick={() => setSlideIndex(0)}>
+						Slide {slideIndex + 1}/{Math.max(slideCount, 1)}
+					</Button>
+					<div className="flex items-center gap-2">
+						<Button type="button" variant="secondary" onClick={() => setStartedAt(Date.now())}>
+							{formatElapsed(now - startedAt)}
+						</Button>
+						<Button
+							type="button"
+							variant="secondary"
+							onClick={() => window.open(viewerUrl, "_blank", "noopener,noreferrer")}
+						>
+							Open clean screen
+						</Button>
+						<Button
+							type="button"
+							variant="secondary"
+							onClick={() =>
+								void navigate({
+									to: "/presentations/$id",
+									params: { id },
+									replace: true,
+								})
+							}
+						>
+							End presentation
+						</Button>
+					</div>
+				</div>
 
-				{isViewer ? null : (
-					<>
-						<div className="pointer-events-none absolute inset-x-4 top-4 flex items-center justify-between">
-							<Button
-								className="pointer-events-auto"
-								variant="secondary"
-								size="sm"
-								onClick={() => setSlideIndex(0)}
-							>
-								Slide {slideIndex + 1}/{Math.max(slideCount, 1)}
-							</Button>
-							<div className="pointer-events-auto flex items-center gap-2">
-								<Button type="button" variant="secondary" onClick={() => setStartedAt(Date.now())}>
-									{formatElapsed(now - startedAt)}
-								</Button>
-								<Button
-									type="button"
-									variant="secondary"
-									onClick={() => window.open(viewerUrl, "_blank", "noopener,noreferrer")}
-								>
-									Open clean screen
-								</Button>
-								<Button
-									type="button"
-									variant="secondary"
-									onClick={() =>
-										void navigate({
-											to: "/presentations/$id",
-											params: { id },
-											replace: true,
-										})
-									}
-								>
-									End presentation
-								</Button>
-							</div>
-						</div>
+				<div className="min-h-0">{frame}</div>
 
-						<div className="pointer-events-none absolute inset-x-4 bottom-4 flex justify-between">
-							<Button
-								type="button"
-								variant="secondary"
-								className="pointer-events-auto"
-								onClick={() => setSlideIndex((current) => Math.max(current - 1, 0))}
-								disabled={slideIndex <= 0}
-							>
-								Previous
-							</Button>
-							<Button
-								type="button"
-								variant="secondary"
-								className="pointer-events-auto"
-								onClick={() => setSlideIndex((current) => Math.min(current + 1, maxSlideIndex))}
-								disabled={slideIndex >= maxSlideIndex}
-							>
-								Next
-							</Button>
-						</div>
-					</>
-				)}
+				<div className="flex justify-between gap-3 border-t border-white/10 px-4 py-3">
+					<Button
+						type="button"
+						variant="secondary"
+						onClick={() => setSlideIndex((current) => Math.max(current - 1, 0))}
+						disabled={slideIndex <= 0}
+					>
+						Previous
+					</Button>
+					<Button
+						type="button"
+						variant="secondary"
+						onClick={() => setSlideIndex((current) => Math.min(current + 1, maxSlideIndex))}
+						disabled={slideIndex >= maxSlideIndex}
+					>
+						Next
+					</Button>
+				</div>
 			</div>
 		);
 	}

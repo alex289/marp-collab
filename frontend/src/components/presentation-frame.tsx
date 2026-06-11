@@ -5,6 +5,7 @@ type PresentationFrameProps = {
 	markdown: string;
 	slideIndex: number;
 	onMetaChange?: (meta: { active: number; total: number }) => void;
+	showSpeakerNotes?: boolean;
 	className?: string;
 };
 
@@ -12,6 +13,7 @@ export function PresentationFrame({
 	markdown,
 	slideIndex,
 	onMetaChange,
+	showSpeakerNotes = false,
 	className,
 }: PresentationFrameProps) {
 	const iframeRef = useRef<HTMLIFrameElement | null>(null);
@@ -23,9 +25,13 @@ export function PresentationFrame({
 			return {
 				html: `<section><h1>Marp Render Error</h1><p>${error instanceof Error ? error.message : "Unknown error"}</p></section>`,
 				css: "",
+				comments: [[]],
 			};
 		}
 	}, [markdown]);
+
+	const activeComments = rendered.comments[slideIndex] ?? [];
+	const hasSpeakerNotes = activeComments.some((comment) => comment.trim().length > 0);
 
 	const srcDoc = useMemo(() => {
 		return `<!doctype html>
@@ -42,6 +48,21 @@ export function PresentationFrame({
         background: #000;
       }
       ${rendered.css}
+      body {
+        align-items: center;
+        display: flex;
+        justify-content: center;
+      }
+      svg[data-marpit-svg] {
+        flex: 0 1 auto;
+        max-height: 100%;
+        max-width: 100%;
+      }
+      section {
+        flex: 0 1 auto;
+        max-height: 100%;
+        max-width: 100%;
+      }
     </style>
   </head>
   <body>
@@ -74,13 +95,39 @@ export function PresentationFrame({
           );
         }
 
+        function slideAspect(slide) {
+          if (slide.viewBox && slide.viewBox.baseVal && slide.viewBox.baseVal.width > 0 && slide.viewBox.baseVal.height > 0) {
+            return slide.viewBox.baseVal.width / slide.viewBox.baseVal.height;
+          }
+
+          var width = Number.parseFloat(slide.getAttribute('width') || '');
+          var height = Number.parseFloat(slide.getAttribute('height') || '');
+          return width > 0 && height > 0 ? width / height : 16 / 9;
+        }
+
+        function fit(slide) {
+          var containerWidth = window.innerWidth;
+          var containerHeight = window.innerHeight;
+          var containerAspect = containerWidth / Math.max(containerHeight, 1);
+          var aspect = slideAspect(slide);
+          var width = containerWidth;
+          var height = containerWidth / aspect;
+
+          if (containerAspect > aspect) {
+            height = containerHeight;
+            width = containerHeight * aspect;
+          }
+
+          slide.style.setProperty('height', height + 'px', 'important');
+          slide.style.setProperty('width', width + 'px', 'important');
+        }
+
         function apply(index) {
           active = clamp(index);
 					slides.forEach(function (slide, i) {
 						if (i === active) {
 							slide.style.setProperty('display', 'block', 'important');
-							slide.style.setProperty('width', '100%', 'important');
-							slide.style.setProperty('height', '100%', 'important');
+							fit(slide);
 							slide.removeAttribute('aria-hidden');
 						} else {
 							slide.style.setProperty('display', 'none', 'important');
@@ -89,6 +136,10 @@ export function PresentationFrame({
           });
           report();
         }
+
+        window.addEventListener('resize', function () {
+          fit(slides[active]);
+        });
 
         window.addEventListener('message', function (event) {
           var data = event.data;
@@ -136,13 +187,58 @@ export function PresentationFrame({
 		);
 	}, [slideIndex, srcDoc]);
 
-	return (
+	const iframe = (
 		<iframe
 			ref={iframeRef}
 			title="Presentation"
 			srcDoc={srcDoc}
-			className={className ?? "h-full w-full border-0"}
+			className={
+				showSpeakerNotes
+					? "h-full w-full border-0 bg-black"
+					: (className ?? "h-full w-full border-0")
+			}
 			sandbox="allow-scripts"
 		/>
+	);
+
+	if (!showSpeakerNotes) {
+		return iframe;
+	}
+
+	return (
+		<div className={className ?? "h-full w-full"}>
+			<div className="grid h-full w-full grid-cols-[minmax(0,1fr)_minmax(280px,24vw)] gap-3 bg-zinc-950 p-4 text-white">
+				<div className="min-h-0 overflow-hidden rounded-md border border-white/10 bg-black shadow-2xl">
+					{iframe}
+				</div>
+				<aside className="flex min-h-0 flex-col overflow-hidden rounded-md border border-white/10 bg-zinc-900/95 shadow-2xl">
+					<div className="border-b border-white/10 px-4 py-3">
+						<h2 className="text-sm font-semibold">Speaker notes</h2>
+						<p className="text-xs text-zinc-400">Slide {slideIndex + 1}</p>
+					</div>
+					<div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+						{hasSpeakerNotes ? (
+							<div className="space-y-3 text-sm leading-6 text-zinc-100">
+								{activeComments.map((comment, index) => {
+									const trimmed = comment.trim();
+
+									if (!trimmed) {
+										return null;
+									}
+
+									return (
+										<p className="whitespace-pre-wrap" key={`${index}-${trimmed}`}>
+											{trimmed}
+										</p>
+									);
+								})}
+							</div>
+						) : (
+							<p className="text-sm text-zinc-400">No speaker notes for this slide.</p>
+						)}
+					</div>
+				</aside>
+			</div>
+		</div>
 	);
 }
