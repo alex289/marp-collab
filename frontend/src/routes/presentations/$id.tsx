@@ -1,7 +1,7 @@
 import { throw404OnError, cn } from "@/lib/utils";
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod/v4-mini";
-import { lazy, Suspense, useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { FileSidebar } from "@/components/file-sidebar";
 import { useCollabDocument, usePresenceUser } from "@/hooks/use-collab-document";
 import { useFiles } from "@/hooks/use-files";
@@ -29,12 +29,52 @@ const searchValidator = z.object({
 	file: z.optional(z.string()),
 });
 
+const PRESENTATION_SYNC_CHANNEL_PREFIX = "marp-collab-presentation";
+
+type PresentationSlideSyncMessage = {
+	type: "presentation-slide";
+	slideIndex: number;
+};
+
+function parseSlideSyncMessage(data: unknown): PresentationSlideSyncMessage | null {
+	if (!data || typeof data !== "object") {
+		return null;
+	}
+
+	const payload = data as Partial<PresentationSlideSyncMessage>;
+	const slideIndex = payload.slideIndex;
+	if (payload.type !== "presentation-slide" || typeof slideIndex !== "number" || !Number.isFinite(slideIndex)) {
+		return null;
+	}
+
+	return {
+		type: "presentation-slide",
+		slideIndex: Math.max(0, Math.trunc(slideIndex)),
+	};
+}
+
+function normalizeSearchSlide(slide: unknown) {
+	if (slide === undefined || slide === null || slide === "") {
+		return null;
+	}
+
+	const index = typeof slide === "number" ? slide : typeof slide === "string" ? Number.parseInt(slide, 10) : Number.NaN;
+	return Number.isFinite(index) ? Math.max(0, index) : null;
+}
+
 export const Route = createFileRoute("/presentations/$id")({
 	component: RouteComponent,
 	params: {
 		parse: throw404OnError((data) => paramsValidator.parse(data)),
 	},
-	validateSearch: (search) => searchValidator.parse(search),
+	validateSearch: (search) => {
+		const slide = normalizeSearchSlide((search as { slide?: unknown }).slide);
+
+		return {
+			...searchValidator.parse(search),
+			...(slide === null ? {} : { slide }),
+		};
+	},
 });
 
 function formatElapsed(ms: number) {
@@ -65,9 +105,15 @@ function RouteComponent() {
 	const [slideCount, setSlideCount] = useState(1);
 	const [startedAt, setStartedAt] = useState(() => Date.now());
 	const [now, setNow] = useState(() => Date.now());
+	const slideSyncChannelRef = useRef<BroadcastChannel | null>(null);
+	const suppressNextSlideBroadcastRef = useRef(false);
 
 	const isPresentation = search.mode === "present" || search.mode === "viewer";
 	const isViewer = search.mode === "viewer";
+	const slideSyncChannelName =
+		isPresentation && selectedFile?.type === "markdown"
+			? `${PRESENTATION_SYNC_CHANNEL_PREFIX}:${id}:${selectedFile.id}`
+			: null;
 
 	useEffect(() => {
 		if (files.length === 0) {
@@ -147,6 +193,26 @@ function RouteComponent() {
 	}, [isPresentation]);
 
 	useEffect(() => {
+		if (!isPresentation) {
+			return;
+		}
+
+		const initialSlide = search.slide ?? null;
+		if (initialSlide === null) {
+			return;
+		}
+
+		setSlideIndex((current) => {
+			if (current === initialSlide) {
+				return current;
+			}
+
+			suppressNextSlideBroadcastRef.current = true;
+			return initialSlide;
+		});
+	}, [isPresentation, search.slide]);
+
+	useEffect(() => {
 		if (slideCount <= 0) {
 			setSlideIndex(0);
 			return;
@@ -156,6 +222,59 @@ function RouteComponent() {
 	}, [slideCount]);
 
 	const maxSlideIndex = Math.max(0, slideCount - 1);
+
+	useEffect(() => {
+		if (!slideSyncChannelName) {
+			slideSyncChannelRef.current?.close();
+			slideSyncChannelRef.current = null;
+			return;
+		}
+
+		const channel = new BroadcastChannel(slideSyncChannelName);
+		slideSyncChannelRef.current = channel;
+
+		const onMessage = (event: MessageEvent) => {
+			const message = parseSlideSyncMessage(event.data);
+			if (!message) {
+				return;
+			}
+
+			setSlideIndex((current) => {
+				if (current === message.slideIndex) {
+					return current;
+				}
+
+				suppressNextSlideBroadcastRef.current = true;
+				return message.slideIndex;
+			});
+		};
+
+		channel.addEventListener("message", onMessage);
+
+		return () => {
+			channel.removeEventListener("message", onMessage);
+			channel.close();
+			if (slideSyncChannelRef.current === channel) {
+				slideSyncChannelRef.current = null;
+			}
+		};
+	}, [slideSyncChannelName]);
+
+	useEffect(() => {
+		if (!slideSyncChannelName) {
+			return;
+		}
+
+		if (suppressNextSlideBroadcastRef.current) {
+			suppressNextSlideBroadcastRef.current = false;
+			return;
+		}
+
+		slideSyncChannelRef.current?.postMessage({
+			type: "presentation-slide",
+			slideIndex,
+		} satisfies PresentationSlideSyncMessage);
+	}, [slideIndex, slideSyncChannelName]);
 
 	useHotkeys(
 		[
@@ -207,7 +326,7 @@ function RouteComponent() {
 	);
 
 	if (isPresentation) {
-		const viewerUrl = `/presentations/${id}?mode=viewer${selectedFile?.id ? `&file=${encodeURIComponent(selectedFile.id)}` : ""}`;
+		const viewerUrl = `/presentations/${id}?mode=viewer&slide=${slideIndex}${selectedFile?.id ? `&file=${encodeURIComponent(selectedFile.id)}` : ""}`;
 
 		return (
 			<div className="relative h-screen w-screen overflow-hidden bg-black text-white">
