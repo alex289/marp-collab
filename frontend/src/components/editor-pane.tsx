@@ -48,7 +48,6 @@ const editorTheme = EditorView.theme({
 	".cm-content": {
 		fontFamily: "'Geist Mono Variable', monospace",
 		minHeight: "100%",
-		padding: "18px 22px",
 		tabSize: "2",
 		caretColor: "var(--primary)",
 	},
