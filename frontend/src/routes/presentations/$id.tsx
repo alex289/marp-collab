@@ -355,7 +355,7 @@ function RouteComponent() {
 
 		return (
 			<div className="grid h-screen w-screen grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden bg-zinc-950 text-white">
-				<div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
+				<div className="flex items-center justify-between gap-3 px-4 py-3">
 					<Button variant="secondary" size="sm" onClick={() => setSlideIndex(0)}>
 						Slide {slideIndex + 1}/{Math.max(slideCount, 1)}
 					</Button>
@@ -388,7 +388,7 @@ function RouteComponent() {
 
 				<div className="min-h-0">{frame}</div>
 
-				<div className="flex justify-between gap-3 border-t border-white/10 px-4 py-3">
+				<div className="flex justify-between gap-3 px-4 py-3">
 					<Button
 						type="button"
 						variant="secondary"

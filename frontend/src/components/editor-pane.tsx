@@ -37,22 +37,46 @@ const editorTheme = EditorView.theme({
 		height: "100%",
 		fontFamily: "'Geist Mono Variable', monospace",
 		fontSize: "14px",
+		backgroundColor: "var(--card)",
+		color: "var(--card-foreground)",
 	},
 	".cm-scroller": {
 		fontFamily: "'Geist Mono Variable', monospace",
 		overflow: "auto",
+		lineHeight: "1.65",
 	},
 	".cm-content": {
 		fontFamily: "'Geist Mono Variable', monospace",
 		minHeight: "100%",
-		padding: "16px",
+		padding: "18px 22px",
+		tabSize: "2",
+		caretColor: "var(--primary)",
+	},
+	".cm-line": {
+		padding: "0 6px",
 	},
 	".cm-gutters": {
-		borderRight: "1px solid hsl(var(--border))",
-		background: "hsl(var(--card))",
+		borderRight: "1px solid var(--border)",
+		background: "color-mix(in oklab, var(--muted) 64%, transparent)",
+		color: "var(--muted-foreground)",
+		paddingRight: "6px",
+	},
+	".cm-lineNumbers .cm-gutterElement": {
+		minWidth: "36px",
+		padding: "0 10px 0 12px",
+	},
+	".cm-activeLine": {
+		backgroundColor: "color-mix(in oklab, var(--primary) 7%, transparent)",
 	},
 	".cm-activeLineGutter": {
-		backgroundColor: "var(--secondary) !important",
+		backgroundColor: "color-mix(in oklab, var(--primary) 10%, transparent) !important",
+		color: "var(--foreground)",
+	},
+	".cm-cursor": {
+		borderLeftColor: "var(--primary)",
+	},
+	".cm-selectionBackground, &.cm-focused .cm-selectionBackground": {
+		backgroundColor: "color-mix(in oklab, var(--primary) 24%, transparent)",
 	},
 	"&.cm-focused": {
 		outline: "none",
@@ -87,6 +111,7 @@ export const EditorPane = ({ label, yText, awareness, undoManager, status }: Edi
 			doc: yText.toString(),
 			extensions: [
 				basicSetup,
+				EditorState.tabSize.of(2),
 				languageExtension,
 				EditorView.lineWrapping,
 				keymap.of([indentWithTab, ...yUndoManagerKeymap]),
@@ -134,10 +159,10 @@ export const EditorPane = ({ label, yText, awareness, undoManager, status }: Edi
 	}, [awareness]);
 
 	return (
-		<Card className="flex h-full min-h-0 flex-col overflow-hidden border-border/80">
-			<CardHeader className="border-b border-border">
+		<Card className="flex h-full min-h-0 flex-col gap-0 overflow-hidden border-border/80 py-0">
+			<CardHeader className="shrink-0 border-b border-border px-4 py-3">
 				<CardTitle>Editor</CardTitle>
-				<CardDescription>
+				<CardDescription className="font-mono text-[11px]">
 					{label ?? "Bitte Datei wählen"}
 
 					<div className="flex flex-wrap items-center gap-2 px-4 py-2">
@@ -164,7 +189,7 @@ export const EditorPane = ({ label, yText, awareness, undoManager, status }: Edi
 				</CardAction>
 			</CardHeader>
 
-			<CardContent className="p-0">
+			<CardContent className="min-h-0 flex-1 p-0">
 				{yText ? (
 					<div ref={mountRef} className="h-full" />
 				) : (

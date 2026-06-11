@@ -214,7 +214,6 @@ export function PresentationFrame({
 				<aside className="flex min-h-0 flex-col overflow-hidden rounded-md border border-white/10 bg-zinc-900/95 shadow-2xl">
 					<div className="border-b border-white/10 px-4 py-3">
 						<h2 className="text-sm font-semibold">Speaker notes</h2>
-						<p className="text-xs text-zinc-400">Slide {slideIndex + 1}</p>
 					</div>
 					<div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
 						{hasSpeakerNotes ? (
