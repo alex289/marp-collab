@@ -17,7 +17,7 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card";
-import { HotkeyLabel } from "./ui/hotkeyLable";
+import { HotkeyLabel } from "./hotkey-lable";
 
 type Participant = {
 	id: string;
@@ -195,7 +195,8 @@ export const EditorPane = ({ label, yText, awareness, undoManager, status }: Edi
 				<CardAction>
 					<div className="flex items-center gap-2">
 						<Badge variant="outline" title="Save document (Ctrl/Cmd+S)">
-							Save <HotkeyLabel hotkey="S" />
+							<span>Save</span>
+							<HotkeyLabel hotkey="S" />
 						</Badge>
 						<Badge variant={statusVariant}>{status}</Badge>
 					</div>
