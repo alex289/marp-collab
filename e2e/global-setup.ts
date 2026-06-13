@@ -1,3 +1,4 @@
+import { setTimeout } from "node:timers/promises";
 import { OAuth2Server } from "oauth2-mock-server";
 
 export default async function globalSetup() {
@@ -14,6 +15,8 @@ export default async function globalSetup() {
 
 	server.issuer.url = "http://host.docker.internal:8091";
 	await server.start(8091, "0.0.0.0");
+
+	await setTimeout(5000); // Without waiting the tests sometimes fail
 
 	(globalThis as any).__OIDC__ = server; // stash to stop in teardown
 }
