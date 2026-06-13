@@ -12,7 +12,7 @@ Herausforderungen:
 
 Erkenntnisse:
 
-- PNPM in Docker Builds zu verwenden ist nicht sehr angenehm. Das pnpm Docker Image enthält kein Node.js, das Node.js Image enthält kein pnpm.
+- PNPM in Docker Builds zu verwenden ist nicht sehr angenehm. Das pnpm Docker Image enthält kein Node.js, das Node.js Image enthält kein pnpm. Trick: PNPM binary aus dem pnpm Image kopieren und in einem Node.js Image verwenden. Siehe Dockerfile.
 
 Nächste Woche:
 
