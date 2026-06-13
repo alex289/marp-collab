@@ -37,6 +37,7 @@ import { UploadFileDialog } from "@/components/dialog/upload-file";
 import { DeleteFileDialog } from "@/components/dialog/delete-file";
 import { API_URL } from "@/lib/config";
 import { Button } from "@/components/ui/button";
+import { HotkeyLabel } from "./ui/hotkeyLable";
 
 type NestedFileNode = {
 	name: string;
@@ -519,7 +520,10 @@ export const FileSidebar = ({
 						<SidebarContent>
 							<SidebarGroup>
 								<SidebarGroupLabel className="flex items-center justify-between pr-1">
-									<span>Files</span>
+									<span className="flex min-w-0 items-center gap-2">
+										<span>Files</span>
+										<HotkeyLabel hotkey="B" />
+									</span>
 									<div className="flex items-center gap-0.5">
 										<SidebarHeaderAction onClick={() => setCreateFileOpen(true)} title="New file">
 											<FilePlus />

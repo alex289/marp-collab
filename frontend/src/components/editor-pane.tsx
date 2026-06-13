@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { EditorState } from "@codemirror/state";
+import { EditorState, Prec } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 import { indentWithTab } from "@codemirror/commands";
 import { markdown } from "@codemirror/lang-markdown";
@@ -17,6 +17,7 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card";
+import { HotkeyLabel } from "./ui/hotkeyLable";
 
 type Participant = {
 	id: string;
@@ -113,6 +114,14 @@ export const EditorPane = ({ label, yText, awareness, undoManager, status }: Edi
 				EditorState.tabSize.of(2),
 				languageExtension,
 				EditorView.lineWrapping,
+				Prec.highest(
+					keymap.of([
+						{
+							key: "Mod-s",
+							run: () => true,
+						},
+					]),
+				),
 				keymap.of([indentWithTab, ...yUndoManagerKeymap]),
 				yCollab(yText, awareness, { undoManager }),
 				editorTheme,
@@ -184,7 +193,12 @@ export const EditorPane = ({ label, yText, awareness, undoManager, status }: Edi
 					</div>
 				</CardDescription>
 				<CardAction>
-					<Badge variant={statusVariant}>{status}</Badge>
+					<div className="flex items-center gap-2">
+						<Badge variant="outline" title="Save document (Ctrl/Cmd+S)">
+							Save <HotkeyLabel hotkey="S" />
+						</Badge>
+						<Badge variant={statusVariant}>{status}</Badge>
+					</div>
 				</CardAction>
 			</CardHeader>
 
