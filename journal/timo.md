@@ -8,11 +8,11 @@ Gelernt:
 
 Herausforderungen:
 
-- ...
+- End-to-End-Tests mit Playwright zu implementieren, insbesondere die Authentifizierung über OpenID Connect (OIDC) in einem Docker-Setup, wobei der OIDC Mock server ausserhalb des Containers läuft. Claude Code fast nur zum Debuggen eingesetzt, warum es am Ende plötzlich funktionierte wusste selbst Claude nicht sicher.
 
 Erkenntnisse:
 
-- ...
+- PNPM in Docker Builds zu verwenden ist nicht sehr angenehm. Das pnpm Docker Image enthält kein Node.js, das Node.js Image enthält kein pnpm.
 
 Nächste Woche:
 

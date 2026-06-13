@@ -20,6 +20,12 @@ const app = new Hono<{ Variables: HonoVariables }>();
 app.use(timeout(30 * 1000)); // 30 seconds
 app.use(trimTrailingSlash());
 app.use(secureHeaders());
+app.use((c, next) => {
+	// Prevent search engines from indexing any page
+	c.header("X-Robots-Tag", "noindex, nofollow, noarchive");
+	return next();
+});
+
 app.use(
 	bodyLimit({
 		maxSize: 10 * 1024 * 1024, // 10 MB

@@ -1,0 +1,16 @@
+{
+	"name": "e2e",
+	"private": true,
+	"type": "module",
+	"scripts": {
+		"test": "playwright test",
+		"test:ui": "playwright test --headed --ui",
+		"install:browsers": "playwright install"
+	},
+	"devDependencies": {
+		"@playwright/test": "^1.60.0",
+		"@types/node": "^25.9.3",
+		"oauth2-mock-server": "^8.2.3",
+		"typescript": "^6.0.3"
+	}
+}
