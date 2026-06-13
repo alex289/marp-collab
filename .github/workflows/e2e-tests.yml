@@ -32,6 +32,9 @@ jobs:
         run: pnpm exec playwright install --with-deps chromium
         working-directory: ./e2e
 
+      - name: Add host.docker.internal to /etc/hosts
+        run: echo "127.0.0.1 host.docker.internal" | sudo tee -a /etc/hosts
+
       - name: Run E2E tests
         run: node --run test
         working-directory: ./e2e
