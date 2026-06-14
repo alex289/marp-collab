@@ -208,3 +208,109 @@ test.describe("Editor page — file management", () => {
 		await expect(page.getByText("keep-me.md")).toBeVisible();
 	});
 });
+
+test.describe("Editor: content editing", () => {
+	test("type into the CodeMirror editor and see live preview update", async ({ page }) => {
+		await page.goto("/");
+
+		await page.getByRole("button", { name: "Create Presentation" }).click();
+		await page.getByLabel("Name").fill("Editor Flow Test");
+		await page.getByRole("button", { name: "Create" }).click();
+		await expect(page.getByRole("dialog")).not.toBeVisible();
+		await clickLastCard(page, "Editor Flow Test");
+		await page.waitForURL(/\/presentations\/.+/);
+
+		const editor = page.locator(".cm-content");
+		await expect(editor).toBeVisible({ timeout: 10_000 });
+
+		await editor.click();
+		await page.keyboard.press("Control+A");
+		await page.keyboard.type("# Hello World");
+
+		const previewFrame = page.frameLocator('iframe[title="Marp preview"]');
+		await expect(previewFrame.getByRole("heading", { name: "Hello World" })).toBeVisible({
+			timeout: 10_000,
+		});
+	});
+});
+
+test.describe("Presentation mode", () => {
+	test("start and end a presentation", async ({ page }) => {
+		await page.goto("/");
+
+		await page.getByRole("button", { name: "Create Presentation" }).click();
+		await page.getByLabel("Name").fill("Presentation Mode Test");
+		await page.getByRole("button", { name: "Create" }).click();
+		await expect(page.getByRole("dialog")).not.toBeVisible();
+		await clickLastCard(page, "Presentation Mode Test");
+		await page.waitForURL(/\/presentations\/.+/);
+
+		await waitForSidebar(page);
+
+		await page.getByRole("link", { name: "Start presentation" }).click();
+		await expect(page).toHaveURL(/mode=present/);
+
+		await expect(page.getByRole("button", { name: "End presentation" })).toBeVisible();
+		await expect(page.getByRole("button", { name: "Next" })).toBeVisible();
+		await expect(page.getByRole("button", { name: "Previous" })).toBeVisible();
+
+		await expect(page.getByRole("button", { name: "Next" })).toBeEnabled({ timeout: 15_000 });
+		await page.getByRole("button", { name: "Next" }).click();
+		await expect(page.getByText(/Slide 2/)).toBeVisible();
+
+		await page.getByRole("button", { name: "Previous" }).click();
+		await expect(page.getByText(/Slide 1/)).toBeVisible();
+
+		await page.getByRole("button", { name: "End presentation" }).click();
+		await expect(page).not.toHaveURL(/mode=present/);
+		await expect(
+			page.locator('[data-slot="card-title"]').filter({ hasText: "Editor" }),
+		).toBeVisible();
+	});
+
+	test("Escape key exits presentation mode", async ({ page }) => {
+		await page.goto("/");
+
+		await page.getByRole("button", { name: "Create Presentation" }).click();
+		await page.getByLabel("Name").fill("Escape Test");
+		await page.getByRole("button", { name: "Create" }).click();
+		await expect(page.getByRole("dialog")).not.toBeVisible();
+		await clickLastCard(page, "Escape Test");
+		await page.waitForURL(/\/presentations\/.+/);
+
+		await expect(page.getByRole("link", { name: "Start presentation" })).toBeVisible({
+			timeout: 10_000,
+		});
+
+		await page.getByRole("link", { name: "Start presentation" }).click();
+		await expect(page).toHaveURL(/mode=present/);
+
+		await page.keyboard.press("Escape");
+		await expect(page).not.toHaveURL(/mode=present/);
+	});
+});
+
+test.describe("Navigation", () => {
+	test("logo link navigates back to dashboard", async ({ page }) => {
+		await page.goto("/");
+
+		await page.getByRole("button", { name: "Create Presentation" }).click();
+		await page.getByLabel("Name").fill("Nav Test");
+		await page.getByRole("button", { name: "Create" }).click();
+		await expect(page.getByRole("dialog")).not.toBeVisible();
+		await clickLastCard(page, "Nav Test");
+		await page.waitForURL(/\/presentations\/.+/);
+
+		await page.getByRole("link", { name: "Marp Collab" }).click();
+		await expect(page).toHaveURL("/");
+		await expect(page.getByRole("heading", { name: "Presentations" })).toBeVisible();
+		await expect(page.getByRole("link", { name: /Nav Test/ })).toBeVisible();
+	});
+
+	test("logout redirects to login page", async ({ page }) => {
+		await page.goto("/");
+
+		await page.getByRole("button", { name: "Logout" }).click();
+		await expect(page).toHaveURL("/login");
+	});
+});
