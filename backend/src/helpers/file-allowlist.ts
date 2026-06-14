@@ -59,6 +59,9 @@ export function isAllowedUpload(filename: string, mimeType: string): boolean {
 		// font/* or application/font-* or application/x-font-* MIME types.
 		return true;
 	}
+	if (MARKDOWN_EXTENSIONS.has(ext)) {
+		return mimeType === "text/markdown";
+	}
 	return ALLOWED_ASSET_EXTENSIONS.has(ext) && ALLOWED_ASSET_MIME_TYPES.has(mimeType);
 }
 

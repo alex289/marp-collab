@@ -40,3 +40,7 @@ jobs:
 
       - name: Build
         run: node --run build
+
+      - name: Run Tests
+        run: node --run test
+        working-directory: ./backend
