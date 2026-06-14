@@ -5,7 +5,6 @@ const MARKDOWN_FILE_NAME = "slides.md";
 const CSS_FILE_NAME = "custom.css";
 const FOLDER_NAME = "assets";
 
-
 async function clickLastCard(page: Page, name: string) {
 	await page
 		.getByRole("link", { name: new RegExp(name) })
@@ -13,13 +12,11 @@ async function clickLastCard(page: Page, name: string) {
 		.click();
 }
 
-
 async function waitForSidebar(page: Page) {
 	await expect(page.getByRole("button", { name: "presentation.md" })).toBeVisible({
 		timeout: 10_000,
 	});
 }
-
 
 async function clickSidebarDelete(
 	page: Page,
@@ -29,8 +26,10 @@ async function clickSidebarDelete(
 	const menuItem = page.locator('[data-sidebar="menu-item"]').filter({
 		has: page.getByRole("button", { name: itemName }),
 	});
-	await menuItem.hover();
-	await menuItem.getByTitle(kind).click();
+	// Hover the item button directly so both group-hover and peer-hover CSS fire
+	await menuItem.getByRole("button", { name: itemName }).hover();
+	// CSS [title=] exact match is more reliable than getByTitle (partial match)
+	await menuItem.locator(`[title="${kind}"]`).click();
 }
 
 test.describe("Dashboard", () => {
@@ -178,4 +177,34 @@ test.describe("Editor page — file management", () => {
 		await expect(page.getByText("to-delete.md")).not.toBeVisible();
 	});
 
+	test("delete a folder", async ({ page }) => {
+		await page.getByRole("button", { name: "New folder" }).click();
+		await page.getByLabel("Folder name").fill("temp-folder");
+		await page.getByRole("button", { name: "Create" }).click();
+		await expect(page.getByRole("dialog")).not.toBeVisible();
+		await expect(page.getByText("temp-folder")).toBeVisible();
+
+		await clickSidebarDelete(page, "temp-folder", "Delete folder");
+
+		await expect(page.getByRole("dialog")).toBeVisible();
+		await page.getByRole("button", { name: "Delete" }).click();
+
+		await expect(page.getByRole("dialog")).not.toBeVisible();
+		await expect(page.getByText("temp-folder")).not.toBeVisible();
+	});
+
+	test("cancel file deletion keeps the file", async ({ page }) => {
+		await page.getByRole("button", { name: "New file" }).click();
+		await page.getByLabel("File name").fill("keep-me.md");
+		await page.getByRole("button", { name: "Create" }).click();
+		await expect(page.getByRole("dialog")).not.toBeVisible();
+
+		await clickSidebarDelete(page, "keep-me.md", "Delete file");
+
+		await expect(page.getByRole("dialog")).toBeVisible();
+		await page.getByRole("button", { name: "Cancel" }).click();
+
+		await expect(page.getByRole("dialog")).not.toBeVisible();
+		await expect(page.getByText("keep-me.md")).toBeVisible();
+	});
 });

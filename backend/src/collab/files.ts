@@ -1,5 +1,5 @@
 import { glob, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
-import { dirname, extname, isAbsolute, resolve, sep } from "node:path";
+import { dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { getFileType, MARKDOWN_EXTENSIONS } from "../helpers/file-allowlist.ts";
 
 export type DeckFile = {
@@ -50,27 +50,6 @@ function isMissingFileError(error: unknown): boolean {
 
 const EXCLUDED_FILE_EXTENSIONS = new Set([".yjs"]);
 
-async function listProjectFiles(projectId: string): Promise<string[]> {
-	if (!isValidProjectId(projectId)) {
-		throw new Error(`Invalid project id: ${projectId}`);
-	}
-	const projectDir = resolve(presentationsDir, projectId);
-	const files = await Array.fromAsync(
-		glob("**/*", {
-			cwd: projectDir,
-			exclude: (p) => {
-				const parts = p.split("/");
-				const filename = parts.at(-1) ?? "";
-				return (
-					parts.some((part) => part.startsWith(".") && part !== ".keep") ||
-					EXCLUDED_FILE_EXTENSIONS.has(filename.slice(filename.lastIndexOf(".")))
-				);
-			},
-		}),
-	);
-	return files.sort((a, b) => a.localeCompare(b));
-}
-
 async function ensurePresentationsDir(projectId: string): Promise<void> {
 	if (!isValidProjectId(projectId)) {
 		throw new Error(`Invalid project id: ${projectId}`);
@@ -85,15 +64,29 @@ export function toDocumentName(projectId: string, fileId: string): string {
 export async function getDeckFiles(projectId: string): Promise<DeckFile[]> {
 	await ensurePresentationsDir(projectId);
 
-	const fileIds = await listProjectFiles(projectId);
-	return fileIds.map((rawId) => {
-		const id = rawId.replace(/\\/g, "/");
-		if (id.endsWith("/.keep")) {
-			const folderPath = id.slice(0, -"/.keep".length);
-			return { id: folderPath, label: folderPath, type: "folder" as const };
-		}
-		return { id, label: id, type: getFileType(id) ?? ("asset" as const) };
-	});
+	const projectDir = resolve(presentationsDir, projectId);
+	const entries = await Array.fromAsync(
+		glob("**/*", {
+			cwd: projectDir,
+			withFileTypes: true,
+			exclude: (dirent) => {
+				return (
+					dirent.name.startsWith(".") ||
+					EXCLUDED_FILE_EXTENSIONS.has(extname(dirent.name).toLowerCase())
+				);
+			},
+		}),
+	);
+
+	return entries
+		.map((dirent) => {
+			const id = relative(projectDir, join(dirent.parentPath, dirent.name)).replace(/\\/g, "/");
+			if (dirent.isDirectory()) {
+				return { id, label: id, type: "folder" as const };
+			}
+			return { id, label: id, type: getFileType(id) ?? ("asset" as const) };
+		})
+		.sort((a, b) => a.id.localeCompare(b.id));
 }
 
 export async function createProjectDir(projectId: string, dirPath: string): Promise<void> {
@@ -111,7 +104,6 @@ export async function createProjectDir(projectId: string, dirPath: string): Prom
 	}
 
 	await mkdir(dir, { recursive: true });
-	await writeFile(resolve(dir, ".keep"), "");
 }
 
 export async function getDocumentContent(documentName: string): Promise<string | undefined> {
@@ -243,6 +235,23 @@ export async function moveProjectFile(
 
 	await rename(sourcePath, destPath);
 	return newFileId;
+}
+
+export async function deleteProjectFolder(projectId: string, folderPath: string): Promise<boolean> {
+	const dirPath = resolveProjectFilePath(projectId, folderPath);
+	if (!dirPath) {
+		return false;
+	}
+
+	try {
+		await rm(dirPath, { recursive: true });
+		return true;
+	} catch (error) {
+		if (isMissingFileError(error)) {
+			return false;
+		}
+		throw error;
+	}
 }
 
 export async function deleteProjectFile(projectId: string, fileId: string): Promise<boolean> {

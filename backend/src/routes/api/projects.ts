@@ -5,6 +5,7 @@ import { getUserProjectAccess } from "../../helpers/project-auth.ts";
 import {
 	createProjectDir,
 	deleteProjectFile,
+	deleteProjectFolder,
 	getDeckFiles,
 	getProjectFile,
 	isMarkdownFileId,
@@ -356,7 +357,7 @@ app.delete("/:projectId/folders/:folderPath{.+}", async (c) => {
 	}
 
 	const folderPath = decodeURIComponent(c.req.param("folderPath"));
-	const deleted = await deleteProjectFile(projectId, `${folderPath}/.keep`);
+	const deleted = await deleteProjectFolder(projectId, folderPath);
 
 	if (!deleted) {
 		return c.json({ error: "Folder not found" }, 404);
