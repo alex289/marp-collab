@@ -41,29 +41,11 @@ const editorTheme = EditorView.theme({
 		backgroundColor: "var(--card)",
 		color: "var(--card-foreground)",
 	},
-	".cm-scroller": {
-		fontFamily: "'Geist Mono Variable', monospace",
-		overflow: "auto",
-		lineHeight: "1.65",
-	},
-	".cm-content": {
-		fontFamily: "'Geist Mono Variable', monospace",
-		minHeight: "100%",
-		tabSize: "2",
-		caretColor: "var(--primary)",
-	},
-	".cm-line": {
-		padding: "0 6px",
-	},
 	".cm-gutters": {
 		borderRight: "1px solid var(--border)",
 		background: "color-mix(in oklab, var(--muted) 64%, transparent)",
 		color: "var(--muted-foreground)",
 		paddingRight: "6px",
-	},
-	".cm-lineNumbers .cm-gutterElement": {
-		minWidth: "36px",
-		padding: "0 10px 0 12px",
 	},
 	".cm-activeLine": {
 		backgroundColor: "color-mix(in oklab, var(--primary) 7%, transparent)",
