@@ -516,7 +516,7 @@ export const FileSidebar = ({
 			>
 				<MobileSidebarToggle />
 				<TooltipProvider>
-					<Sidebar variant="floating" collapsible="icon" className="static pt-0">
+					<Sidebar variant="floating" collapsible="icon" className="static pt-0 -ml-2">
 						<SidebarContent>
 							<SidebarGroup>
 								<SidebarGroupLabel className="flex items-center justify-between pr-1">

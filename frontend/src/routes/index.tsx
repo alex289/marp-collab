@@ -25,7 +25,7 @@ function RootComponent() {
 	const projects = data?.projects ?? [];
 
 	return (
-		<div className="flex flex-col mx-auto w-full max-w-6xl p-6 gap-6">
+		<div className="flex flex-col mx-auto w-full p-6 gap-6">
 			<Navbar />
 			<div className="flex items-center justify-between">
 				<h1 className="text-2xl font-bold">Presentations</h1>

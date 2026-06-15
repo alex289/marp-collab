@@ -32,7 +32,7 @@ function LoginRoute() {
 	}
 
 	return (
-		<div className="flex min-h-screen items-center justify-center bg-halo">
+		<div className="flex min-h-screen items-center justify-center">
 			<Card className="w-full max-w-sm p-8 shadow-panel">
 				<div className="mb-3 text-center">
 					<img src="/logo.svg" alt="Logo" className="mx-auto mb-5 w-26" />

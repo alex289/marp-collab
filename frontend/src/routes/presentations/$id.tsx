@@ -412,7 +412,7 @@ function RouteComponent() {
 
 	return (
 		<div className="min-h-screen bg-halo pb-4 pt-6 text-foreground">
-			<div className="mx-auto flex w-[min(1440px,96vw)] flex-col gap-4">
+			<div className="mx-auto flex px-6 flex-col gap-4">
 				<Navbar />
 				<main
 					className={cn(
