@@ -16,7 +16,7 @@ export const HotkeyLabel = ({
 	const modifierLabel = isMac ? "⌘" : "Ctrl";
 
 	return (
-		<KbdGroup className={cn("align-middle", className)}>
+		<KbdGroup className={cn("hidden align-middle md:inline-flex", className)}>
 			{withMod !== false && <Kbd>{modifierLabel}</Kbd>}
 			{withMod !== false && <span>+</span>}
 			<Kbd>{hotkey}</Kbd>

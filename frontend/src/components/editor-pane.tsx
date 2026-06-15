@@ -17,6 +17,9 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Save } from "lucide-react";
 import { HotkeyLabel } from "./hotkey-lable";
 
 type Participant = {
@@ -176,10 +179,29 @@ export const EditorPane = ({ label, yText, awareness, undoManager, status }: Edi
 				</CardDescription>
 				<CardAction>
 					<div className="flex items-center gap-2">
-						<Badge variant="outline" title="Save document (Ctrl/Cmd+S)">
-							<span>Save</span>
-							<HotkeyLabel hotkey="S" />
-						</Badge>
+						<TooltipProvider>
+							<Tooltip>
+								<TooltipTrigger asChild>
+									<Button
+										type="button"
+										variant="outline"
+										size="sm"
+										title="Document saves automatically"
+										aria-label="Save document"
+										onClick={() =>
+											mountRef.current?.querySelector<HTMLElement>(".cm-content")?.focus()
+										}
+									>
+										<Save />
+										<span>Save</span>
+									</Button>
+								</TooltipTrigger>
+								<TooltipContent>
+									<span>Document saves automatically</span>
+									<HotkeyLabel hotkey="S" />
+								</TooltipContent>
+							</Tooltip>
+						</TooltipProvider>
 						<Badge variant={statusVariant}>{status}</Badge>
 					</div>
 				</CardAction>

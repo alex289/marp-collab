@@ -27,10 +27,11 @@ import {
 	SidebarMenuSub,
 	SidebarProvider,
 	SidebarRail,
+	SidebarTrigger,
 	useSidebar,
 } from "@/components/ui/sidebar";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { TooltipProvider } from "./ui/tooltip";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
 import { CreateFileDialog } from "@/components/dialog/create-file";
 import { CreateFolderDialog } from "@/components/dialog/create-folder";
 import { UploadFileDialog } from "@/components/dialog/upload-file";
@@ -163,21 +164,39 @@ const SidebarHeaderAction = ({
 	</button>
 );
 
-const MobileSidebarToggle = () => {
-	const { setOpenMobile } = useSidebar();
+const FileSidebarToggle = ({ mobileButton }: { mobileButton?: boolean }) => {
+	const { toggleSidebar } = useSidebar();
 
-	return (
-		<div className="md:hidden">
+	if (mobileButton) {
+		return (
 			<Button
 				type="button"
 				variant="outline"
-				className="w-full justify-start gap-2"
-				onClick={() => setOpenMobile(true)}
+				className="justify-start gap-2 md:hidden"
+				title="Toggle files sidebar"
+				aria-label="Toggle files sidebar"
+				onClick={toggleSidebar}
 			>
 				<PanelLeft className="h-4 w-4" />
-				Dateien
+				<span className="truncate">Dateien</span>
 			</Button>
-		</div>
+		);
+	}
+
+	return (
+		<Tooltip>
+			<TooltipTrigger asChild>
+				<SidebarTrigger
+					className="border border-border bg-background/85 shadow-sm backdrop-blur hidden md:flex"
+					title="Toggle files sidebar"
+					aria-label="Toggle files sidebar"
+				/>
+			</TooltipTrigger>
+			<TooltipContent>
+				<span>Toggle files sidebar</span>
+				<HotkeyLabel hotkey="B" />
+			</TooltipContent>
+		</Tooltip>
 	);
 };
 
@@ -514,16 +533,13 @@ export const FileSidebar = ({
 				onOpenChange={setSidebarOpen}
 				className="md:min-h-svh min-h-fit"
 			>
-				<MobileSidebarToggle />
 				<TooltipProvider>
+					<FileSidebarToggle mobileButton={true} />
 					<Sidebar variant="floating" collapsible="icon" className="static pt-0 -ml-2">
 						<SidebarContent>
 							<SidebarGroup>
-								<SidebarGroupLabel className="flex items-center justify-between pr-1">
-									<span className="flex min-w-0 items-center gap-2">
-										<span>Files</span>
-										<HotkeyLabel hotkey="B" className="opacity-70" />
-									</span>
+								<SidebarGroupLabel className="flex items-center justify-between pr-1 pl-0 pb-2">
+									<FileSidebarToggle />
 									<div className="flex items-center gap-0.5">
 										<SidebarHeaderAction onClick={() => setCreateFileOpen(true)} title="New file">
 											<FilePlus />
