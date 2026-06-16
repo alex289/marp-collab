@@ -10,6 +10,7 @@ import Navbar from "@/components/navbar";
 import { useHotkeys } from "@tanstack/react-hotkeys";
 import { PresentationFrame } from "@/components/presentation-frame";
 import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
 
 const EditorPane = lazy(async () => {
 	const m = await import("@/components/editor-pane");
@@ -87,7 +88,7 @@ export const Route = createFileRoute("/presentations/$id")({
 });
 
 function formatElapsed(ms: number) {
-	const totalSeconds = Math.floor(ms / 1000);
+	const totalSeconds = Math.max(0, Math.floor(ms / 1000));
 	const hours = Math.floor(totalSeconds / 3600);
 	const minutes = Math.floor((totalSeconds % 3600) / 60);
 	const seconds = totalSeconds % 60;
@@ -114,6 +115,8 @@ function RouteComponent() {
 	const [slideCount, setSlideCount] = useState(1);
 	const [startedAt, setStartedAt] = useState(() => Date.now());
 	const [now, setNow] = useState(() => Date.now());
+	const [isTimerPaused, setIsTimerPaused] = useState(false);
+	const [pausedElapsedMs, setPausedElapsedMs] = useState(0);
 	const slideSyncChannelRef = useRef<BroadcastChannel | null>(null);
 	const suppressNextSlideBroadcastRef = useRef(false);
 
@@ -192,14 +195,24 @@ function RouteComponent() {
 			return;
 		}
 
-		setStartedAt(Date.now());
-		setNow(Date.now());
+		const currentTime = Date.now();
+		setStartedAt(currentTime);
+		setNow(currentTime);
+		setIsTimerPaused(false);
+		setPausedElapsedMs(0);
+	}, [isPresentation]);
+
+	useEffect(() => {
+		if (!isPresentation || isTimerPaused) {
+			return;
+		}
+
 		const interval = window.setInterval(() => setNow(Date.now()), 1000);
 
 		return () => {
 			window.clearInterval(interval);
 		};
-	}, [isPresentation]);
+	}, [isPresentation, isTimerPaused]);
 
 	useEffect(() => {
 		if (!isPresentation) {
@@ -336,6 +349,26 @@ function RouteComponent() {
 
 	if (isPresentation) {
 		const viewerUrl = `/presentations/${id}?mode=viewer&slide=${slideIndex}${selectedFile?.id ? `&file=${encodeURIComponent(selectedFile.id)}` : ""}`;
+		const elapsedMs = isTimerPaused ? pausedElapsedMs : now - startedAt;
+		const resetTimer = () => {
+			const currentTime = Date.now();
+			setStartedAt(currentTime);
+			setNow(currentTime);
+			setPausedElapsedMs(0);
+			setIsTimerPaused(false);
+		};
+		const pauseTimer = () => {
+			const currentTime = Date.now();
+			setNow(currentTime);
+			setPausedElapsedMs(Math.max(0, currentTime - startedAt));
+			setIsTimerPaused(true);
+		};
+		const resumeTimer = () => {
+			const currentTime = Date.now();
+			setStartedAt(currentTime - pausedElapsedMs);
+			setNow(currentTime);
+			setIsTimerPaused(false);
+		};
 		const frame = (
 			<PresentationFrame
 				markdown={markdown}
@@ -360,9 +393,17 @@ function RouteComponent() {
 						Slide {slideIndex + 1}/{Math.max(slideCount, 1)}
 					</Button>
 					<div className="flex items-center gap-2">
-						<Button type="button" variant="secondary" onClick={() => setStartedAt(Date.now())}>
-							{formatElapsed(now - startedAt)}
+						<Button type="button" variant="secondary" onClick={resetTimer}>
+							{formatElapsed(elapsedMs)}
 						</Button>
+						<Button
+							type="button"
+							variant="secondary"
+							onClick={isTimerPaused ? resumeTimer : pauseTimer}
+						>
+							{isTimerPaused ? "Resume timer" : "Pause timer"}
+						</Button>
+						<Separator orientation="vertical" />
 						<Button
 							type="button"
 							variant="secondary"
