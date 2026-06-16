@@ -8,6 +8,7 @@ import {
 	FilePlus,
 	FolderPlus,
 	Upload,
+	Download,
 	Image,
 	Trash2,
 	Type,
@@ -496,6 +497,15 @@ export const FileSidebar = ({
 		onRetry();
 	};
 
+	const handleExportProject = () => {
+		const link = document.createElement("a");
+		link.href = `${API_URL}/projects/${projectId}/export.zip`;
+		link.download = "";
+		document.body.append(link);
+		link.click();
+		link.remove();
+	};
+
 	const isRootDragOver = dragState.dragOverPath === "" && dragState.draggingFileId !== null;
 
 	return (
@@ -556,6 +566,12 @@ export const FileSidebar = ({
 											title="Upload file"
 										>
 											<Upload />
+										</SidebarHeaderAction>
+										<SidebarHeaderAction
+											onClick={handleExportProject}
+											title="Export project as ZIP"
+										>
+											<Download />
 										</SidebarHeaderAction>
 									</div>
 								</SidebarGroupLabel>

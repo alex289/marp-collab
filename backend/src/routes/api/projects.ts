@@ -4,6 +4,7 @@ import { createProject, deleteProject, getProjectsByOwnerId } from "../../db/mod
 import { getUserProjectAccess } from "../../helpers/project-auth.ts";
 import {
 	createProjectDir,
+	createProjectZip,
 	deleteProjectFile,
 	deleteProjectFolder,
 	getDeckFiles,
@@ -83,6 +84,31 @@ app.delete("/:projectId", (c) => {
 	}
 
 	return c.json({ success: true });
+});
+
+app.get("/:projectId/export.zip", async (c) => {
+	const user = c.get("user");
+	if (!user) {
+		return c.json({ error: "Unauthorized" }, 401);
+	}
+
+	const { projectId } = c.req.param();
+	const access = getUserProjectAccess(projectId, user.id);
+	if (!access) {
+		return c.json({ error: "Project not found or access denied" }, 403);
+	}
+
+	const zip = await createProjectZip(projectId);
+
+	return new Response(new Uint8Array(zip), {
+		status: 200,
+		headers: {
+			"Content-Type": "application/zip",
+			"Content-Disposition": `attachment; filename="project-${projectId}.zip"`,
+			"Content-Length": zip.length.toString(),
+			"Cache-Control": "no-store",
+		},
+	});
 });
 
 app.get("/:projectId/files", async (c) => {

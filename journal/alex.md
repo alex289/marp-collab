@@ -1,5 +1,15 @@
 # Development Journal
 
+## KW 25
+
+Gelernt:
+
+- Zip-Archive mit Nodejs erstellen
+
+KI Unterstützung:
+
+- Zip-Archive: GPT-5.5
+
 ## KW 24
 
 Gelernt:
