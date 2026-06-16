@@ -10,6 +10,7 @@ import {
 import { renderMarp } from "@/lib/marp";
 import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
+import { useTheme } from "./theme-provider";
 
 type PreviewPaneProps = {
 	markdown: string;
@@ -19,6 +20,7 @@ type PreviewPaneProps = {
 };
 
 export const PreviewPane = ({ markdown, label, projectId, selectedFileId }: PreviewPaneProps) => {
+	const { theme } = useTheme();
 	const rendered = useMemo(() => {
 		try {
 			return renderMarp(markdown);
@@ -37,17 +39,32 @@ export const PreviewPane = ({ markdown, label, projectId, selectedFileId }: Prev
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <style>
+      html,
       body {
         margin: 0;
+        min-height: 100%;
+        box-sizing: border-box;
+        background: ${theme === "dark" ? "oklch(0.205 0 0)" : "oklch(1 0 0)"};
       }
       ${rendered.css}
+      div.marpit {
+        display: flex;
+        flex-direction: column;
+        gap: 24px;
+        align-items: center;
+      }
+      div.marpit > svg[data-marpit-svg],
+      body > section {
+        flex: 0 0 auto;
+		border: 1px solid ${theme === "dark" ? "oklch(1 0 0 / 10%)" : "oklch(0.922 0 0)"};
+      }
     </style>
   </head>
   <body>
     ${rendered.html}
   </body>
 </html>`;
-	}, [rendered.css, rendered.html]);
+	}, [rendered.css, rendered.html, theme]);
 
 	return (
 		<Card className="flex h-full min-h-0 flex-col overflow-hidden border-border/80">
@@ -80,7 +97,7 @@ export const PreviewPane = ({ markdown, label, projectId, selectedFileId }: Prev
 				<iframe
 					title="Marp preview"
 					srcDoc={srcDoc}
-					className="h-full w-full border"
+					className="h-full w-full"
 					sandbox="allow-scripts"
 				/>
 			</CardContent>
