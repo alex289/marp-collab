@@ -21,6 +21,9 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Save } from "lucide-react";
 import { HotkeyLabel } from "./hotkey-lable";
+import { useTheme } from "./theme-provider";
+import { vsCodeLight } from "@fsegurai/codemirror-theme-vscode-light";
+import { vsCodeDark } from "@fsegurai/codemirror-theme-vscode-dark";
 
 type Participant = {
 	id: string;
@@ -71,6 +74,7 @@ const editorTheme = EditorView.theme({
 export const EditorPane = ({ label, yText, awareness, undoManager, status }: EditorPaneProps) => {
 	const mountRef = useRef<HTMLDivElement | null>(null);
 	const [participants, setParticipants] = useState<Participant[]>([]);
+	const { theme } = useTheme();
 
 	const statusVariant = useMemo(() => {
 		if (status === "connected") {
@@ -109,7 +113,8 @@ export const EditorPane = ({ label, yText, awareness, undoManager, status }: Edi
 				),
 				keymap.of([indentWithTab, ...yUndoManagerKeymap]),
 				yCollab(yText, awareness, { undoManager }),
-				editorTheme,
+				theme === "dark" ? vsCodeDark : vsCodeLight,
+				Prec.highest(editorTheme),
 			],
 		});
 
@@ -121,7 +126,7 @@ export const EditorPane = ({ label, yText, awareness, undoManager, status }: Edi
 		return () => {
 			view.destroy();
 		};
-	}, [yText, awareness, undoManager, label]);
+	}, [yText, awareness, undoManager, label, theme]);
 
 	useEffect(() => {
 		if (!awareness) {
