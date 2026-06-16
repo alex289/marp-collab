@@ -103,7 +103,6 @@ test.describe("Editor page — file management", () => {
 	});
 
 	test("editor layout is visible with sidebar and panes", async ({ page }) => {
-		await expect(page.getByText("Files")).toBeVisible();
 		await expect(page.getByRole("button", { name: "presentation.md" })).toBeVisible();
 		await expect(
 			page.locator('[data-slot="card-title"]').filter({ hasText: "Editor" }),

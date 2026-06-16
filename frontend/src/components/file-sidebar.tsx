@@ -187,9 +187,10 @@ const FileSidebarToggle = ({ mobileButton }: { mobileButton?: boolean }) => {
 		<Tooltip>
 			<TooltipTrigger asChild>
 				<SidebarTrigger
-					className="border border-border bg-background/85 shadow-sm backdrop-blur hidden md:flex"
+					className="hidden md:flex pl-0.5"
 					title="Toggle files sidebar"
 					aria-label="Toggle files sidebar"
+					size="icon"
 				/>
 			</TooltipTrigger>
 			<TooltipContent>
@@ -538,9 +539,9 @@ export const FileSidebar = ({
 					<Sidebar variant="floating" collapsible="icon" className="static pt-0 -ml-2">
 						<SidebarContent>
 							<SidebarGroup>
-								<SidebarGroupLabel className="flex items-center justify-between pr-1 pl-0 pb-2">
+								<SidebarGroupLabel className="flex items-center justify-between pr-1 pl-0 pb-2 group-data-[collapsible=icon]:mt-0 group-data-[collapsible=icon]:opacity-100">
 									<FileSidebarToggle />
-									<div className="flex items-center gap-0.5">
+									<div className="flex items-center gap-0.5 group-data-[collapsible=icon]:hidden">
 										<SidebarHeaderAction onClick={() => setCreateFileOpen(true)} title="New file">
 											<FilePlus />
 										</SidebarHeaderAction>
