@@ -1,6 +1,7 @@
 import { Buffer } from "node:buffer";
 import { glob, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { ZipArchive } from "archiver";
 import { getFileType, MARKDOWN_EXTENSIONS } from "../helpers/file-allowlist.ts";
 
 export type DeckFile = {
@@ -93,90 +94,8 @@ export async function getDeckFiles(projectId: string): Promise<DeckFile[]> {
 type ZipSourceEntry = {
 	path: string;
 	type: "directory" | "file";
-	data: Buffer;
+	fullPath: string | null;
 };
-
-const crc32Table = new Uint32Array(256);
-for (let index = 0; index < 256; index++) {
-	let value = index;
-	for (let bit = 0; bit < 8; bit++) {
-		value = value & 1 ? 0xedb88320 ^ (value >>> 1) : value >>> 1;
-	}
-	crc32Table[index] = value >>> 0;
-}
-
-function crc32(data: Buffer): number {
-	let value = 0xffffffff;
-	for (const byte of data) {
-		value = crc32Table[(value ^ byte) & 0xff] ^ (value >>> 8);
-	}
-	return (value ^ 0xffffffff) >>> 0;
-}
-
-function createZipArchive(entries: ZipSourceEntry[]): Buffer {
-	const localParts: Buffer[] = [];
-	const centralParts: Buffer[] = [];
-	let offset = 0;
-
-	for (const entry of entries) {
-		const name = Buffer.from(entry.type === "directory" ? `${entry.path}/` : entry.path);
-		const checksum = crc32(entry.data);
-		const size = entry.data.length;
-
-		const localHeader = Buffer.alloc(30);
-		localHeader.writeUInt32LE(0x04034b50, 0);
-		localHeader.writeUInt16LE(20, 4);
-		localHeader.writeUInt16LE(0, 6);
-		localHeader.writeUInt16LE(0, 8);
-		localHeader.writeUInt16LE(0, 10);
-		localHeader.writeUInt16LE(0, 12);
-		localHeader.writeUInt32LE(checksum, 14);
-		localHeader.writeUInt32LE(size, 18);
-		localHeader.writeUInt32LE(size, 22);
-		localHeader.writeUInt16LE(name.length, 26);
-		localHeader.writeUInt16LE(0, 28);
-
-		localParts.push(localHeader, name, entry.data);
-
-		const centralHeader = Buffer.alloc(46);
-		centralHeader.writeUInt32LE(0x02014b50, 0);
-		centralHeader.writeUInt16LE(20, 4);
-		centralHeader.writeUInt16LE(20, 6);
-		centralHeader.writeUInt16LE(0, 8);
-		centralHeader.writeUInt16LE(0, 10);
-		centralHeader.writeUInt16LE(0, 12);
-		centralHeader.writeUInt16LE(0, 14);
-		centralHeader.writeUInt32LE(checksum, 16);
-		centralHeader.writeUInt32LE(size, 20);
-		centralHeader.writeUInt32LE(size, 24);
-		centralHeader.writeUInt16LE(name.length, 28);
-		centralHeader.writeUInt16LE(0, 30);
-		centralHeader.writeUInt16LE(0, 32);
-		centralHeader.writeUInt16LE(0, 34);
-		centralHeader.writeUInt16LE(0, 36);
-		centralHeader.writeUInt32LE(entry.type === "directory" ? 0x10 : 0, 38);
-		centralHeader.writeUInt32LE(offset, 42);
-
-		centralParts.push(centralHeader, name);
-		offset += localHeader.length + name.length + entry.data.length;
-	}
-
-	const centralDirectoryOffset = offset;
-	const centralDirectory = Buffer.concat(centralParts);
-	const centralDirectorySize = centralDirectory.length;
-
-	const endRecord = Buffer.alloc(22);
-	endRecord.writeUInt32LE(0x06054b50, 0);
-	endRecord.writeUInt16LE(0, 4);
-	endRecord.writeUInt16LE(0, 6);
-	endRecord.writeUInt16LE(entries.length, 8);
-	endRecord.writeUInt16LE(entries.length, 10);
-	endRecord.writeUInt32LE(centralDirectorySize, 12);
-	endRecord.writeUInt32LE(centralDirectoryOffset, 16);
-	endRecord.writeUInt16LE(0, 20);
-
-	return Buffer.concat([...localParts, centralDirectory, endRecord]);
-}
 
 export async function createProjectZip(projectId: string): Promise<Buffer> {
 	await ensurePresentationsDir(projectId);
@@ -200,22 +119,43 @@ export async function createProjectZip(projectId: string): Promise<Buffer> {
 			}
 
 			if (entry.isDirectory()) {
-				zipEntries.push({ path: relativePath, type: "directory", data: Buffer.alloc(0) });
+				zipEntries.push({ path: relativePath, type: "directory", fullPath: null });
 				await collectEntries(relativePath);
 				continue;
 			}
 
-			if (EXCLUDED_FILE_EXTENSIONS.has(extname(entry.name).toLowerCase())) {
+			if (!entry.isFile() || EXCLUDED_FILE_EXTENSIONS.has(extname(entry.name).toLowerCase())) {
 				continue;
 			}
 
-			zipEntries.push({ path: relativePath, type: "file", data: await readFile(fullPath) });
+			zipEntries.push({ path: relativePath, type: "file", fullPath });
 		}
 	}
 
 	await collectEntries("");
 
-	return createZipArchive(zipEntries);
+	const archive = new ZipArchive({ zlib: { level: 9 } });
+	const chunks: Buffer[] = [];
+	const archiveBuffer = new Promise<Buffer>((resolveArchive, rejectArchive) => {
+		archive.on("data", (chunk) => chunks.push(chunk));
+		archive.on("warning", rejectArchive);
+		archive.on("error", rejectArchive);
+		archive.on("end", () => resolveArchive(Buffer.concat(chunks)));
+	});
+
+	for (const entry of zipEntries) {
+		if (entry.type === "directory") {
+			archive.append("", { name: `${entry.path}/`, type: "directory" });
+			continue;
+		}
+
+		if (entry.fullPath) {
+			archive.file(entry.fullPath, { name: entry.path });
+		}
+	}
+
+	await archive.finalize();
+	return archiveBuffer;
 }
 
 export async function createProjectDir(projectId: string, dirPath: string): Promise<void> {

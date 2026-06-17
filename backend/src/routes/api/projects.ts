@@ -1,6 +1,11 @@
 import { Hono } from "hono";
 import type { HonoVariables } from "../../types.ts";
-import { createProject, deleteProject, getProjectsByOwnerId } from "../../db/models/project.ts";
+import {
+	createProject,
+	deleteProject,
+	getProjectById,
+	getProjectsByOwnerId,
+} from "../../db/models/project.ts";
 import { getUserProjectAccess } from "../../helpers/project-auth.ts";
 import {
 	createProjectDir,
@@ -93,6 +98,12 @@ app.get("/:projectId/export.zip", async (c) => {
 	}
 
 	const { projectId } = c.req.param();
+
+	const project = getProjectById(projectId);
+	if (!project) {
+		return c.json({ error: "Project not found" }, 404);
+	}
+
 	const access = getUserProjectAccess(projectId, user.id);
 	if (!access) {
 		return c.json({ error: "Project not found or access denied" }, 403);
@@ -104,7 +115,7 @@ app.get("/:projectId/export.zip", async (c) => {
 		status: 200,
 		headers: {
 			"Content-Type": "application/zip",
-			"Content-Disposition": `attachment; filename="project-${projectId}.zip"`,
+			"Content-Disposition": `attachment; filename="${project.name}.zip"`,
 			"Content-Length": zip.length.toString(),
 			"Cache-Control": "no-store",
 		},
