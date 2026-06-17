@@ -2,39 +2,49 @@ import { db } from "../db.ts";
 
 export type ProjectCollaborator = {
 	projectId: string;
+	projectName: string;
 	userId: string;
 	readOnly: boolean;
 	createdAt: Date;
+	userName: string;
 };
 
 type ProjectCollaboratorRow = {
 	projectId: string;
+	projectName: string;
 	userId: string;
 	readOnly: number;
 	createdAt: string;
+	userName: string;
 };
 
 function rowToProjectCollaborator(row: ProjectCollaboratorRow): ProjectCollaborator {
 	return {
 		projectId: row.projectId,
+		projectName: row.projectName,
 		userId: row.userId,
 		readOnly: row.readOnly === 1,
 		createdAt: new Date(row.createdAt),
+		userName: row.userName,
 	};
 }
 
 const preparedStatements = {
 	getCollaboratorsByProjectId: db.prepare(`
-        select projectId, userId, readOnly, createdAt
-        from project_collaborator
+        select projectId, userId, readOnly, pc.createdAt, u.name as userName, p.name as projectName
+        from project_collaborator pc
+		join user u on userId = u.id
+		join project p on projectId = p.id
         where projectId = ?
-        order by createdAt asc
+        order by pc.createdAt asc
     `),
 	getCollaborationsByUserId: db.prepare(`
-        select projectId, userId, readOnly, createdAt
-        from project_collaborator
-        where userId = ?
-        order by createdAt asc
+        select projectId, userId as ownerId, readOnly, pc.createdAt, u.name as userName, p.name as projectName
+		from project_collaborator pc
+		join user u on userId = u.id
+		join project p on projectId = p.id
+		where userId = ?
+		order by pc.createdAt asc
     `),
 	getCollaborator: db.prepare(`
         select projectId, userId, readOnly, createdAt
@@ -81,11 +91,11 @@ export function getCollaborator(
 	return rowToProjectCollaborator(row);
 }
 
-export function addCollaborator(collaborator: Omit<ProjectCollaborator, "createdAt">) {
+export function addCollaborator(projectId: string, userId: string, readOnly: boolean) {
 	return preparedStatements.addCollaborator.run(
-		collaborator.projectId,
-		collaborator.userId,
-		collaborator.readOnly ? 1 : 0,
+		projectId,
+		userId,
+		readOnly ? 1 : 0,
 		new Date().toISOString(),
 	);
 }

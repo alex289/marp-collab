@@ -482,6 +482,7 @@ function RouteComponent() {
 							awareness={collab.awareness}
 							undoManager={collab.undoManager}
 							status={collab.status}
+							projectId={id}
 						/>
 					</Suspense>
 

@@ -24,6 +24,7 @@ import { HotkeyLabel } from "./hotkey-lable";
 import { useTheme } from "./theme-provider";
 import { vsCodeLight } from "@fsegurai/codemirror-theme-vscode-light";
 import { vsCodeDark } from "@fsegurai/codemirror-theme-vscode-dark";
+import { ManageProjectCollaborator } from "./dialog/manage-project-collaborator";
 
 type Participant = {
 	id: string;
@@ -37,6 +38,7 @@ type EditorPaneProps = {
 	awareness: Awareness | null;
 	undoManager: Y.UndoManager | null;
 	status: "connecting" | "connected" | "disconnected";
+	projectId: string;
 };
 
 const editorTheme = EditorView.theme({
@@ -71,7 +73,14 @@ const editorTheme = EditorView.theme({
 	},
 });
 
-export const EditorPane = ({ label, yText, awareness, undoManager, status }: EditorPaneProps) => {
+export const EditorPane = ({
+	label,
+	yText,
+	awareness,
+	undoManager,
+	status,
+	projectId,
+}: EditorPaneProps) => {
 	const mountRef = useRef<HTMLDivElement | null>(null);
 	const [participants, setParticipants] = useState<Participant[]>([]);
 	const { theme } = useTheme();
@@ -184,6 +193,7 @@ export const EditorPane = ({ label, yText, awareness, undoManager, status }: Edi
 				</CardDescription>
 				<CardAction>
 					<div className="flex items-center gap-2">
+						<ManageProjectCollaborator projectId={projectId} />
 						<TooltipProvider>
 							<Tooltip>
 								<TooltipTrigger asChild>

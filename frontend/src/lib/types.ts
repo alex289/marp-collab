@@ -22,3 +22,12 @@ export type Project = {
 	updatedAt: Date;
 	ownerId: string;
 };
+
+export type SharedProject = {
+	projectId: string;
+	projectName: string;
+	userId: string;
+	readOnly: boolean;
+	createdAt: Date;
+	userName: string;
+};

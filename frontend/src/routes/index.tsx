@@ -4,7 +4,7 @@ import Navbar from "@/components/navbar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { API_URL } from "@/lib/config";
 import { fetcher } from "@/lib/fetcher";
-import type { Project } from "@/lib/types";
+import type { Project, SharedProject } from "@/lib/types";
 import { Link, createFileRoute } from "@tanstack/react-router";
 import useSWR from "swr";
 
@@ -13,7 +13,7 @@ export const Route = createFileRoute("/")({
 });
 
 function RootComponent() {
-	const { data, isLoading } = useSWR<{ projects: Project[]; sharedProjects: Project[] }>(
+	const { data, isLoading } = useSWR<{ projects: Project[]; sharedProjects: SharedProject[] }>(
 		`${API_URL}/projects`,
 		fetcher,
 	);
@@ -23,6 +23,7 @@ function RootComponent() {
 	}
 
 	const projects = data?.projects ?? [];
+	const sharedProjects = data?.sharedProjects ?? [];
 
 	return (
 		<div className="flex flex-col mx-auto w-full p-6 gap-6">
@@ -52,6 +53,37 @@ function RootComponent() {
 									<p className="text-muted-foreground text-xs">
 										{new Date(project.createdAt).toLocaleDateString()}
 									</p>
+								</CardContent>
+							</Card>
+						</Link>
+					))}
+				</div>
+			)}
+			<div className="flex items-center justify-between">
+				<h1 className="text-2xl font-bold">Shared Presentations</h1>
+			</div>
+			{sharedProjects.length === 0 ? (
+				<p className="text-muted-foreground text-sm">No shared presentations yet.</p>
+			) : (
+				<div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+					{sharedProjects.map((project) => (
+						<Link
+							key={project.projectId}
+							to="/presentations/$id"
+							params={{ id: project.projectId }}
+							className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-lg"
+						>
+							<Card className="hover:ring-foreground/25 transition-shadow cursor-pointer h-full">
+								<CardHeader>
+									<CardTitle className="text-sm font-medium truncate">
+										{project.projectName}
+									</CardTitle>
+								</CardHeader>
+								<CardContent>
+									<p className="text-muted-foreground text-xs">
+										{new Date(project.createdAt).toLocaleDateString()}
+									</p>
+									<p className="text-muted-foreground text-xs">Shared by {project.userName}</p>
 								</CardContent>
 							</Card>
 						</Link>
