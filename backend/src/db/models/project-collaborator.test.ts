@@ -38,7 +38,7 @@ describe("project-collaborator model", () => {
 	});
 
 	test("addCollaborator inserts and getCollaborator retrieves it", () => {
-		models.addCollaborator({ projectId: "proj-1", userId: "collab-1", readOnly: false });
+		models.addCollaborator("proj-1", "collab-1", false);
 		const collab = models.getCollaborator("proj-1", "collab-1");
 		ok(collab, "collaborator should exist");
 		equal(collab!.projectId, "proj-1");
@@ -90,7 +90,7 @@ describe("project-collaborator model", () => {
 	});
 
 	test("removeCollaborator deletes the collaborator", () => {
-		models.addCollaborator({ projectId: "proj-1", userId: "owner-1", readOnly: true });
+		models.addCollaborator("proj-1", "owner-1", true);
 		models.removeCollaborator("proj-1", "owner-1");
 		equal(models.getCollaborator("proj-1", "owner-1"), undefined);
 	});
