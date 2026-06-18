@@ -9,6 +9,7 @@ import {
 import { isEditableExtension } from "../helpers/file-allowlist.ts";
 import { auth } from "../auth.ts";
 import { getUserProjectAccess } from "../helpers/project-auth.ts";
+import { registerProjectConnection, unregisterProjectConnection } from "./connections.ts";
 
 type CollabContext = {
 	userId: string;
@@ -67,6 +68,19 @@ export const collabServer = new Hocuspocus({
 			color: fallbackColors[hashString(session.user.id) % fallbackColors.length] ?? "#0ea5e9",
 			readOnly: access.readOnly,
 		} satisfies CollabContext;
+	},
+	// oxlint-disable-next-line require-await
+	async connected({ socketId, documentName, context, connection }) {
+		registerProjectConnection({
+			socketId,
+			documentName,
+			userId: context.userId,
+			connection: connection.webSocket,
+		});
+	},
+	// oxlint-disable-next-line require-await
+	async onDisconnect({ socketId, documentName }) {
+		unregisterProjectConnection(socketId, documentName);
 	},
 	async onLoadDocument({ documentName }: { documentName: string }) {
 		const binary = await getDocumentBinary(documentName);

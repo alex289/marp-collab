@@ -148,7 +148,6 @@ export const EditorPane = ({
 				.map((state) => state.user as Partial<Participant> | undefined)
 				.filter((user): user is Partial<Participant> => Boolean(user))
 				.map((user) => ({
-					// To-Do fix this logic
 					id: user.id ?? crypto.randomUUID(),
 					name: user.name ?? "Unknown",
 					color: user.color ?? "#0ea5e9",

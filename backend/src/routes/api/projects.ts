@@ -37,6 +37,7 @@ import {
 	removeCollaborator,
 } from "../../db/models/project-collaborator.ts";
 import { getUserByEmail } from "../../db/models/user.ts";
+import { closeProjectCollaboratorConnections } from "../../collab/connections.ts";
 
 const app = new Hono<{ Variables: HonoVariables }>();
 
@@ -144,7 +145,7 @@ app.delete("/:projectId/collaborators/:userId", (c) => {
 	}
 
 	removeCollaborator(projectId, userId);
-	// to-do: close WebSocket connections for the removed collaborator
+	closeProjectCollaboratorConnections(projectId, userId);
 
 	return c.json({ success: true });
 });
