@@ -69,7 +69,7 @@ export function CreatePresentationDialog() {
 					<PlusIcon /> Create Presentation
 				</Button>
 			</DialogTrigger>
-			<DialogContent className="sm:max-w-sm">
+			<DialogContent className="sm:max-w-md">
 				<form onSubmit={handleSubmit} className="flex flex-col gap-3">
 					<DialogHeader>
 						<DialogTitle>Create Presentation</DialogTitle>

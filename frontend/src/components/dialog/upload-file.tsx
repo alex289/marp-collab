@@ -70,7 +70,7 @@ export function UploadFileDialog({ projectId, open, onOpenChange, onUploaded }: 
 
 	return (
 		<Dialog open={open} onOpenChange={handleOpenChange}>
-			<DialogContent className="sm:max-w-sm">
+			<DialogContent className="sm:max-w-md">
 				<form onSubmit={handleSubmit} className="flex flex-col gap-3">
 					<DialogHeader>
 						<DialogTitle>Upload File</DialogTitle>

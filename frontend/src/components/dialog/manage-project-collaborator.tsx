@@ -112,7 +112,7 @@ export function ManageProjectCollaborator({ projectId }: { projectId: string }) 
 					<span>Share</span>
 				</Button>
 			</DialogTrigger>
-			<DialogContent className="sm:max-w-sm">
+			<DialogContent className="sm:max-w-xl">
 				<DialogHeader>
 					<DialogTitle>Manage Collaboration</DialogTitle>
 					<DialogDescription>Manage who can view and edit this presentation.</DialogDescription>

@@ -59,36 +59,37 @@ function RootComponent() {
 					))}
 				</div>
 			)}
-			<div className="flex items-center justify-between">
-				<h1 className="text-2xl font-bold">Shared Presentations</h1>
-			</div>
-			{sharedProjects.length === 0 ? (
-				<p className="text-muted-foreground text-sm">No shared presentations yet.</p>
-			) : (
-				<div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-					{sharedProjects.map((project) => (
-						<Link
-							key={project.projectId}
-							to="/presentations/$id"
-							params={{ id: project.projectId }}
-							className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-lg"
-						>
-							<Card className="hover:ring-foreground/25 transition-shadow cursor-pointer h-full">
-								<CardHeader>
-									<CardTitle className="text-sm font-medium truncate">
-										{project.projectName}
-									</CardTitle>
-								</CardHeader>
-								<CardContent>
-									<p className="text-muted-foreground text-xs">
-										{new Date(project.createdAt).toLocaleDateString()}
-									</p>
-									<p className="text-muted-foreground text-xs">Shared by {project.userName}</p>
-								</CardContent>
-							</Card>
-						</Link>
-					))}
-				</div>
+
+			{sharedProjects.length === 0 ? null : (
+				<>
+					<div className="flex items-center justify-between">
+						<h1 className="text-2xl font-bold">Shared Presentations</h1>
+					</div>
+					<div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+						{sharedProjects.map((project) => (
+							<Link
+								key={project.projectId}
+								to="/presentations/$id"
+								params={{ id: project.projectId }}
+								className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-lg"
+							>
+								<Card className="hover:ring-foreground/25 transition-shadow cursor-pointer h-full">
+									<CardHeader>
+										<CardTitle className="text-sm font-medium truncate">
+											{project.projectName}
+										</CardTitle>
+									</CardHeader>
+									<CardContent>
+										<p className="text-muted-foreground text-xs">
+											{new Date(project.createdAt).toLocaleDateString()}
+										</p>
+										<p className="text-muted-foreground text-xs">Shared by {project.userName}</p>
+									</CardContent>
+								</Card>
+							</Link>
+						))}
+					</div>
+				</>
 			)}
 		</div>
 	);
