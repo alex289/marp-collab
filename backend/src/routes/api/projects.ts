@@ -216,7 +216,7 @@ app.get("/:projectId/export.zip", async (c) => {
 		status: 200,
 		headers: {
 			"Content-Type": "application/zip",
-			"Content-Disposition": `attachment; filename="${project.name}.zip"`,
+			"Content-Disposition": `attachment; filename*=UTF-8''${encodeURIComponent(project.name + ".zip")}`,
 			"Content-Length": zip.length.toString(),
 			"Cache-Control": "no-store",
 		},
@@ -434,6 +434,7 @@ app.get("/:projectId/files/:fileId{.+}", async (c) => {
 		status: 200,
 		headers: {
 			"Content-Type": getMimeType(fileId),
+			"Content-Disposition": "attachment",
 			"Cache-Control": "private, max-age=3600",
 		},
 	});
