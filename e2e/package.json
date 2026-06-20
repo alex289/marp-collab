@@ -8,9 +8,9 @@
 		"install:browsers": "playwright install"
 	},
 	"devDependencies": {
-		"@playwright/test": "^1.60.0",
+		"@playwright/test": "^1.61.0",
 		"@types/node": "^25.9.3",
-		"oauth2-mock-server": "^8.2.3",
+		"oauth2-mock-server": "^9.0.0",
 		"typescript": "^6.0.3"
 	}
 }
