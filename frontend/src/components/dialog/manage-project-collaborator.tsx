@@ -34,6 +34,7 @@ export function ManageProjectCollaborator({ projectId }: { projectId: string }) 
 	const [error, setError] = useState<string | null>(null);
 	const [isSubmitting, setIsSubmitting] = useState(false);
 	const [isRemoving, setIsRemoving] = useState(false);
+	const [isEmailValid, setIsEmailValid] = useState(false);
 
 	function handleOpenChange(next: boolean) {
 		setOpen(next);
@@ -41,6 +42,7 @@ export function ManageProjectCollaborator({ projectId }: { projectId: string }) 
 			setCollaboratorEmail("");
 			setAccessLevel("read-only");
 			setError(null);
+			setIsEmailValid(false);
 		}
 	}
 
@@ -152,9 +154,13 @@ export function ManageProjectCollaborator({ projectId }: { projectId: string }) 
 								<Input
 									id="collaborator-email"
 									name="collaborator-email"
+									type="email"
 									placeholder="Collaborator's email"
 									value={collaboratorEmail}
-									onChange={(e) => setCollaboratorEmail(e.target.value)}
+									onChange={(e) => {
+										setCollaboratorEmail(e.target.value);
+										setIsEmailValid(e.target.validity.valid);
+									}}
 									required
 								/>
 							</TableCell>
@@ -175,7 +181,7 @@ export function ManageProjectCollaborator({ projectId }: { projectId: string }) 
 									variant="outline"
 									title="Share the document with others"
 									aria-label="Share document"
-									disabled={isSubmitting}
+									disabled={isSubmitting || !isEmailValid}
 									onClick={handleAddCollaborator}
 								>
 									<PlusIcon />
