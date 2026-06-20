@@ -101,6 +101,8 @@ app.post("/:projectId/collaborators", async (c) => {
 		return c.json({ error: z.prettifyError(parseResult.error) }, 400);
 	}
 
+	// User enumeration risk accepted: private OIDC-only deployment where all users
+	// are known within the organisation.
 	const userToAdd = getUserByEmail(parseResult.data.email);
 	if (!userToAdd) {
 		return c.json({ error: "User with that email not found" }, 404);
