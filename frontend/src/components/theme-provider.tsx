@@ -12,6 +12,7 @@ type ThemeProviderProps = {
 
 type ThemeProviderState = {
 	theme: Theme;
+	resolvedTheme: "dark" | "light";
 	setTheme: (theme: Theme) => void;
 };
 
@@ -24,16 +25,17 @@ function getThemeScript(storageKey: string, defaultTheme: Theme) {
 
 const ThemeProviderContext = createContext<ThemeProviderState>({
 	theme: "system",
+	resolvedTheme: "light",
 	setTheme: () => {
 		/* empty */
 	},
 });
 
-function applyTheme(theme: Theme) {
+function applyTheme(theme: Theme): "dark" | "light" {
 	const root = document.documentElement;
 	root.classList.remove("light", "dark");
 
-	const resolved =
+	const resolved: "dark" | "light" =
 		theme === "system"
 			? window.matchMedia("(prefers-color-scheme: dark)").matches
 				? "dark"
@@ -42,6 +44,7 @@ function applyTheme(theme: Theme) {
 
 	root.classList.add(resolved);
 	root.style.colorScheme = resolved;
+	return resolved;
 }
 
 export function ThemeProvider({
@@ -50,6 +53,7 @@ export function ThemeProvider({
 	storageKey = "theme",
 }: ThemeProviderProps) {
 	const [theme, setThemeState] = useState<Theme>(defaultTheme);
+	const [resolvedTheme, setResolvedTheme] = useState<"dark" | "light">("light");
 	const [mounted, setMounted] = useState(false);
 
 	useHotkey("D", () => setTheme(theme === "dark" ? "light" : "dark"));
@@ -66,7 +70,7 @@ export function ThemeProvider({
 		if (!mounted) {
 			return;
 		}
-		applyTheme(theme);
+		setResolvedTheme(applyTheme(theme));
 	}, [theme, mounted]);
 
 	useEffect(() => {
@@ -75,7 +79,7 @@ export function ThemeProvider({
 		}
 
 		const media = window.matchMedia("(prefers-color-scheme: dark)");
-		const onChange = () => applyTheme("system");
+		const onChange = () => setResolvedTheme(applyTheme("system"));
 		media.addEventListener("change", onChange);
 		return () => media.removeEventListener("change", onChange);
 	}, [theme, mounted]);
@@ -86,7 +90,7 @@ export function ThemeProvider({
 	};
 
 	return (
-		<ThemeProviderContext value={{ theme, setTheme }}>
+		<ThemeProviderContext value={{ theme, resolvedTheme, setTheme }}>
 			<ScriptOnce>{getThemeScript(storageKey, defaultTheme)}</ScriptOnce>
 			{children}
 		</ThemeProviderContext>

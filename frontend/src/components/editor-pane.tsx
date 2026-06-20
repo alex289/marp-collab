@@ -83,7 +83,7 @@ export const EditorPane = ({
 }: EditorPaneProps) => {
 	const mountRef = useRef<HTMLDivElement | null>(null);
 	const [participants, setParticipants] = useState<Participant[]>([]);
-	const { theme } = useTheme();
+	const { resolvedTheme } = useTheme();
 
 	const statusVariant = useMemo(() => {
 		if (status === "connected") {
@@ -122,7 +122,7 @@ export const EditorPane = ({
 				),
 				keymap.of([indentWithTab, ...yUndoManagerKeymap]),
 				yCollab(yText, awareness, { undoManager }),
-				theme === "dark" ? vsCodeDark : vsCodeLight,
+				resolvedTheme === "dark" ? vsCodeDark : vsCodeLight,
 				Prec.highest(editorTheme),
 			],
 		});
@@ -135,7 +135,7 @@ export const EditorPane = ({
 		return () => {
 			view.destroy();
 		};
-	}, [yText, awareness, undoManager, label, theme]);
+	}, [yText, awareness, undoManager, label, resolvedTheme]);
 
 	useEffect(() => {
 		if (!awareness) {
