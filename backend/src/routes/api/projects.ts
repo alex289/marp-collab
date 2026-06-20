@@ -80,24 +80,6 @@ app.get("/:projectId/collaborators", (c) => {
 	return c.json({ collaborators: collaborators });
 });
 
-app.get("/:projectId/collaborators", (c) => {
-	const user = c.get("user");
-	if (!user) {
-		return c.json({ error: "Unauthorized" }, 401);
-	}
-
-	const { projectId } = c.req.param();
-
-	const access = getUserProjectAccess(projectId, user.id);
-	if (!access) {
-		return c.json({ error: "Project not found or access denied" }, 403);
-	}
-
-	const collaborators = getCollaboratorsByProjectId(projectId);
-
-	return c.json({ collaborators: collaborators });
-});
-
 app.post("/:projectId/collaborators", async (c) => {
 	const user = c.get("user");
 	if (!user) {
