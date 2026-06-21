@@ -1,6 +1,7 @@
 import { ListTree } from "lucide-react";
 import { SidebarGroup, SidebarGroupContent, SidebarGroupLabel } from "@/components/ui/sidebar";
 import type { OutlineItem } from "@/lib/outline";
+import { Button } from "./ui/button";
 
 type OutlinePanelProps = {
 	items: OutlineItem[];
@@ -25,21 +26,28 @@ export const OutlinePanel = ({ items, isMarkdown, onSelectLine }: OutlinePanelPr
 				) : (
 					<div className="grid min-w-0 gap-1">
 						{items.map((item) => (
-							<button
+							<Button
 								key={`${item.line}:${item.text}`}
 								type="button"
+								variant="default"
 								onClick={() => onSelectLine(item.line)}
-								className="flex min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-sidebar-accent"
+								className="flex min-w-0 items-left gap-2 rounded-md px-2 py-1.5 justify-start text-xs bg-transparent"
 								style={{
 									paddingLeft:
 										item.kind === "heading" ? `${1 + (item.level - 1) * 0.75}rem` : "0.5rem",
 								}}
 							>
 								<span className="min-w-6 shrink-0 text-muted-foreground">{item.line}</span>
-								<span className={item.kind === "slide" ? "truncate font-medium" : "truncate"}>
+								<span
+									className={
+										item.kind === "slide"
+											? "truncate font-medium text-foreground"
+											: "truncate text-foreground"
+									}
+								>
 									{item.text}
 								</span>
-							</button>
+							</Button>
 						))}
 					</div>
 				)}
