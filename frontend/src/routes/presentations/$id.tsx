@@ -562,12 +562,12 @@ function RouteComponent() {
 	}
 
 	return (
-		<div className="min-h-screen bg-halo pb-4 pt-2 text-foreground">
-			<div className="mx-auto flex px-6 flex-col gap-4">
+		<div className="h-svh overflow-hidden bg-halo p-2 text-foreground">
+			<div className="mx-auto flex h-full min-h-0 flex-col gap-2 px-4">
 				<Navbar />
 				<main
 					className={cn(
-						"grid min-h-[76vh] gap-2 grid-cols-1",
+						"grid min-h-0 flex-1 gap-2 grid-cols-1 overflow-hidden",
 						sidebarOpen
 							? "xl:grid-cols-[304px_minmax(0,1fr)_minmax(320px,42%)]"
 							: "xl:grid-cols-[48px_minmax(0,1fr)_minmax(320px,42%)]",

@@ -648,7 +648,7 @@ export const FileSidebar = ({
 			<SidebarProvider
 				open={sidebarOpen}
 				onOpenChange={setSidebarOpen}
-				className="md:min-h-svh min-h-fit"
+				className="h-full min-h-0"
 				style={
 					{
 						"--sidebar-width": "19rem",
@@ -657,9 +657,9 @@ export const FileSidebar = ({
 				}
 			>
 				<TooltipProvider>
-					<Sidebar variant="sidebar" collapsible="icon" className="static pt-0">
-						<SidebarContent>
-							<div className="flex min-h-0 flex-1">
+					<Sidebar variant="sidebar" collapsible="icon" className="static h-full pt-0">
+						<SidebarContent className="h-full">
+							<div className="flex h-full min-h-0 flex-1">
 								<div className="flex w-12 shrink-0 flex-col items-center gap-2 border-r border-sidebar-border px-1.5 py-2">
 									<WorkspaceRailButton
 										active={activePanel === "files"}
@@ -683,7 +683,7 @@ export const FileSidebar = ({
 										<ListTree />
 									</WorkspaceRailButton>
 								</div>
-								<div className="min-w-0 flex-1 overflow-hidden group-data-[collapsible=icon]:hidden">
+								<div className="min-h-0 min-w-0 flex-1 overflow-auto group-data-[collapsible=icon]:hidden">
 									{activePanel === "files" ? filesPanel : null}
 									{activePanel === "search" ? (searchPanel ?? emptyPanel) : null}
 									{activePanel === "outline" ? (outlinePanel ?? emptyPanel) : null}

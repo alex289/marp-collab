@@ -67,8 +67,8 @@ export const PreviewPane = ({ markdown, label, projectId, selectedFileId }: Prev
 	}, [rendered.css, rendered.html, resolvedTheme]);
 
 	return (
-		<Card className="flex h-full min-h-0 flex-col overflow-hidden border-border/80">
-			<CardHeader className="border-b border-border gap-2">
+		<Card className="flex h-full min-h-0 flex-col overflow-hidden border-border/80 py-0">
+			<CardHeader className="shrink-0 border-b border-border px-4 py-3">
 				<CardTitle>Live Preview</CardTitle>
 				<CardAction>
 					{label ? (
@@ -93,7 +93,7 @@ export const PreviewPane = ({ markdown, label, projectId, selectedFileId }: Prev
 				<CardDescription>{label ? `Active file: ${label}` : "No file selected"}</CardDescription>
 			</CardHeader>
 
-			<CardContent className="min-h-0 flex-1">
+			<CardContent className="min-h-0 flex-1 overflow-hidden p-0">
 				<iframe
 					title="Marp preview"
 					srcDoc={srcDoc}
