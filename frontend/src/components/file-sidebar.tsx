@@ -30,7 +30,6 @@ import {
 	SidebarMenuItem,
 	SidebarMenuSub,
 	SidebarProvider,
-	SidebarRail,
 } from "@/components/ui/sidebar";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { TooltipProvider } from "./ui/tooltip";
@@ -591,7 +590,11 @@ export const FileSidebar = ({
 	const filesPanel = (
 		<SidebarGroup>
 			<SidebarGroupLabel className="flex items-center justify-between pr-1 pl-0 pb-2 group-data-[collapsible=icon]:mt-0 group-data-[collapsible=icon]:opacity-100">
-				<span className="text-sm font-medium">Files</span>
+				<div className="flex items-center gap-2 pb-2 pl-0 mt-2">
+					<Files className="size-4" />
+					Files
+				</div>
+
 				<div className="flex items-center gap-0.5 group-data-[collapsible=icon]:hidden">
 					<SidebarHeaderAction onClick={() => setCreateFileOpen(true)} title="New file">
 						<FilePlus />
@@ -654,7 +657,7 @@ export const FileSidebar = ({
 				}
 			>
 				<TooltipProvider>
-					<Sidebar variant="floating" collapsible="icon" className="static pt-0 -ml-2">
+					<Sidebar variant="sidebar" collapsible="icon" className="static pt-0">
 						<SidebarContent>
 							<div className="flex min-h-0 flex-1">
 								<div className="flex w-12 shrink-0 flex-col items-center gap-2 border-r border-sidebar-border px-1.5 py-2">
@@ -687,7 +690,6 @@ export const FileSidebar = ({
 								</div>
 							</div>
 						</SidebarContent>
-						<SidebarRail />
 					</Sidebar>
 				</TooltipProvider>
 			</SidebarProvider>

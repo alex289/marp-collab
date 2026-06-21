@@ -567,10 +567,10 @@ function RouteComponent() {
 				<Navbar />
 				<main
 					className={cn(
-						"grid min-h-[76vh] gap-3 grid-cols-1",
+						"grid min-h-[76vh] gap-2 grid-cols-1",
 						sidebarOpen
-							? "xl:grid-cols-[310px_minmax(0,1fr)_minmax(320px,42%)]"
-							: "xl:grid-cols-[60px_minmax(0,1fr)_minmax(320px,42%)]",
+							? "xl:grid-cols-[304px_minmax(0,1fr)_minmax(320px,42%)]"
+							: "xl:grid-cols-[48px_minmax(0,1fr)_minmax(320px,42%)]",
 					)}
 				>
 					<FileSidebar
