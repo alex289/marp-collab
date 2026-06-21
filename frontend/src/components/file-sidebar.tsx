@@ -16,6 +16,7 @@ import {
 	Search,
 	ListTree,
 } from "lucide-react";
+import { useHotkeys } from "@tanstack/react-hotkeys";
 import type { DeckFile } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import {
@@ -33,7 +34,8 @@ import {
 	useSidebar,
 } from "@/components/ui/sidebar";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { TooltipProvider } from "./ui/tooltip";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
+import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { CreateFileDialog } from "@/components/dialog/create-file";
 import { CreateFolderDialog } from "@/components/dialog/create-folder";
 import { UploadFileDialog } from "@/components/dialog/upload-file";
@@ -167,28 +169,51 @@ const SidebarHeaderAction = ({
 const WorkspaceRailButton = ({
 	active,
 	label,
+	hotkey,
 	onClick,
 	children,
 }: {
 	active: boolean;
 	label: string;
+	hotkey: string;
 	onClick: () => void;
 	children: React.ReactNode;
-}) => (
-	<button
-		type="button"
-		onClick={onClick}
-		title={label}
-		aria-label={label}
-		className={cn(
-			"flex h-9 w-9 items-center justify-center rounded-md text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground [&>svg]:size-4",
-			active &&
-				"bg-sidebar-primary text-sidebar-primary-foreground hover:bg-sidebar-primary hover:text-sidebar-primary-foreground",
-		)}
-	>
-		{children}
-	</button>
-);
+}) => {
+	const platform = window.navigator.platform.toLowerCase();
+	const isMac =
+		platform.includes("mac") || platform.includes("iphone") || platform.includes("ipad");
+	const modifierLabel = isMac ? "⌥" : "Alt";
+	const keyLabel = hotkey.replace("Alt+", "");
+	const displayHotkey = `${modifierLabel}+${keyLabel}`;
+
+	return (
+		<Tooltip>
+			<TooltipTrigger asChild>
+				<button
+					type="button"
+					onClick={onClick}
+					title={`${label} (${displayHotkey})`}
+					aria-label={`${label} (${displayHotkey})`}
+					className={cn(
+						"flex h-9 w-9 items-center justify-center rounded-md text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground [&>svg]:size-4",
+						active &&
+							"bg-sidebar-primary text-sidebar-primary-foreground hover:bg-sidebar-primary hover:text-sidebar-primary-foreground",
+					)}
+				>
+					{children}
+				</button>
+			</TooltipTrigger>
+			<TooltipContent>
+				<span>{label}</span>
+				<KbdGroup className="ml-2">
+					<Kbd>{modifierLabel}</Kbd>
+					<span>+</span>
+					<Kbd>{keyLabel}</Kbd>
+				</KbdGroup>
+			</TooltipContent>
+		</Tooltip>
+	);
+};
 
 type DragState = {
 	draggingFileId: string | null;
@@ -196,6 +221,12 @@ type DragState = {
 };
 
 type WorkspacePanel = "files" | "search" | "outline";
+
+const WORKSPACE_PANEL_HOTKEYS = {
+	files: "Alt+1",
+	search: "Alt+2",
+	outline: "Alt+3",
+} as const;
 
 type WorkspaceRailButtonsProps = {
 	activePanel: WorkspacePanel;
@@ -207,6 +238,7 @@ const WorkspaceRailButtons = ({ activePanel, onPanelClick }: WorkspaceRailButton
 		<WorkspaceRailButton
 			active={activePanel === "files"}
 			label="Files"
+			hotkey={WORKSPACE_PANEL_HOTKEYS.files}
 			onClick={() => onPanelClick("files")}
 		>
 			<Files />
@@ -214,6 +246,7 @@ const WorkspaceRailButtons = ({ activePanel, onPanelClick }: WorkspaceRailButton
 		<WorkspaceRailButton
 			active={activePanel === "search"}
 			label="Search"
+			hotkey={WORKSPACE_PANEL_HOTKEYS.search}
 			onClick={() => onPanelClick("search")}
 		>
 			<Search />
@@ -221,6 +254,7 @@ const WorkspaceRailButtons = ({ activePanel, onPanelClick }: WorkspaceRailButton
 		<WorkspaceRailButton
 			active={activePanel === "outline"}
 			label="Outline"
+			hotkey={WORKSPACE_PANEL_HOTKEYS.outline}
 			onClick={() => onPanelClick("outline")}
 		>
 			<ListTree />
@@ -568,6 +602,21 @@ export const FileSidebar = ({
 			setSidebarOpen(true);
 		}
 	};
+
+	useHotkeys([
+		{
+			hotkey: WORKSPACE_PANEL_HOTKEYS.files,
+			callback: () => handlePanelButtonClick("files"),
+		},
+		{
+			hotkey: WORKSPACE_PANEL_HOTKEYS.search,
+			callback: () => handlePanelButtonClick("search"),
+		},
+		{
+			hotkey: WORKSPACE_PANEL_HOTKEYS.outline,
+			callback: () => handlePanelButtonClick("outline"),
+		},
+	]);
 
 	const isRootDragOver = dragState.dragOverPath === "" && dragState.draggingFileId !== null;
 	const emptyPanel = (
