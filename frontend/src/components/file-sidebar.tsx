@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
 	RefreshCw,
 	File,
+	Files,
 	ChevronRight,
 	Folder,
 	FilePlus,
@@ -12,9 +13,11 @@ import {
 	Image,
 	Trash2,
 	Type,
-	PanelLeft,
+	Search,
+	ListTree,
 } from "lucide-react";
 import type { DeckFile } from "@/lib/types";
+import { cn } from "@/lib/utils";
 import {
 	Sidebar,
 	SidebarContent,
@@ -28,18 +31,14 @@ import {
 	SidebarMenuSub,
 	SidebarProvider,
 	SidebarRail,
-	SidebarTrigger,
-	useSidebar,
 } from "@/components/ui/sidebar";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
+import { TooltipProvider } from "./ui/tooltip";
 import { CreateFileDialog } from "@/components/dialog/create-file";
 import { CreateFolderDialog } from "@/components/dialog/create-folder";
 import { UploadFileDialog } from "@/components/dialog/upload-file";
 import { DeleteFileDialog } from "@/components/dialog/delete-file";
 import { API_URL } from "@/lib/config";
-import { Button } from "@/components/ui/button";
-import { HotkeyLabel } from "./hotkey-lable";
 
 type NestedFileNode = {
 	name: string;
@@ -165,47 +164,38 @@ const SidebarHeaderAction = ({
 	</button>
 );
 
-const FileSidebarToggle = ({ mobileButton }: { mobileButton?: boolean }) => {
-	const { toggleSidebar } = useSidebar();
-
-	if (mobileButton) {
-		return (
-			<Button
-				type="button"
-				variant="outline"
-				className="justify-start gap-2 md:hidden"
-				title="Toggle files sidebar"
-				aria-label="Toggle files sidebar"
-				onClick={toggleSidebar}
-			>
-				<PanelLeft className="h-4 w-4" />
-				<span className="truncate">Dateien</span>
-			</Button>
-		);
-	}
-
-	return (
-		<Tooltip>
-			<TooltipTrigger asChild>
-				<SidebarTrigger
-					className="hidden md:flex pl-0.5"
-					title="Toggle files sidebar"
-					aria-label="Toggle files sidebar"
-					size="icon"
-				/>
-			</TooltipTrigger>
-			<TooltipContent>
-				<span>Toggle files sidebar</span>
-				<HotkeyLabel hotkey="B" />
-			</TooltipContent>
-		</Tooltip>
-	);
-};
+const WorkspaceRailButton = ({
+	active,
+	label,
+	onClick,
+	children,
+}: {
+	active: boolean;
+	label: string;
+	onClick: () => void;
+	children: React.ReactNode;
+}) => (
+	<button
+		type="button"
+		onClick={onClick}
+		title={label}
+		aria-label={label}
+		className={cn(
+			"flex h-9 w-9 items-center justify-center rounded-md text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground [&>svg]:size-4",
+			active &&
+				"bg-sidebar-primary text-sidebar-primary-foreground hover:bg-sidebar-primary hover:text-sidebar-primary-foreground",
+		)}
+	>
+		{children}
+	</button>
+);
 
 type DragState = {
 	draggingFileId: string | null;
 	dragOverPath: string | null;
 };
+
+type WorkspacePanel = "files" | "search" | "outline";
 
 type NestedFileItemProps = {
 	node: NestedFileNode;
@@ -383,6 +373,8 @@ type FileSidebarProps = {
 	onRetry: () => void;
 	sidebarOpen: boolean;
 	setSidebarOpen: (open: boolean) => void;
+	searchPanel?: React.ReactNode;
+	outlinePanel?: React.ReactNode;
 };
 
 export const FileSidebar = ({
@@ -395,8 +387,11 @@ export const FileSidebar = ({
 	onRetry,
 	sidebarOpen,
 	setSidebarOpen,
+	searchPanel = null,
+	outlinePanel = null,
 }: FileSidebarProps) => {
 	const nestedFileTree = useMemo(() => buildNestedFileTree(files), [files]);
+	const [activePanel, setActivePanel] = useState<WorkspacePanel>("files");
 	const [openFolders, setOpenFolders] = useState<Record<string, boolean>>({});
 	const [createFileOpen, setCreateFileOpen] = useState(false);
 	const [createFolderOpen, setCreateFolderOpen] = useState(false);
@@ -506,7 +501,115 @@ export const FileSidebar = ({
 		link.remove();
 	};
 
+	const handlePanelButtonClick = (panel: WorkspacePanel) => {
+		if (activePanel === panel) {
+			setSidebarOpen(!sidebarOpen);
+			return;
+		}
+
+		setActivePanel(panel);
+		if (!sidebarOpen) {
+			setSidebarOpen(true);
+		}
+	};
+
 	const isRootDragOver = dragState.dragOverPath === "" && dragState.draggingFileId !== null;
+	const emptyPanel = (
+		<SidebarGroup>
+			<SidebarGroupLabel className="pl-0 pb-2">Not available yet</SidebarGroupLabel>
+			<SidebarGroupContent>
+				<p className="px-2 text-xs text-muted-foreground">This panel is being loaded.</p>
+			</SidebarGroupContent>
+		</SidebarGroup>
+	);
+	const filesPanelMenu = (
+		<div
+			className={isRootDragOver ? "rounded-md ring-2 ring-primary ring-inset" : undefined}
+			onDragOver={(e) => {
+				if (dragState.draggingFileId) {
+					e.preventDefault();
+					e.dataTransfer.dropEffect = "move";
+					handleDragOverPath("");
+				}
+			}}
+			onDragLeave={(e) => {
+				if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+					handleDragOverPath(null);
+				}
+			}}
+			onDrop={(e) => {
+				e.preventDefault();
+				void handleDropOnPath("");
+			}}
+		>
+			<SidebarMenu>
+				{isLoading ? (
+					<SidebarMenuButton disabled>
+						<RefreshCw className="animate-spin" />
+						Loading files...
+					</SidebarMenuButton>
+				) : null}
+
+				{error ? (
+					<SidebarMenuButton
+						className="bg-destructive/10 text-destructive hover:bg-destructive/20"
+						onClick={onRetry}
+					>
+						<RefreshCw />
+						Retry
+					</SidebarMenuButton>
+				) : null}
+
+				{!isLoading && !error && nestedFileTree.length === 0 ? (
+					<SidebarMenuItem>
+						<SidebarMenuButton disabled>
+							<File />
+							No files yet
+						</SidebarMenuButton>
+					</SidebarMenuItem>
+				) : null}
+
+				{nestedFileTree.map((node) => (
+					<NestedFileItem
+						key={node.path}
+						node={node}
+						selectedFileId={selectedFileId}
+						onSelectFile={onSelectFile}
+						onDeleteFile={setFileToDelete}
+						openFolders={openFolders}
+						setFolderOpen={setFolderOpen}
+						dragState={dragState}
+						onDragStart={handleDragStart}
+						onDragEnd={handleDragEnd}
+						onDragOverPath={handleDragOverPath}
+						onDropOnPath={handleDropOnPath}
+					/>
+				))}
+			</SidebarMenu>
+		</div>
+	);
+	const filesPanel = (
+		<SidebarGroup>
+			<SidebarGroupLabel className="flex items-center justify-between pr-1 pl-0 pb-2 group-data-[collapsible=icon]:mt-0 group-data-[collapsible=icon]:opacity-100">
+				<span className="text-sm font-medium">Files</span>
+				<div className="flex items-center gap-0.5 group-data-[collapsible=icon]:hidden">
+					<SidebarHeaderAction onClick={() => setCreateFileOpen(true)} title="New file">
+						<FilePlus />
+					</SidebarHeaderAction>
+					<SidebarHeaderAction onClick={() => setCreateFolderOpen(true)} title="New folder">
+						<FolderPlus />
+					</SidebarHeaderAction>
+					<SidebarHeaderAction onClick={() => setUploadFileOpen(true)} title="Upload file">
+						<Upload />
+					</SidebarHeaderAction>
+					<SidebarHeaderAction onClick={handleExportProject} title="Export project as ZIP">
+						<Download />
+					</SidebarHeaderAction>
+				</div>
+			</SidebarGroupLabel>
+			<SidebarGroupContent>{filesPanelMenu}</SidebarGroupContent>
+		</SidebarGroup>
+	);
 
 	return (
 		<>
@@ -543,107 +646,46 @@ export const FileSidebar = ({
 				open={sidebarOpen}
 				onOpenChange={setSidebarOpen}
 				className="md:min-h-svh min-h-fit"
+				style={
+					{
+						"--sidebar-width": "19rem",
+						"--sidebar-width-icon": "3rem",
+					} as React.CSSProperties
+				}
 			>
 				<TooltipProvider>
-					<FileSidebarToggle mobileButton={true} />
 					<Sidebar variant="floating" collapsible="icon" className="static pt-0 -ml-2">
 						<SidebarContent>
-							<SidebarGroup>
-								<SidebarGroupLabel className="flex items-center justify-between pr-1 pl-0 pb-2 group-data-[collapsible=icon]:mt-0 group-data-[collapsible=icon]:opacity-100">
-									<FileSidebarToggle />
-									<div className="flex items-center gap-0.5 group-data-[collapsible=icon]:hidden">
-										<SidebarHeaderAction onClick={() => setCreateFileOpen(true)} title="New file">
-											<FilePlus />
-										</SidebarHeaderAction>
-										<SidebarHeaderAction
-											onClick={() => setCreateFolderOpen(true)}
-											title="New folder"
-										>
-											<FolderPlus />
-										</SidebarHeaderAction>
-										<SidebarHeaderAction
-											onClick={() => setUploadFileOpen(true)}
-											title="Upload file"
-										>
-											<Upload />
-										</SidebarHeaderAction>
-										<SidebarHeaderAction
-											onClick={handleExportProject}
-											title="Export project as ZIP"
-										>
-											<Download />
-										</SidebarHeaderAction>
-									</div>
-								</SidebarGroupLabel>
-								<SidebarGroupContent>
-									<div
-										className={
-											isRootDragOver ? "rounded-md ring-2 ring-primary ring-inset" : undefined
-										}
-										onDragOver={(e) => {
-											if (dragState.draggingFileId) {
-												e.preventDefault();
-												e.dataTransfer.dropEffect = "move";
-												handleDragOverPath("");
-											}
-										}}
-										onDragLeave={(e) => {
-											if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-												handleDragOverPath(null);
-											}
-										}}
-										onDrop={(e) => {
-											e.preventDefault();
-											void handleDropOnPath("");
-										}}
+							<div className="flex min-h-0 flex-1">
+								<div className="flex w-12 shrink-0 flex-col items-center gap-2 border-r border-sidebar-border px-1.5 py-2">
+									<WorkspaceRailButton
+										active={activePanel === "files"}
+										label="Files"
+										onClick={() => handlePanelButtonClick("files")}
 									>
-										<SidebarMenu>
-											{isLoading ? (
-												<SidebarMenuButton disabled>
-													<RefreshCw className="animate-spin" />
-													Loading files...
-												</SidebarMenuButton>
-											) : null}
-
-											{error ? (
-												<SidebarMenuButton
-													className="bg-destructive/10 text-destructive hover:bg-destructive/20"
-													onClick={onRetry}
-												>
-													<RefreshCw />
-													Retry
-												</SidebarMenuButton>
-											) : null}
-
-											{!isLoading && !error && nestedFileTree.length === 0 ? (
-												<SidebarMenuItem>
-													<SidebarMenuButton disabled>
-														<File />
-														No files yet
-													</SidebarMenuButton>
-												</SidebarMenuItem>
-											) : null}
-
-											{nestedFileTree.map((node) => (
-												<NestedFileItem
-													key={node.path}
-													node={node}
-													selectedFileId={selectedFileId}
-													onSelectFile={onSelectFile}
-													onDeleteFile={setFileToDelete}
-													openFolders={openFolders}
-													setFolderOpen={setFolderOpen}
-													dragState={dragState}
-													onDragStart={handleDragStart}
-													onDragEnd={handleDragEnd}
-													onDragOverPath={handleDragOverPath}
-													onDropOnPath={handleDropOnPath}
-												/>
-											))}
-										</SidebarMenu>
-									</div>
-								</SidebarGroupContent>
-							</SidebarGroup>
+										<Files />
+									</WorkspaceRailButton>
+									<WorkspaceRailButton
+										active={activePanel === "search"}
+										label="Search"
+										onClick={() => handlePanelButtonClick("search")}
+									>
+										<Search />
+									</WorkspaceRailButton>
+									<WorkspaceRailButton
+										active={activePanel === "outline"}
+										label="Outline"
+										onClick={() => handlePanelButtonClick("outline")}
+									>
+										<ListTree />
+									</WorkspaceRailButton>
+								</div>
+								<div className="min-w-0 flex-1 overflow-hidden group-data-[collapsible=icon]:hidden">
+									{activePanel === "files" ? filesPanel : null}
+									{activePanel === "search" ? (searchPanel ?? emptyPanel) : null}
+									{activePanel === "outline" ? (outlinePanel ?? emptyPanel) : null}
+								</div>
+							</div>
 						</SidebarContent>
 						<SidebarRail />
 					</Sidebar>

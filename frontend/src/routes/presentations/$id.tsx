@@ -1,7 +1,7 @@
 import { throw404OnError, cn } from "@/lib/utils";
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod/v4-mini";
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { FileSidebar } from "@/components/file-sidebar";
 import { useCollabDocument, usePresenceUser } from "@/hooks/use-collab-document";
 import { useFiles } from "@/hooks/use-files";
@@ -11,6 +11,11 @@ import { useHotkeys } from "@tanstack/react-hotkeys";
 import { PresentationFrame } from "@/components/presentation-frame";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import type { EditorPaneHandle } from "@/components/editor-pane";
+import { SearchPanel } from "@/components/search-panel";
+import { findTextMatches, replaceTextRange, type TextSearchMatch } from "@/lib/text-search";
+import { OutlinePanel } from "@/components/outline-panel";
+import { parseMarkdownOutline } from "@/lib/outline";
 
 const EditorPane = lazy(async () => {
 	const m = await import("@/components/editor-pane");
@@ -117,6 +122,11 @@ function RouteComponent() {
 	const [now, setNow] = useState(() => Date.now());
 	const [isTimerPaused, setIsTimerPaused] = useState(false);
 	const [pausedElapsedMs, setPausedElapsedMs] = useState(0);
+	const [searchQuery, setSearchQuery] = useState("");
+	const [searchMatches, setSearchMatches] = useState<TextSearchMatch[]>([]);
+	const [searchLoading, setSearchLoading] = useState(false);
+	const [searchError, setSearchError] = useState<string | null>(null);
+	const editorPaneRef = useRef<EditorPaneHandle | null>(null);
 	const slideSyncChannelRef = useRef<BroadcastChannel | null>(null);
 	const suppressNextSlideBroadcastRef = useRef(false);
 
@@ -126,6 +136,7 @@ function RouteComponent() {
 		isPresentation && selectedFile?.type === "markdown"
 			? `${PRESENTATION_SYNC_CHANNEL_PREFIX}:${id}:${selectedFile.id}`
 			: null;
+	const outlineItems = useMemo(() => parseMarkdownOutline(markdown), [markdown]);
 
 	useEffect(() => {
 		if (files.length === 0) {
@@ -189,6 +200,105 @@ function RouteComponent() {
 			collab.yText?.unobserve(sync);
 		};
 	}, [collab.yText, selectedFile?.id]);
+
+	useEffect(() => {
+		setSearchMatches([]);
+		setSearchError(null);
+	}, [selectedFile?.id]);
+
+	const runActiveFileSearch = (query: string) => {
+		setSearchQuery(query);
+		setSearchLoading(true);
+		setSearchError(null);
+
+		try {
+			if (!query) {
+				setSearchMatches([]);
+				return;
+			}
+
+			if (selectedFile?.type !== "markdown" || !collab.yText) {
+				setSearchMatches([]);
+				setSearchError("Open an editable file to search.");
+				return;
+			}
+
+			setSearchMatches(findTextMatches(selectedFile.id, collab.yText.toString(), query, "active"));
+		} catch (requestError) {
+			setSearchError(requestError instanceof Error ? requestError.message : "Search failed");
+		} finally {
+			setSearchLoading(false);
+		}
+	};
+
+	const replaceActiveMatch = (match: TextSearchMatch, replacement: string) => {
+		if (!collab.yText) {
+			return false;
+		}
+
+		const current = collab.yText.toString();
+		const result = replaceTextRange(
+			current,
+			{
+				startOffset: match.startOffset,
+				endOffset: match.endOffset,
+				expectedText: match.matchedText,
+			},
+			replacement,
+		);
+		if (result.status === "stale") {
+			setSearchError("Result changed. Search again.");
+			return false;
+		}
+
+		const applyReplacement = () => {
+			collab.yText?.delete(match.startOffset, match.endOffset - match.startOffset);
+			collab.yText?.insert(match.startOffset, replacement);
+		};
+		if (collab.yText.doc) {
+			collab.yText.doc.transact(applyReplacement);
+		} else {
+			applyReplacement();
+		}
+		return true;
+	};
+
+	const handleReplaceOne = (match: TextSearchMatch, replacement: string) => {
+		setSearchError(null);
+
+		if (match.source === "active") {
+			if (replaceActiveMatch(match, replacement)) {
+				runActiveFileSearch(searchQuery);
+			}
+			return;
+		}
+
+		setSearchError("Result changed. Search again.");
+	};
+
+	const handleReplaceAll = (query: string, replacement: string) => {
+		setSearchError(null);
+
+		if (selectedFile?.type !== "markdown" || !collab.yText || query.length === 0) {
+			setSearchMatches([]);
+			setSearchError("Open an editable file to replace.");
+			return;
+		}
+
+		const current = collab.yText.toString();
+		const next = current.split(query).join(replacement);
+		const applyReplacement = () => {
+			collab.yText?.delete(0, collab.yText.length);
+			collab.yText?.insert(0, next);
+		};
+		if (collab.yText.doc) {
+			collab.yText.doc.transact(applyReplacement);
+		} else {
+			applyReplacement();
+		}
+
+		runActiveFileSearch(query);
+	};
 
 	useEffect(() => {
 		if (!isPresentation) {
@@ -452,14 +562,14 @@ function RouteComponent() {
 	}
 
 	return (
-		<div className="min-h-screen bg-halo pb-4 pt-6 text-foreground">
+		<div className="min-h-screen bg-halo pb-4 pt-2 text-foreground">
 			<div className="mx-auto flex px-6 flex-col gap-4">
 				<Navbar />
 				<main
 					className={cn(
 						"grid min-h-[76vh] gap-3 grid-cols-1",
 						sidebarOpen
-							? "xl:grid-cols-[250px_minmax(0,1fr)_minmax(320px,42%)]"
+							? "xl:grid-cols-[310px_minmax(0,1fr)_minmax(320px,42%)]"
 							: "xl:grid-cols-[60px_minmax(0,1fr)_minmax(320px,42%)]",
 					)}
 				>
@@ -473,10 +583,34 @@ function RouteComponent() {
 						onRetry={reload}
 						sidebarOpen={sidebarOpen}
 						setSidebarOpen={setSidebarOpen}
+						searchPanel={
+							<SearchPanel
+								matches={searchMatches}
+								isLoading={searchLoading}
+								error={searchError}
+								onSearch={(query) => {
+									runActiveFileSearch(query);
+								}}
+								onReplaceOne={(match, replacement) => {
+									handleReplaceOne(match, replacement);
+								}}
+								onReplaceAll={(query, replacement) => {
+									handleReplaceAll(query, replacement);
+								}}
+							/>
+						}
+						outlinePanel={
+							<OutlinePanel
+								items={outlineItems}
+								isMarkdown={selectedFile?.type === "markdown" && !selectedFile.id.endsWith(".css")}
+								onSelectLine={(line) => editorPaneRef.current?.jumpToLine(line)}
+							/>
+						}
 					/>
 
 					<Suspense>
 						<EditorPane
+							ref={editorPaneRef}
 							label={selectedFile?.label ?? null}
 							yText={collab.yText}
 							awareness={collab.awareness}
