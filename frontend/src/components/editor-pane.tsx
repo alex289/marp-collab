@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import { EditorState, Prec } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 import { indentWithTab } from "@codemirror/commands";
@@ -41,6 +41,10 @@ type EditorPaneProps = {
 	projectId: string;
 };
 
+export type EditorPaneHandle = {
+	jumpToLine: (line: number) => void;
+};
+
 const editorTheme = EditorView.theme({
 	"&": {
 		height: "100%",
@@ -73,15 +77,12 @@ const editorTheme = EditorView.theme({
 	},
 });
 
-export const EditorPane = ({
-	label,
-	yText,
-	awareness,
-	undoManager,
-	status,
-	projectId,
-}: EditorPaneProps) => {
+export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function EditorPane(
+	{ label, yText, awareness, undoManager, status, projectId },
+	ref,
+) {
 	const mountRef = useRef<HTMLDivElement | null>(null);
+	const viewRef = useRef<EditorView | null>(null);
 	const [participants, setParticipants] = useState<Participant[]>([]);
 	const { resolvedTheme } = useTheme();
 
@@ -131,8 +132,12 @@ export const EditorPane = ({
 			state,
 			parent: mountRef.current,
 		});
+		viewRef.current = view;
 
 		return () => {
+			if (viewRef.current === view) {
+				viewRef.current = null;
+			}
 			view.destroy();
 		};
 	}, [yText, awareness, undoManager, label, resolvedTheme]);
@@ -163,6 +168,23 @@ export const EditorPane = ({
 			awareness.off("change", update);
 		};
 	}, [awareness]);
+
+	useImperativeHandle(ref, () => ({
+		jumpToLine(line: number) {
+			const view = viewRef.current;
+			if (!view) {
+				return;
+			}
+
+			const targetLine = Math.min(Math.max(1, line), view.state.doc.lines);
+			const docLine = view.state.doc.line(targetLine);
+			view.dispatch({
+				selection: { anchor: docLine.from },
+				effects: EditorView.scrollIntoView(docLine.from, { y: "center" }),
+			});
+			view.focus();
+		},
+	}));
 
 	return (
 		<Card className="flex h-full min-h-0 flex-col gap-0 overflow-hidden border-border/80 py-0">
@@ -232,4 +254,4 @@ export const EditorPane = ({
 			</CardContent>
 		</Card>
 	);
-};
+});
