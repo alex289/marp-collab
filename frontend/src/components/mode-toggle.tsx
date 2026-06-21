@@ -21,7 +21,6 @@ export function ModeToggle() {
 						<Button
 							variant="ghost"
 							size="icon"
-							className="size-8"
 							title="Toggle theme (D)"
 							aria-label="Toggle theme (D)"
 						>

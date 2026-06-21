@@ -16,6 +16,7 @@ import { SearchPanel } from "@/components/search-panel";
 import { findTextMatches, replaceTextRange, type TextSearchMatch } from "@/lib/text-search";
 import { OutlinePanel } from "@/components/outline-panel";
 import { parseMarkdownOutline } from "@/lib/outline";
+import { isEditableDeckFile, isMarkdownDeckFile } from "@/lib/file-types";
 
 const EditorPane = lazy(async () => {
 	const m = await import("@/components/editor-pane");
@@ -217,7 +218,7 @@ function RouteComponent() {
 				return;
 			}
 
-			if (selectedFile?.type !== "markdown" || !collab.yText) {
+			if (!isEditableDeckFile(selectedFile) || !collab.yText) {
 				setSearchMatches([]);
 				setSearchError("Open an editable file to search.");
 				return;
@@ -281,7 +282,7 @@ function RouteComponent() {
 	const handleReplaceAll = (query: string, replacement: string) => {
 		setSearchError(null);
 
-		if (selectedFile?.type !== "markdown" || !collab.yText || query.length === 0) {
+		if (!isEditableDeckFile(selectedFile) || !collab.yText || query.length === 0) {
 			setSearchMatches([]);
 			setSearchError("Open an editable file to replace.");
 			return;
@@ -289,7 +290,14 @@ function RouteComponent() {
 
 		// oxlint-disable-next-line no-base-to-string
 		const current = collab.yText.toString();
-		const next = current.split(query).join(replacement);
+		const matches = findTextMatches(selectedFile.id, current, query, "active");
+		const next = [...matches]
+			.reverse()
+			.reduce(
+				(content, match) =>
+					content.slice(0, match.startOffset) + replacement + content.slice(match.endOffset),
+				current,
+			);
 		const applyReplacement = () => {
 			collab.yText?.delete(0, collab.yText.length);
 			collab.yText?.insert(0, next);
@@ -605,7 +613,7 @@ function RouteComponent() {
 						outlinePanel={
 							<OutlinePanel
 								items={outlineItems}
-								isMarkdown={selectedFile?.type === "markdown" && !selectedFile.id.endsWith(".css")}
+								isMarkdown={isMarkdownDeckFile(selectedFile)}
 								onSelectLine={(line) => editorPaneRef.current?.jumpToLine(line)}
 							/>
 						}

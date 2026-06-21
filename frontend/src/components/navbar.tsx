@@ -28,13 +28,13 @@ export default function Navbar() {
 		return null;
 	}
 	return (
-		<header className="flex h-8 items-center justify-between border-b border-border/70 px-1">
+		<header className="flex min-h-10 items-center justify-between border-b border-border/70 px-1 py-1">
 			<Link
 				to="/"
-				className="flex h-7 items-center gap-2 rounded-md px-2 text-xs font-medium hover:bg-accent hover:text-accent-foreground"
+				className="flex min-h-8 items-center gap-2 rounded-md px-2 text-sm font-medium hover:bg-accent hover:text-accent-foreground"
 				aria-label="Marp Collab"
 			>
-				<img src="/logo.svg" alt="" className="h-4 w-4" />
+				<img src="/logo.svg" alt="" className="h-5 w-5" />
 				<span className="hidden sm:inline">Marp Collab</span>
 			</Link>
 
@@ -47,13 +47,12 @@ export default function Navbar() {
 					type="button"
 					variant="ghost"
 					size="icon"
-					className="size-8"
 					onClick={onLogout}
 					disabled={busy}
 					title="Logout"
 					aria-label="Logout"
 				>
-					<LogOut className="h-3.5 w-3.5" />
+					<LogOut className="h-4 w-4" />
 				</Button>
 			</div>
 		</header>

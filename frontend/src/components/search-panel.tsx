@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import { Replace, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { SidebarGroup, SidebarGroupContent, SidebarGroupLabel } from "@/components/ui/sidebar";
 import type { TextSearchMatch } from "@/lib/text-search";
 
@@ -40,12 +41,12 @@ export const SearchPanel = ({
 				<span>Search</span>
 			</SidebarGroupLabel>
 			<SidebarGroupContent className="flex h-full min-h-0 flex-col gap-2">
-				<label
+				<Label
 					className="text-xs font-medium text-muted-foreground"
 					htmlFor="active-file-search-query"
 				>
 					Find
-				</label>
+				</Label>
 				<Input
 					id="active-file-search-query"
 					value={query}
@@ -57,12 +58,12 @@ export const SearchPanel = ({
 					}}
 					aria-label="Find"
 				/>
-				<label
+				<Label
 					className="text-xs font-medium text-muted-foreground"
 					htmlFor="active-file-search-replacement"
 				>
 					Replace
-				</label>
+				</Label>
 				<Input
 					id="active-file-search-replacement"
 					value={replacement}
@@ -78,7 +79,7 @@ export const SearchPanel = ({
 						disabled={query.length === 0 || isLoading}
 					>
 						<Search />
-						<span>Find</span>
+						Find
 					</Button>
 					<Button
 						type="button"
@@ -87,7 +88,7 @@ export const SearchPanel = ({
 						disabled={query.length === 0 || matches.length === 0 || isLoading}
 					>
 						<Replace />
-						<span>Replace all</span>
+						Replace all
 					</Button>
 				</div>
 				{error ? <p className="text-xs text-destructive">{error}</p> : null}

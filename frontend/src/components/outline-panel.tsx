@@ -30,10 +30,15 @@ export const OutlinePanel = ({ items, isMarkdown, onSelectLine }: OutlinePanelPr
 								type="button"
 								onClick={() => onSelectLine(item.line)}
 								className="flex min-w-0 items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs hover:bg-sidebar-accent"
-								style={{ paddingLeft: `${0.5 + (item.level - 1) * 0.75}rem` }}
+								style={{
+									paddingLeft:
+										item.kind === "heading" ? `${1 + (item.level - 1) * 0.75}rem` : "0.5rem",
+								}}
 							>
 								<span className="min-w-6 shrink-0 text-muted-foreground">{item.line}</span>
-								<span className="truncate">{item.text}</span>
+								<span className={item.kind === "slide" ? "truncate font-medium" : "truncate"}>
+									{item.text}
+								</span>
 							</button>
 						))}
 					</div>

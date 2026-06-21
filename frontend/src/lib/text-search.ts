@@ -54,11 +54,13 @@ export function findTextMatches(
 
 	const matches: TextSearchMatch[] = [];
 	const lines = getLineSpans(content);
+	const searchableContent = content.toLocaleLowerCase();
+	const searchableQuery = query.toLocaleLowerCase();
 	let searchOffset = 0;
 	let lineIndex = 0;
 
 	while (searchOffset <= content.length) {
-		const startOffset = content.indexOf(query, searchOffset);
+		const startOffset = searchableContent.indexOf(searchableQuery, searchOffset);
 
 		if (startOffset === -1) {
 			break;
