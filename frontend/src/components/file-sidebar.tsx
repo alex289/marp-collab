@@ -30,6 +30,7 @@ import {
 	SidebarMenuItem,
 	SidebarMenuSub,
 	SidebarProvider,
+	useSidebar,
 } from "@/components/ui/sidebar";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { TooltipProvider } from "./ui/tooltip";
@@ -195,6 +196,62 @@ type DragState = {
 };
 
 type WorkspacePanel = "files" | "search" | "outline";
+
+type WorkspaceRailButtonsProps = {
+	activePanel: WorkspacePanel;
+	onPanelClick: (panel: WorkspacePanel) => void;
+};
+
+const WorkspaceRailButtons = ({ activePanel, onPanelClick }: WorkspaceRailButtonsProps) => (
+	<>
+		<WorkspaceRailButton
+			active={activePanel === "files"}
+			label="Files"
+			onClick={() => onPanelClick("files")}
+		>
+			<Files />
+		</WorkspaceRailButton>
+		<WorkspaceRailButton
+			active={activePanel === "search"}
+			label="Search"
+			onClick={() => onPanelClick("search")}
+		>
+			<Search />
+		</WorkspaceRailButton>
+		<WorkspaceRailButton
+			active={activePanel === "outline"}
+			label="Outline"
+			onClick={() => onPanelClick("outline")}
+		>
+			<ListTree />
+		</WorkspaceRailButton>
+	</>
+);
+
+type MobileWorkspaceRailProps = {
+	activePanel: WorkspacePanel;
+	setActivePanel: (panel: WorkspacePanel) => void;
+};
+
+const MobileWorkspaceRail = ({ activePanel, setActivePanel }: MobileWorkspaceRailProps) => {
+	const { openMobile, setOpenMobile } = useSidebar();
+
+	const handlePanelClick = (panel: WorkspacePanel) => {
+		if (activePanel === panel) {
+			setOpenMobile(!openMobile);
+			return;
+		}
+
+		setActivePanel(panel);
+		setOpenMobile(true);
+	};
+
+	return (
+		<div className="flex h-12 items-center gap-2 rounded-md border border-sidebar-border bg-sidebar px-2 text-sidebar-foreground md:hidden">
+			<WorkspaceRailButtons activePanel={activePanel} onPanelClick={handlePanelClick} />
+		</div>
+	);
+};
 
 type NestedFileItemProps = {
 	node: NestedFileNode;
@@ -648,7 +705,7 @@ export const FileSidebar = ({
 			<SidebarProvider
 				open={sidebarOpen}
 				onOpenChange={setSidebarOpen}
-				className="h-full min-h-0"
+				className="min-h-0 md:h-full"
 				style={
 					{
 						"--sidebar-width": "19rem",
@@ -657,31 +714,15 @@ export const FileSidebar = ({
 				}
 			>
 				<TooltipProvider>
+					<MobileWorkspaceRail activePanel={activePanel} setActivePanel={setActivePanel} />
 					<Sidebar variant="sidebar" collapsible="icon" className="static h-full pt-0">
 						<SidebarContent className="h-full">
 							<div className="flex h-full min-h-0 flex-1">
 								<div className="flex w-12 shrink-0 flex-col items-center gap-2 border-r border-sidebar-border px-1.5 py-2">
-									<WorkspaceRailButton
-										active={activePanel === "files"}
-										label="Files"
-										onClick={() => handlePanelButtonClick("files")}
-									>
-										<Files />
-									</WorkspaceRailButton>
-									<WorkspaceRailButton
-										active={activePanel === "search"}
-										label="Search"
-										onClick={() => handlePanelButtonClick("search")}
-									>
-										<Search />
-									</WorkspaceRailButton>
-									<WorkspaceRailButton
-										active={activePanel === "outline"}
-										label="Outline"
-										onClick={() => handlePanelButtonClick("outline")}
-									>
-										<ListTree />
-									</WorkspaceRailButton>
+									<WorkspaceRailButtons
+										activePanel={activePanel}
+										onPanelClick={handlePanelButtonClick}
+									/>
 								</div>
 								<div className="min-h-0 min-w-0 flex-1 overflow-auto group-data-[collapsible=icon]:hidden">
 									{activePanel === "files" ? filesPanel : null}
