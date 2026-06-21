@@ -764,10 +764,14 @@ export const FileSidebar = ({
 			>
 				<TooltipProvider>
 					<MobileWorkspaceRail activePanel={activePanel} setActivePanel={setActivePanel} />
-					<Sidebar variant="sidebar" collapsible="icon" className="static h-full pt-0">
-						<SidebarContent className="h-full">
+					<Sidebar
+						variant="sidebar"
+						collapsible="icon"
+						className="static h-full border-0 pt-0 group-data-[side=left]:border-r-0"
+					>
+						<SidebarContent className="h-full overflow-hidden rounded-lg border border-sidebar-border bg-sidebar">
 							<div className="flex h-full min-h-0 flex-1">
-								<div className="flex w-12 shrink-0 flex-col items-center gap-2 border-r border-sidebar-border px-1.5 py-2">
+								<div className="flex w-12 shrink-0 flex-col items-center gap-2 border-r border-sidebar-border px-1.5 py-2 group-data-[collapsible=icon]:rounded-lg group-data-[collapsible=icon]:border-r-0">
 									<WorkspaceRailButtons
 										activePanel={activePanel}
 										onPanelClick={handlePanelButtonClick}
