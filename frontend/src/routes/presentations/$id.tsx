@@ -223,6 +223,7 @@ function RouteComponent() {
 				return;
 			}
 
+			// oxlint-disable-next-line no-base-to-string
 			setSearchMatches(findTextMatches(selectedFile.id, collab.yText.toString(), query, "active"));
 		} catch (requestError) {
 			setSearchError(requestError instanceof Error ? requestError.message : "Search failed");
@@ -236,6 +237,7 @@ function RouteComponent() {
 			return false;
 		}
 
+		// oxlint-disable-next-line no-base-to-string
 		const current = collab.yText.toString();
 		const result = replaceTextRange(
 			current,
@@ -285,6 +287,7 @@ function RouteComponent() {
 			return;
 		}
 
+		// oxlint-disable-next-line no-base-to-string
 		const current = collab.yText.toString();
 		const next = current.split(query).join(replacement);
 		const applyReplacement = () => {
