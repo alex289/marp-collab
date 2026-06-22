@@ -1,5 +1,4 @@
 export type OutlineItem = {
-	kind: "heading" | "slide";
 	level: number;
 	text: string;
 	line: number;
@@ -42,14 +41,6 @@ export function parseMarkdownOutline(markdown: string): OutlineItem[] {
 	const outline: OutlineItem[] = [];
 	const lines = markdown.split(/\r\n|\n|\r/);
 	let fence: Fence | null = null;
-	let slideNumber = 1;
-
-	outline.push({
-		kind: "slide",
-		level: 1,
-		text: "Slide 1",
-		line: 1,
-	});
 
 	for (let index = 0; index < lines.length; index += 1) {
 		const line = lines[index];
@@ -69,17 +60,6 @@ export function parseMarkdownOutline(markdown: string): OutlineItem[] {
 			continue;
 		}
 
-		if (/^\s*---\s*$/.test(line)) {
-			slideNumber += 1;
-			outline.push({
-				kind: "slide",
-				level: 1,
-				text: `Slide ${slideNumber}`,
-				line: index + 1,
-			});
-			continue;
-		}
-
 		// CommonMark allows ATX headings to be indented up to three spaces;
 		// four leading spaces would make the line an indented code block.
 		const heading = line.match(/^\s{0,3}(#{1,6})\s+(.*)$/);
@@ -91,7 +71,6 @@ export function parseMarkdownOutline(markdown: string): OutlineItem[] {
 		const text = heading[2].replace(/[ \t]+#+[ \t]*$/, "").trim();
 
 		outline.push({
-			kind: "heading",
 			level: heading[1].length,
 			text,
 			line: index + 1,
