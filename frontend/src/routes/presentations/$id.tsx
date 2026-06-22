@@ -18,6 +18,9 @@ import { findTextMatches, replaceTextRange, type TextSearchMatch } from "@/lib/t
 import { OutlinePanel } from "@/components/outline-panel";
 import { parseMarkdownOutline } from "@/lib/outline";
 import { isEditableDeckFile, isMarkdownDeckFile } from "@/lib/file-types";
+import { listThemeNames, setProjectThemes } from "@/lib/marp";
+import { applyThemeToYText, getMarkdownTheme } from "@/lib/markdown-theme";
+import { API_URL } from "@/lib/config";
 import { PauseIcon, PlayIcon } from "lucide-react";
 
 const EditorPane = lazy(async () => {
@@ -119,6 +122,7 @@ function RouteComponent() {
 	const [selectedFile, setSelectedFile] = useState<DeckFile | null>(null);
 	const [sidebarOpen, setSidebarOpen] = useState(true);
 	const [markdown, setMarkdown] = useState("");
+	const [themeNames, setThemeNames] = useState<string[]>(() => listThemeNames());
 	const [slideIndex, setSlideIndex] = useState(0);
 	const [slideCount, setSlideCount] = useState(1);
 	const [startedAt, setStartedAt] = useState(() => Date.now());
@@ -204,6 +208,58 @@ function RouteComponent() {
 			collab.yText?.unobserve(sync);
 		};
 	}, [collab.yText, selectedFile?.id]);
+
+	useEffect(() => {
+		const cssFiles = files.filter((file) => file.id.toLowerCase().endsWith(".css"));
+		if (cssFiles.length === 0) {
+			setThemeNames(setProjectThemes([]));
+			return;
+		}
+
+		const controller = new AbortController();
+		void (async () => {
+			const themes = await Promise.all(
+				cssFiles.map(async (file) => {
+					try {
+						const encodedId = file.id.split("/").map(encodeURIComponent).join("/");
+						const res = await fetch(`${API_URL}/projects/${id}/files/${encodedId}`, {
+							credentials: "include",
+							signal: controller.signal,
+						});
+						if (!res.ok) {
+							return null;
+						}
+						return { id: file.id, css: await res.text() };
+					} catch {
+						return null;
+					}
+				}),
+			);
+
+			if (controller.signal.aborted) {
+				return;
+			}
+
+			setThemeNames(
+				setProjectThemes(
+					themes.filter((theme): theme is { id: string; css: string } => theme !== null),
+				),
+			);
+		})();
+
+		return () => controller.abort();
+	}, [files, id]);
+
+	const currentTheme = useMemo(() => getMarkdownTheme(markdown) ?? "default", [markdown]);
+
+	const handleThemeChange = useCallback(
+		(theme: string) => {
+			if (collab.yText) {
+				applyThemeToYText(collab.yText, theme);
+			}
+		},
+		[collab.yText],
+	);
 
 	useEffect(() => {
 		setSearchMatches([]);
@@ -669,6 +725,10 @@ function RouteComponent() {
 							label={selectedFile?.label ?? null}
 							projectId={id}
 							selectedFileId={selectedFile?.id ?? null}
+							themeNames={themeNames}
+							currentTheme={currentTheme}
+							onThemeChange={handleThemeChange}
+							themeSelectDisabled={!isMarkdownDeckFile(selectedFile) || collab.readOnly}
 						/>
 					</Suspense>
 				</main>

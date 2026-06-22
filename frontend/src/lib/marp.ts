@@ -75,3 +75,53 @@ export const renderMarp = (
 	currentMarkdownDir = lastSlash > -1 ? selectedFileId!.slice(0, lastSlash + 1) : "";
 	return marp.render(markdown);
 };
+
+const customThemeNames = new Set<string>();
+const themeMarkerRegex = /\/\*[\s\S]*?@theme\s+([\w-]+)/;
+
+function sanitizeThemeName(fileId: string): string {
+	const base = fileId.split("/").pop() ?? fileId;
+	const name = base
+		.replace(/\.css$/i, "")
+		.toLowerCase()
+		.replace(/[^\w-]+/g, "-")
+		.replace(/^-+|-+$/g, "");
+	return name || "theme";
+}
+
+function prepareThemeCss(css: string, fallbackName: string): { css: string; name: string } {
+	const marker = themeMarkerRegex.exec(css);
+	if (marker?.[1]) {
+		return { css, name: marker[1] };
+	}
+	return { css: `/* @theme ${fallbackName} */\n${css}`, name: fallbackName };
+}
+
+/** Returns every registered theme name (built-ins plus project CSS themes). */
+export const listThemeNames = (): string[] =>
+	Array.from(marp.themeSet.themes(), (theme) => theme.name);
+
+/**
+ * Registers project CSS files as Marpit themes. A file becomes a theme named
+ * after its own `@theme` marker, or after its file name when the marker is
+ * missing. Replaces any previously registered project themes.
+ */
+export const setProjectThemes = (themes: Array<{ id: string; css: string }>): string[] => {
+	for (const name of customThemeNames) {
+		marp.themeSet.delete(name);
+	}
+	customThemeNames.clear();
+
+	for (const { id, css } of themes) {
+		try {
+			const { css: prepared, name } = prepareThemeCss(css, sanitizeThemeName(id));
+			marp.themeSet.delete(name);
+			const theme = marp.themeSet.add(prepared);
+			customThemeNames.add(theme.name);
+		} catch {
+			// Skip CSS that Marpit cannot parse as a theme.
+		}
+	}
+
+	return listThemeNames();
+};
