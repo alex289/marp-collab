@@ -10,6 +10,7 @@ import Navbar from "@/components/navbar";
 import { useHotkeys } from "@tanstack/react-hotkeys";
 import { PresentationFrame } from "@/components/presentation-frame";
 import { Button } from "@/components/ui/button";
+import { ButtonGroup } from "@/components/ui/button-group";
 import { Separator } from "@/components/ui/separator";
 import type { EditorPaneHandle } from "@/components/editor-pane";
 import { SearchPanel } from "@/components/search-panel";
@@ -17,6 +18,7 @@ import { findTextMatches, replaceTextRange, type TextSearchMatch } from "@/lib/t
 import { OutlinePanel } from "@/components/outline-panel";
 import { parseMarkdownOutline } from "@/lib/outline";
 import { isEditableDeckFile, isMarkdownDeckFile } from "@/lib/file-types";
+import { PauseIcon, PlayIcon } from "lucide-react";
 
 const EditorPane = lazy(async () => {
 	const m = await import("@/components/editor-pane");
@@ -541,16 +543,18 @@ function RouteComponent() {
 						Slide {slideIndex + 1}/{Math.max(slideCount, 1)}
 					</Button>
 					<div className="flex items-center gap-2">
-						<Button type="button" variant="secondary" onClick={resetTimer}>
-							{formatElapsed(elapsedMs)}
-						</Button>
-						<Button
-							type="button"
-							variant="secondary"
-							onClick={isTimerPaused ? resumeTimer : pauseTimer}
-						>
-							{isTimerPaused ? "Resume timer" : "Pause timer"}
-						</Button>
+						<ButtonGroup>
+							<Button
+								type="button"
+								variant="secondary"
+								onClick={isTimerPaused ? resumeTimer : pauseTimer}
+							>
+								{isTimerPaused ? <PlayIcon /> : <PauseIcon />}
+							</Button>
+							<Button type="button" variant="secondary" onClick={resetTimer}>
+								{formatElapsed(elapsedMs)}
+							</Button>
+						</ButtonGroup>
 						<Separator orientation="vertical" />
 						<Button
 							type="button"
