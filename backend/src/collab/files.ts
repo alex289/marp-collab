@@ -147,7 +147,7 @@ export async function createProjectZipStream(projectId: string): Promise<Readabl
 		}
 	}
 
-	archive.finalize();
+	await archive.finalize();
 	return archive;
 }
 

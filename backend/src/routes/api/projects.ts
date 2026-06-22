@@ -208,7 +208,9 @@ app.get("/:projectId/export.zip", async (c) => {
 	c.header("Cache-Control", "no-store");
 
 	return stream(c, async (s) => {
-		s.onAbort(() => { zipStream.destroy(); });
+		s.onAbort(() => {
+			zipStream.destroy();
+		});
 		await s.pipe(Readable.toWeb(zipStream) as ReadableStream);
 	});
 });
@@ -432,7 +434,9 @@ app.get("/:projectId/files/:fileId{.+}", async (c) => {
 
 	return stream(c, async (s) => {
 		const readStream = createReadStream(filePath);
-		s.onAbort(() => { readStream.destroy(); });
+		s.onAbort(() => {
+			readStream.destroy();
+		});
 		await s.pipe(Readable.toWeb(readStream) as ReadableStream);
 	});
 });
