@@ -34,7 +34,10 @@ export function ManageProjectCollaborator({ projectId }: { projectId: string }) 
 	const [error, setError] = useState<string | null>(null);
 	const [isSubmitting, setIsSubmitting] = useState(false);
 	const [isRemoving, setIsRemoving] = useState(false);
+	const [updatingUserId, setUpdatingUserId] = useState<string | null>(null);
 	const [isEmailValid, setIsEmailValid] = useState(false);
+
+	const collaboratorsKey = `${API_URL}/projects/${projectId}/collaborators`;
 
 	function handleOpenChange(next: boolean) {
 		setOpen(next);
@@ -46,10 +49,7 @@ export function ManageProjectCollaborator({ projectId }: { projectId: string }) 
 		}
 	}
 
-	const { data, isLoading } = useSWR<{ collaborators: SharedProject[] }>(
-		`${API_URL}/projects/${projectId}/collaborators`,
-		fetcher,
-	);
+	const { data, isLoading } = useSWR<{ collaborators: SharedProject[] }>(collaboratorsKey, fetcher);
 
 	const collaborators = data?.collaborators ?? [];
 
@@ -69,11 +69,39 @@ export function ManageProjectCollaborator({ projectId }: { projectId: string }) 
 				return;
 			}
 
-			await mutate(`${API_URL}/projects/collaborators`);
+			setCollaboratorEmail("");
+			setAccessLevel("read-only");
+			setIsEmailValid(false);
+			await mutate(collaboratorsKey);
 		} catch {
 			setError("An unexpected error occurred. Please try again.");
 		} finally {
 			setIsSubmitting(false);
+		}
+	}
+
+	async function handleUpdateCollaborator(userId: string, readOnly: boolean) {
+		setUpdatingUserId(userId);
+		setError(null);
+		try {
+			const res = await fetch(`${API_URL}/projects/${projectId}/collaborators/${userId}`, {
+				method: "PATCH",
+				credentials: "include",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({ readOnly }),
+			});
+
+			if (!res.ok) {
+				const data = (await res.json()) as { error?: string };
+				setError(data.error ?? "Failed to update collaborator");
+				return;
+			}
+
+			await mutate(collaboratorsKey);
+		} catch {
+			setError("An unexpected error occurred. Please try again.");
+		} finally {
+			setUpdatingUserId(null);
 		}
 	}
 
@@ -92,7 +120,7 @@ export function ManageProjectCollaborator({ projectId }: { projectId: string }) 
 				return;
 			}
 
-			await mutate(`${API_URL}/projects/collaborators`);
+			await mutate(collaboratorsKey);
 		} catch {
 			setError("An unexpected error occurred. Please try again.");
 		} finally {
@@ -131,7 +159,23 @@ export function ManageProjectCollaborator({ projectId }: { projectId: string }) 
 							collaborators?.map((collaborator) => (
 								<TableRow key={collaborator.userId}>
 									<TableCell>{collaborator.userName}</TableCell>
-									<TableCell>{collaborator.readOnly ? "Read-only" : "Full access"}</TableCell>
+									<TableCell>
+										<Select
+											value={collaborator.readOnly ? "read-only" : "full-access"}
+											disabled={updatingUserId === collaborator.userId}
+											onValueChange={(value) =>
+												handleUpdateCollaborator(collaborator.userId, value === "read-only")
+											}
+										>
+											<SelectTrigger className="w-full">
+												<SelectValue placeholder="Select access level" />
+											</SelectTrigger>
+											<SelectContent>
+												<SelectItem value="read-only">Read-only</SelectItem>
+												<SelectItem value="full-access">Full access</SelectItem>
+											</SelectContent>
+										</Select>
+									</TableCell>
 									<TableCell className="text-right">
 										<Button
 											variant="destructive"

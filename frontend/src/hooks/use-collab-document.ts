@@ -10,6 +10,7 @@ type CollabState = {
 	awareness: Awareness | null;
 	undoManager: Y.UndoManager | null;
 	status: "connecting" | "connected" | "disconnected";
+	readOnly: boolean;
 };
 
 const defaultState: CollabState = {
@@ -17,6 +18,7 @@ const defaultState: CollabState = {
 	awareness: null,
 	undoManager: null,
 	status: "disconnected",
+	readOnly: false,
 };
 
 const palette = ["#f97316", "#16a34a", "#0ea5e9", "#e11d48", "#0891b2", "#ca8a04"];
@@ -77,6 +79,12 @@ export const useCollabDocument = (
 			onStateless: ({ payload }: { payload: string }) => {
 				onStatelessMessageRef.current?.(payload);
 			},
+			onAuthenticated: ({ scope }) => {
+				setState((current) => ({
+					...current,
+					readOnly: scope === "readonly",
+				}));
+			},
 		});
 
 		provider.setAwarenessField("user", {
@@ -90,6 +98,7 @@ export const useCollabDocument = (
 			awareness: provider.awareness,
 			undoManager,
 			status: "connecting",
+			readOnly: false,
 		});
 
 		return () => {

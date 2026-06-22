@@ -654,6 +654,7 @@ function RouteComponent() {
 							awareness={collab.awareness}
 							undoManager={collab.undoManager}
 							status={collab.status}
+							readOnly={collab.readOnly}
 							projectId={id}
 						/>
 					</Suspense>

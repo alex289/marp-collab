@@ -38,6 +38,7 @@ type EditorPaneProps = {
 	awareness: Awareness | null;
 	undoManager: Y.UndoManager | null;
 	status: "connecting" | "connected" | "disconnected";
+	readOnly: boolean;
 	projectId: string;
 };
 
@@ -125,7 +126,7 @@ const editorTheme = EditorView.theme({
 });
 
 export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function EditorPane(
-	{ label, yText, awareness, undoManager, status, projectId },
+	{ label, yText, awareness, undoManager, status, readOnly, projectId },
 	ref,
 ) {
 	const mountRef = useRef<HTMLDivElement | null>(null);
@@ -203,6 +204,8 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 					]),
 				),
 				keymap.of([indentWithTab, ...yUndoManagerKeymap]),
+				EditorState.readOnly.of(readOnly),
+				EditorView.editable.of(!readOnly),
 				yCollab(yText, awareness, { undoManager }),
 				EditorView.updateListener.of((update) => {
 					if (update.docChanged || update.selectionSet) {
@@ -228,7 +231,7 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 			}
 			view.destroy();
 		};
-	}, [yText, awareness, undoManager, label, resolvedTheme, wrapEnabled]);
+	}, [yText, awareness, undoManager, label, resolvedTheme, wrapEnabled, readOnly]);
 
 	useEffect(() => {
 		if (!awareness) {
@@ -311,6 +314,7 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 							<span className="size-1.5 rounded-full bg-current" aria-hidden="true" />
 							{status}
 						</Badge>
+						{readOnly ? <Badge variant="outline">Read-only</Badge> : null}
 						<ManageProjectCollaborator projectId={projectId} />
 						<TooltipProvider>
 							<Tooltip>

@@ -37,8 +37,10 @@ import { extname } from "node:path";
 import {
 	addCollaborator,
 	getCollaborationsByUserId,
+	getCollaborator,
 	getCollaboratorsByProjectId,
 	removeCollaborator,
+	updateCollaborator,
 } from "../../db/models/project-collaborator.ts";
 import { getUserByEmail } from "../../db/models/user.ts";
 import { closeProjectCollaboratorConnections } from "../../collab/connections.ts";
@@ -52,6 +54,10 @@ const createProjectSchema = z.object({
 const addCollaboratorSchema = z.object({
 	email: z.string().trim().email(),
 	readOnly: z.boolean().default(false),
+});
+
+const updateCollaboratorSchema = z.object({
+	readOnly: z.boolean(),
 });
 
 app.get("/", (c) => {
@@ -113,6 +119,42 @@ app.post("/:projectId/collaborators", async (c) => {
 	}
 
 	addCollaborator(projectId, userToAdd.userId, parseResult.data.readOnly);
+
+	return c.json({ success: true });
+});
+
+app.patch("/:projectId/collaborators/:userId", async (c) => {
+	const user = c.get("user");
+	if (!user) {
+		return c.json({ error: "Unauthorized" }, 401);
+	}
+
+	const { projectId, userId } = c.req.param();
+
+	const access = getUserProjectAccess(projectId, user.id);
+	if (!access) {
+		return c.json({ error: "Project not found or access denied" }, 403);
+	} else if (!access.isOwner) {
+		return c.json({ error: "Only the project owner can manage collaborators" }, 403);
+	}
+
+	const body = await c.req.json();
+	const parseResult = updateCollaboratorSchema.safeParse(body);
+	if (!parseResult.success) {
+		return c.json({ error: z.prettifyError(parseResult.error) }, 400);
+	}
+
+	const collaborator = getCollaborator(projectId, userId);
+	if (!collaborator) {
+		return c.json({ error: "Collaborator not found" }, 404);
+	}
+
+	updateCollaborator(projectId, userId, parseResult.data.readOnly);
+
+	// Drop open connections so the collaborator reconnects with the new access level.
+	if (collaborator.readOnly !== parseResult.data.readOnly) {
+		closeProjectCollaboratorConnections(projectId, userId);
+	}
 
 	return c.json({ success: true });
 });
