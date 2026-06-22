@@ -24,6 +24,7 @@ import { useTheme } from "./theme-provider";
 import { vsCodeLight } from "@fsegurai/codemirror-theme-vscode-light";
 import { vsCodeDark } from "@fsegurai/codemirror-theme-vscode-dark";
 import { ManageProjectCollaborator } from "./dialog/manage-project-collaborator";
+import { toast } from "sonner";
 
 type Participant = {
 	id: string;
@@ -192,7 +193,12 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 					keymap.of([
 						{
 							key: "Mod-s",
-							run: () => true,
+							run: () => {
+								toast("Marp Collab automatically saves your changes. 🚀", {
+									position: "bottom-center",
+								});
+								return true;
+							},
 						},
 					]),
 				),
