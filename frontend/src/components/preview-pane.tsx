@@ -68,7 +68,7 @@ export const PreviewPane = ({ markdown, label, projectId, selectedFileId }: Prev
 
 	return (
 		<Card className="flex h-full min-h-0 flex-col overflow-hidden border-border/80 py-0">
-			<CardHeader className="shrink-0 border-b border-border px-4 py-3">
+			<CardHeader className="shrink-0 border border-border px-4 py-3">
 				<CardTitle>Live Preview</CardTitle>
 				<CardAction>
 					{label ? (

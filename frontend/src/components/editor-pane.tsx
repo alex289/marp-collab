@@ -282,7 +282,7 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 					: "flex h-full min-h-0 flex-col gap-0 overflow-hidden border-border/80 py-0"
 			}
 		>
-			<CardHeader className="shrink-0 border-b border-border bg-card/95 px-4 py-3 backdrop-blur">
+			<CardHeader className="shrink-0 border border-border bg-card/95 px-4 py-3 backdrop-blur">
 				<div className="flex min-w-0 items-start gap-3">
 					<div className="min-w-0">
 						<CardTitle className="flex min-w-0 items-center gap-2">
