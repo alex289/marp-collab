@@ -1,7 +1,7 @@
 import { throw404OnError, cn } from "@/lib/utils";
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod/v4-mini";
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FileSidebar } from "@/components/file-sidebar";
 import { useCollabDocument, usePresenceUser } from "@/hooks/use-collab-document";
 import { useFiles } from "@/hooks/use-files";
@@ -128,6 +128,7 @@ function RouteComponent() {
 	const [searchLoading, setSearchLoading] = useState(false);
 	const [searchError, setSearchError] = useState<string | null>(null);
 	const editorPaneRef = useRef<EditorPaneHandle | null>(null);
+	const viewerContainerRef = useRef<HTMLDivElement | null>(null);
 	const slideSyncChannelRef = useRef<BroadcastChannel | null>(null);
 	const suppressNextSlideBroadcastRef = useRef(false);
 
@@ -365,6 +366,18 @@ function RouteComponent() {
 	}, [slideCount]);
 
 	const maxSlideIndex = Math.max(0, slideCount - 1);
+	const toggleViewerFullscreen = useCallback(() => {
+		if (!isViewer) {
+			return;
+		}
+
+		if (document.fullscreenElement) {
+			void document.exitFullscreen();
+			return;
+		}
+
+		void (viewerContainerRef.current ?? document.documentElement).requestFullscreen();
+	}, [isViewer]);
 
 	useEffect(() => {
 		if (!slideSyncChannelName) {
@@ -450,6 +463,11 @@ function RouteComponent() {
 				callback: () => setSlideIndex((current) => Math.max(current - 1, 0)),
 			},
 			{
+				hotkey: "F",
+				callback: toggleViewerFullscreen,
+				options: { enabled: isViewer },
+			},
+			{
 				hotkey: "Escape",
 				callback: () => {
 					if (isViewer && window.opener) {
@@ -504,7 +522,14 @@ function RouteComponent() {
 		);
 
 		if (isViewer) {
-			return <div className="h-screen w-screen overflow-hidden bg-black text-white">{frame}</div>;
+			return (
+				<div
+					ref={viewerContainerRef}
+					className="h-screen w-screen overflow-hidden bg-black text-white"
+				>
+					{frame}
+				</div>
+			);
 		}
 
 		return (

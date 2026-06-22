@@ -19,8 +19,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Check, Copy, FileText, Maximize2, Save, Sparkles, Users, WrapText } from "lucide-react";
-import { HotkeyLabel } from "./hotkey-lable";
+import { Check, Copy, FileText, Maximize2, Sparkles, Users, WrapText } from "lucide-react";
 import { useTheme } from "./theme-provider";
 import { vsCodeLight } from "@fsegurai/codemirror-theme-vscode-light";
 import { vsCodeDark } from "@fsegurai/codemirror-theme-vscode-dark";
@@ -91,24 +90,11 @@ const editorTheme = EditorView.theme({
 		backgroundColor: "var(--card)",
 		color: "var(--card-foreground)",
 	},
-	".cm-scroller": {
-		lineHeight: "1.65",
-	},
-	".cm-content": {
-		padding: "16px 0 96px 0",
-		caretColor: "var(--primary)",
-	},
-	".cm-line": {
-		padding: "0 20px",
-	},
 	".cm-gutters": {
 		borderRight: "1px solid var(--border)",
 		background: "color-mix(in oklab, var(--muted) 64%, transparent)",
 		color: "var(--muted-foreground)",
-		paddingRight: "8px",
-	},
-	".cm-lineNumbers .cm-gutterElement": {
-		padding: "0 10px 0 14px",
+		paddingRight: "6px",
 	},
 	".cm-activeLine": {
 		backgroundColor: "color-mix(in oklab, var(--primary) 7%, transparent)",
@@ -202,7 +188,6 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 				basicSetup,
 				EditorState.tabSize.of(2),
 				languageExtension,
-				EditorView.lineWrapping,
 				Prec.highest(
 					keymap.of([
 						{
@@ -293,9 +278,6 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 		>
 			<CardHeader className="shrink-0 border-b border-border bg-card/95 px-4 py-3 backdrop-blur">
 				<div className="flex min-w-0 items-start gap-3">
-					<div className="flex size-9 shrink-0 items-center justify-center rounded-md border border-border bg-muted text-muted-foreground">
-						<FileText className="size-4" />
-					</div>
 					<div className="min-w-0">
 						<CardTitle className="flex min-w-0 items-center gap-2">
 							<span className="truncate">Editor</span>
@@ -353,27 +335,6 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 									<span>{isFocused ? "Exit focus mode" : "Enter focus mode"}</span>
 								</TooltipContent>
 							</Tooltip>
-							<Tooltip>
-								<TooltipTrigger asChild>
-									<Button
-										type="button"
-										variant="outline"
-										size="sm"
-										title="Document saves automatically"
-										aria-label="Save document"
-										onClick={() =>
-											mountRef.current?.querySelector<HTMLElement>(".cm-content")?.focus()
-										}
-									>
-										<Save />
-										<span>Save</span>
-									</Button>
-								</TooltipTrigger>
-								<TooltipContent>
-									<span>Document saves automatically</span>
-									<HotkeyLabel hotkey="S" />
-								</TooltipContent>
-							</Tooltip>
 						</TooltipProvider>
 						<Badge variant={statusVariant} className="capitalize">
 							<span className="size-1.5 rounded-full bg-current" aria-hidden="true" />
@@ -384,17 +345,21 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 			</CardHeader>
 
 			<div className="flex shrink-0 items-center justify-between gap-3 border-b border-border bg-muted/35 px-4 py-2">
-				<div className="flex min-w-0 flex-wrap items-center gap-2">
-					<Badge variant="outline">{stats.lines.toLocaleString()} lines</Badge>
-					<Badge variant="outline">{stats.words.toLocaleString()} words</Badge>
-					<Badge variant="outline">{stats.chars.toLocaleString()} chars</Badge>
-					{fileKind === "Markdown" ? (
-						<Badge variant="outline">
-							<Sparkles />
-							{stats.slides.toLocaleString()} cues
-						</Badge>
-					) : null}
-				</div>
+				{isFocused ? (
+					<div className="flex min-w-0 flex-wrap items-center gap-2">
+						<Badge variant="outline">{stats.lines.toLocaleString()} lines</Badge>
+						<Badge variant="outline">{stats.words.toLocaleString()} words</Badge>
+						<Badge variant="outline">{stats.chars.toLocaleString()} chars</Badge>
+						{fileKind === "Markdown" ? (
+							<Badge variant="outline">
+								<Sparkles />
+								{stats.slides.toLocaleString()} slides
+							</Badge>
+						) : null}
+					</div>
+				) : (
+					<div></div>
+				)}
 				<div className="flex min-w-0 items-center gap-3">
 					<div className="hidden items-center gap-1 text-xs text-muted-foreground sm:flex">
 						<Users className="size-3" />
