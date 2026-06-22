@@ -512,6 +512,8 @@ function RouteComponent() {
 			<PresentationFrame
 				markdown={markdown}
 				slideIndex={slideIndex}
+				projectId={id}
+				selectedFileId={selectedFile?.id ?? null}
 				onMetaChange={({ active, total }) => {
 					setSlideIndex(active);
 					setSlideCount(Math.max(total, 1));

@@ -5,6 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 type PresentationFrameProps = {
 	markdown: string;
 	slideIndex: number;
+	projectId?: string;
+	selectedFileId?: string | null;
 	onMetaChange?: (meta: { active: number; total: number }) => void;
 	showSpeakerNotes?: boolean;
 	className?: string;
@@ -13,6 +15,8 @@ type PresentationFrameProps = {
 export function PresentationFrame({
 	markdown,
 	slideIndex,
+	projectId,
+	selectedFileId,
 	onMetaChange,
 	showSpeakerNotes = false,
 	className,
@@ -21,7 +25,7 @@ export function PresentationFrame({
 
 	const rendered = useMemo(() => {
 		try {
-			return renderMarp(markdown);
+			return renderMarp(markdown, projectId, selectedFileId);
 		} catch (error) {
 			return {
 				html: `<section><h1>Marp Render Error</h1><p>${error instanceof Error ? error.message : "Unknown error"}</p></section>`,
@@ -29,7 +33,7 @@ export function PresentationFrame({
 				comments: [[]],
 			};
 		}
-	}, [markdown]);
+	}, [markdown, projectId, selectedFileId]);
 
 	const activeComments = rendered.comments[slideIndex] ?? [];
 	const hasSpeakerNotes = activeComments.some((comment) => comment.trim().length > 0);
@@ -198,7 +202,7 @@ export function PresentationFrame({
 					? "h-full w-full border-0 bg-black"
 					: (className ?? "h-full w-full border-0")
 			}
-			sandbox="allow-scripts"
+			sandbox="allow-scripts allow-same-origin"
 		/>
 	);
 

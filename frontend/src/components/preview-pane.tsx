@@ -23,14 +23,14 @@ export const PreviewPane = ({ markdown, label, projectId, selectedFileId }: Prev
 	const { resolvedTheme } = useTheme();
 	const rendered = useMemo(() => {
 		try {
-			return renderMarp(markdown);
+			return renderMarp(markdown, projectId, selectedFileId);
 		} catch (error) {
 			return {
 				html: `<section><h1>Marp Render Fehler</h1><p>${error instanceof Error ? error.message : "Unbekannter Fehler"}</p></section>`,
 				css: "",
 			};
 		}
-	}, [markdown]);
+	}, [markdown, projectId, selectedFileId]);
 
 	const srcDoc = useMemo(() => {
 		return `<!doctype html>
@@ -98,7 +98,7 @@ export const PreviewPane = ({ markdown, label, projectId, selectedFileId }: Prev
 					title="Marp preview"
 					srcDoc={srcDoc}
 					className="h-full w-full"
-					sandbox="allow-scripts"
+					sandbox="allow-scripts allow-same-origin"
 				/>
 			</CardContent>
 		</Card>
