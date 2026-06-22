@@ -46,7 +46,7 @@ marp.use((md) => {
 		},
 	);
 
-	md.core.ruler.push("rewrite_html_img_urls", (state) => {
+	md.core.ruler.push("rewrite_html_img_urls", (state: any) => {
 		if (!currentProjectId) {
 			return;
 		}
@@ -56,7 +56,7 @@ marp.use((md) => {
 			}
 			token.content = token.content.replace(
 				/(<img[^>]+src=["'])(?!https?:\/\/|data:|\/\/)([^"']+)(["'])/gi,
-				(_, pre, src, quote) => {
+				(_: string, pre: string, src: string, quote: string) => {
 					const resolved = resolvePosixPath(currentMarkdownDir, src);
 					return `${pre}${API_URL}/projects/${currentProjectId}/files/${resolved}${quote}`;
 				},
