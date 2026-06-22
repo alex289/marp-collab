@@ -301,6 +301,10 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 				</div>
 				<CardAction>
 					<div className="flex items-center gap-2">
+						<Badge variant={statusVariant} className="capitalize">
+							<span className="size-1.5 rounded-full bg-current" aria-hidden="true" />
+							{status}
+						</Badge>
 						<ManageProjectCollaborator projectId={projectId} />
 						<TooltipProvider>
 							<Tooltip>
@@ -336,10 +340,6 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 								</TooltipContent>
 							</Tooltip>
 						</TooltipProvider>
-						<Badge variant={statusVariant} className="capitalize">
-							<span className="size-1.5 rounded-full bg-current" aria-hidden="true" />
-							{status}
-						</Badge>
 					</div>
 				</CardAction>
 			</CardHeader>
