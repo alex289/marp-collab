@@ -19,12 +19,12 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Save } from "lucide-react";
-import { HotkeyLabel } from "./hotkey-lable";
+import { Check, Copy, FileText, Maximize2, Sparkles, Users, WrapText } from "lucide-react";
 import { useTheme } from "./theme-provider";
 import { vsCodeLight } from "@fsegurai/codemirror-theme-vscode-light";
 import { vsCodeDark } from "@fsegurai/codemirror-theme-vscode-dark";
 import { ManageProjectCollaborator } from "./dialog/manage-project-collaborator";
+import { toast } from "sonner";
 
 type Participant = {
 	id: string;
@@ -44,6 +44,44 @@ type EditorPaneProps = {
 export type EditorPaneHandle = {
 	jumpToLine: (line: number) => void;
 };
+
+type EditorStats = {
+	chars: number;
+	words: number;
+	lines: number;
+	cursorLine: number;
+	cursorColumn: number;
+	slides: number;
+};
+
+const emptyStats: EditorStats = {
+	chars: 0,
+	words: 0,
+	lines: 0,
+	cursorLine: 1,
+	cursorColumn: 1,
+	slides: 0,
+};
+
+function getEditorStats(view: EditorView): EditorStats {
+	const doc = view.state.doc;
+	const text = doc.toString();
+	const cursor = view.state.selection.main.head;
+	const cursorLine = doc.lineAt(cursor);
+	const words = text.trim().length === 0 ? 0 : text.trim().split(/\s+/).length;
+	const slides = text
+		.split(/\r\n|\n|\r/)
+		.filter((line) => line.trim() === "---" || line.trim().startsWith("# ")).length;
+
+	return {
+		chars: text.length,
+		words,
+		lines: doc.lines,
+		cursorLine: cursorLine.number,
+		cursorColumn: cursor - cursorLine.from + 1,
+		slides,
+	};
+}
 
 const editorTheme = EditorView.theme({
 	"&": {
@@ -72,6 +110,15 @@ const editorTheme = EditorView.theme({
 	".cm-selectionBackground, &.cm-focused .cm-selectionBackground": {
 		backgroundColor: "color-mix(in oklab, var(--primary) 24%, transparent)",
 	},
+	".cm-matchingBracket, .cm-nonmatchingBracket": {
+		backgroundColor: "color-mix(in oklab, var(--primary) 14%, transparent)",
+		outline: "1px solid color-mix(in oklab, var(--primary) 42%, transparent)",
+	},
+	".cm-foldPlaceholder": {
+		border: "1px solid var(--border)",
+		backgroundColor: "var(--muted)",
+		color: "var(--muted-foreground)",
+	},
 	"&.cm-focused": {
 		outline: "none",
 	},
@@ -84,6 +131,10 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 	const mountRef = useRef<HTMLDivElement | null>(null);
 	const viewRef = useRef<EditorView | null>(null);
 	const [participants, setParticipants] = useState<Participant[]>([]);
+	const [stats, setStats] = useState<EditorStats>(emptyStats);
+	const [wrapEnabled, setWrapEnabled] = useState(true);
+	const [isFocused, setIsFocused] = useState(false);
+	const [copiedLabel, setCopiedLabel] = useState(false);
 	const { resolvedTheme } = useTheme();
 
 	const statusVariant = useMemo(() => {
@@ -98,8 +149,34 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 		return "outline";
 	}, [status]);
 
+	const fileKind = useMemo(() => {
+		if (!label) {
+			return "No file";
+		}
+
+		if (label.endsWith(".css")) {
+			return "CSS";
+		}
+
+		return "Markdown";
+	}, [label]);
+
+	const visibleParticipants = participants.slice(0, 4);
+	const hiddenParticipants = Math.max(0, participants.length - visibleParticipants.length);
+
+	const copyLabel = async () => {
+		if (!label) {
+			return;
+		}
+
+		await navigator.clipboard.writeText(label);
+		setCopiedLabel(true);
+		window.setTimeout(() => setCopiedLabel(false), 1200);
+	};
+
 	useEffect(() => {
 		if (!mountRef.current || !yText || !awareness || !undoManager) {
+			setStats(emptyStats);
 			return;
 		}
 
@@ -112,17 +189,27 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 				basicSetup,
 				EditorState.tabSize.of(2),
 				languageExtension,
-				EditorView.lineWrapping,
 				Prec.highest(
 					keymap.of([
 						{
 							key: "Mod-s",
-							run: () => true,
+							run: () => {
+								toast("Marp Collab automatically saves your changes. 🚀", {
+									position: "bottom-center",
+								});
+								return true;
+							},
 						},
 					]),
 				),
 				keymap.of([indentWithTab, ...yUndoManagerKeymap]),
 				yCollab(yText, awareness, { undoManager }),
+				EditorView.updateListener.of((update) => {
+					if (update.docChanged || update.selectionSet) {
+						setStats(getEditorStats(update.view));
+					}
+				}),
+				wrapEnabled ? EditorView.lineWrapping : [],
 				resolvedTheme === "dark" ? vsCodeDark : vsCodeLight,
 				Prec.highest(editorTheme),
 			],
@@ -133,6 +220,7 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 			parent: mountRef.current,
 		});
 		viewRef.current = view;
+		setStats(getEditorStats(view));
 
 		return () => {
 			if (viewRef.current === view) {
@@ -140,7 +228,7 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 			}
 			view.destroy();
 		};
-	}, [yText, awareness, undoManager, label, resolvedTheme]);
+	}, [yText, awareness, undoManager, label, resolvedTheme, wrapEnabled]);
 
 	useEffect(() => {
 		if (!awareness) {
@@ -187,68 +275,139 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 	}));
 
 	return (
-		<Card className="flex h-full min-h-0 flex-col gap-0 overflow-hidden border-border/80 py-0">
-			<CardHeader className="shrink-0 border-b border-border px-4 py-3">
-				<CardTitle>Editor</CardTitle>
-				<CardDescription className="font-mono text-[11px]">
-					{label ?? "Bitte Datei wählen"}
-
-					<div className="flex flex-wrap items-center gap-2 px-4 py-2">
-						{participants.length === 0 ? (
-							<p className="text-xs text-muted-foreground">No active collaborators yet</p>
-						) : (
-							participants.map((participant) => (
-								<div
-									key={participant.id}
-									className="inline-flex items-center gap-1 rounded-full border border-border bg-background px-2 py-1 text-xs"
+		<Card
+			className={
+				isFocused
+					? "fixed inset-4 z-50 flex min-h-0 flex-col gap-0 overflow-hidden border-border/80 bg-card py-0 shadow-2xl"
+					: "flex h-full min-h-0 flex-col gap-0 overflow-hidden border-border/80 py-0"
+			}
+		>
+			<CardHeader className="shrink-0 border-b border-border bg-card/95 px-4 py-3 backdrop-blur">
+				<div className="flex min-w-0 items-start gap-3">
+					<div className="min-w-0">
+						<CardTitle className="flex min-w-0 items-center gap-2">
+							<span className="truncate">Editor</span>
+							<Badge variant="outline">{fileKind}</Badge>
+						</CardTitle>
+						<CardDescription className="mt-1 flex min-w-0 items-center gap-2 font-mono text-[11px]">
+							<span className="truncate">{label ?? "Bitte Datei wählen"}</span>
+							{label ? (
+								<Button
+									type="button"
+									variant="ghost"
+									size="icon-xs"
+									aria-label="Copy file name"
+									onClick={copyLabel}
 								>
-									<span
-										className="h-2 w-2 rounded-full"
-										style={{ backgroundColor: participant.color }}
-									/>
-									{participant.name}
-								</div>
-							))
-						)}
+									{copiedLabel ? <Check /> : <Copy />}
+								</Button>
+							) : null}
+						</CardDescription>
 					</div>
-				</CardDescription>
+				</div>
 				<CardAction>
 					<div className="flex items-center gap-2">
+						<Badge variant={statusVariant} className="capitalize">
+							<span className="size-1.5 rounded-full bg-current" aria-hidden="true" />
+							{status}
+						</Badge>
 						<ManageProjectCollaborator projectId={projectId} />
 						<TooltipProvider>
 							<Tooltip>
 								<TooltipTrigger asChild>
 									<Button
 										type="button"
-										variant="outline"
-										size="sm"
-										title="Document saves automatically"
-										aria-label="Save document"
-										onClick={() =>
-											mountRef.current?.querySelector<HTMLElement>(".cm-content")?.focus()
-										}
+										variant={wrapEnabled ? "secondary" : "outline"}
+										size="icon-sm"
+										aria-label={wrapEnabled ? "Disable line wrapping" : "Enable line wrapping"}
+										onClick={() => setWrapEnabled((current) => !current)}
 									>
-										<Save />
-										<span>Save</span>
+										<WrapText />
 									</Button>
 								</TooltipTrigger>
 								<TooltipContent>
-									<span>Document saves automatically</span>
-									<HotkeyLabel hotkey="S" />
+									<span>{wrapEnabled ? "Disable line wrapping" : "Enable line wrapping"}</span>
+								</TooltipContent>
+							</Tooltip>
+							<Tooltip>
+								<TooltipTrigger asChild>
+									<Button
+										type="button"
+										variant={isFocused ? "secondary" : "outline"}
+										size="icon-sm"
+										aria-label={isFocused ? "Exit focus mode" : "Enter focus mode"}
+										onClick={() => setIsFocused((current) => !current)}
+									>
+										<Maximize2 />
+									</Button>
+								</TooltipTrigger>
+								<TooltipContent>
+									<span>{isFocused ? "Exit focus mode" : "Enter focus mode"}</span>
 								</TooltipContent>
 							</Tooltip>
 						</TooltipProvider>
-						<Badge variant={statusVariant}>{status}</Badge>
 					</div>
 				</CardAction>
 			</CardHeader>
 
-			<CardContent className="min-h-0 flex-1 p-0">
+			<div className="flex shrink-0 items-center justify-between gap-3 border-b border-border bg-muted/35 px-4 py-2">
+				{isFocused ? (
+					<div className="flex min-w-0 flex-wrap items-center gap-2">
+						<Badge variant="outline">{stats.lines.toLocaleString()} lines</Badge>
+						<Badge variant="outline">{stats.words.toLocaleString()} words</Badge>
+						<Badge variant="outline">{stats.chars.toLocaleString()} chars</Badge>
+						{fileKind === "Markdown" ? (
+							<Badge variant="outline">
+								<Sparkles />
+								{stats.slides.toLocaleString()} slides
+							</Badge>
+						) : null}
+					</div>
+				) : (
+					<div></div>
+				)}
+				<div className="flex min-w-0 items-center gap-3">
+					<div className="hidden items-center gap-1 text-xs text-muted-foreground sm:flex">
+						<Users className="size-3" />
+						<span>{participants.length} online</span>
+					</div>
+					<div className="flex -space-x-1">
+						{visibleParticipants.map((participant) => (
+							<TooltipProvider key={participant.id}>
+								<Tooltip>
+									<TooltipTrigger asChild>
+										<span
+											className="flex size-6 items-center justify-center rounded-full border border-card text-[10px] font-semibold text-white shadow-sm"
+											style={{ backgroundColor: participant.color }}
+										>
+											{participant.name.slice(0, 1).toUpperCase()}
+										</span>
+									</TooltipTrigger>
+									<TooltipContent>{participant.name}</TooltipContent>
+								</Tooltip>
+							</TooltipProvider>
+						))}
+						{hiddenParticipants > 0 ? (
+							<span className="flex size-6 items-center justify-center rounded-full border border-card bg-muted text-[10px] font-semibold text-muted-foreground shadow-sm">
+								+{hiddenParticipants}
+							</span>
+						) : null}
+					</div>
+					<span className="font-mono text-[11px] text-muted-foreground">
+						Ln {stats.cursorLine}, Col {stats.cursorColumn}
+					</span>
+				</div>
+			</div>
+
+			<CardContent className="relative min-h-0 flex-1 p-0">
 				{yText ? (
 					<div ref={mountRef} className="h-full" />
 				) : (
-					<div className="flex h-full items-center justify-center text-sm text-muted-foreground">
-						Choose a file on the left to get started.
+					<div className="flex h-full flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
+						<div className="flex size-12 items-center justify-center rounded-md border border-dashed border-border bg-muted/40">
+							<FileText className="size-5" />
+						</div>
+						<span>Choose a file on the left to get started.</span>
 					</div>
 				)}
 			</CardContent>

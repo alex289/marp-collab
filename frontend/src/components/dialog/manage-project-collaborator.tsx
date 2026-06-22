@@ -106,12 +106,11 @@ export function ManageProjectCollaborator({ projectId }: { projectId: string }) 
 				<Button
 					type="button"
 					variant="outline"
-					size="sm"
+					size="icon-sm"
 					title="Share the document with others"
 					aria-label="Share document"
 				>
 					<Share />
-					<span>Share</span>
 				</Button>
 			</DialogTrigger>
 			<DialogContent className="sm:max-w-xl">
