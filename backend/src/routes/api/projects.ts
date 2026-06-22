@@ -118,6 +118,10 @@ app.post("/:projectId/collaborators", async (c) => {
 		return c.json({ error: "User with that email not found" }, 404);
 	}
 
+	if (getCollaborator(projectId, userToAdd.userId)) {
+		return c.json({ error: "User is already a collaborator" }, 400);
+	}
+
 	addCollaborator(projectId, userToAdd.userId, parseResult.data.readOnly);
 
 	return c.json({ success: true });
