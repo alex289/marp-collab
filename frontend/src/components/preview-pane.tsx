@@ -20,17 +20,17 @@ type PreviewPaneProps = {
 };
 
 export const PreviewPane = ({ markdown, label, projectId, selectedFileId }: PreviewPaneProps) => {
-	const { theme } = useTheme();
+	const { resolvedTheme } = useTheme();
 	const rendered = useMemo(() => {
 		try {
-			return renderMarp(markdown);
+			return renderMarp(markdown, projectId, selectedFileId);
 		} catch (error) {
 			return {
 				html: `<section><h1>Marp Render Fehler</h1><p>${error instanceof Error ? error.message : "Unbekannter Fehler"}</p></section>`,
 				css: "",
 			};
 		}
-	}, [markdown]);
+	}, [markdown, projectId, selectedFileId]);
 
 	const srcDoc = useMemo(() => {
 		return `<!doctype html>
@@ -44,7 +44,7 @@ export const PreviewPane = ({ markdown, label, projectId, selectedFileId }: Prev
         margin: 0;
         min-height: 100%;
         box-sizing: border-box;
-        background: ${theme === "dark" ? "oklch(0.205 0 0)" : "oklch(1 0 0)"};
+        background: ${resolvedTheme === "dark" ? "oklch(0.205 0 0)" : "oklch(1 0 0)"};
       }
       ${rendered.css}
       div.marpit {
@@ -56,7 +56,7 @@ export const PreviewPane = ({ markdown, label, projectId, selectedFileId }: Prev
       div.marpit > svg[data-marpit-svg],
       body > section {
         flex: 0 0 auto;
-		border: 1px solid ${theme === "dark" ? "oklch(1 0 0 / 10%)" : "oklch(0.922 0 0)"};
+		border: 1px solid ${resolvedTheme === "dark" ? "oklch(1 0 0 / 10%)" : "oklch(0.922 0 0)"};
       }
     </style>
   </head>
@@ -64,11 +64,11 @@ export const PreviewPane = ({ markdown, label, projectId, selectedFileId }: Prev
     ${rendered.html}
   </body>
 </html>`;
-	}, [rendered.css, rendered.html, theme]);
+	}, [rendered.css, rendered.html, resolvedTheme]);
 
 	return (
-		<Card className="flex h-full min-h-0 flex-col overflow-hidden border-border/80">
-			<CardHeader className="border-b border-border gap-2">
+		<Card className="flex h-full min-h-0 flex-col overflow-hidden border-border/80 py-0">
+			<CardHeader className="shrink-0 border border-border px-4 py-3">
 				<CardTitle>Live Preview</CardTitle>
 				<CardAction>
 					{label ? (
@@ -93,12 +93,12 @@ export const PreviewPane = ({ markdown, label, projectId, selectedFileId }: Prev
 				<CardDescription>{label ? `Active file: ${label}` : "No file selected"}</CardDescription>
 			</CardHeader>
 
-			<CardContent className="min-h-0 flex-1">
+			<CardContent className="min-h-0 flex-1 overflow-hidden p-0">
 				<iframe
 					title="Marp preview"
 					srcDoc={srcDoc}
 					className="h-full w-full"
-					sandbox="allow-scripts"
+					sandbox="allow-scripts allow-same-origin"
 				/>
 			</CardContent>
 		</Card>

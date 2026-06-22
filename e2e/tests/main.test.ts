@@ -18,6 +18,10 @@ async function waitForSidebar(page: Page) {
 	});
 }
 
+async function fillNewFileName(page: Page, fileName: string) {
+	await page.getByRole("textbox", { name: "File name" }).fill(fileName);
+}
+
 async function clickSidebarDelete(
 	page: Page,
 	itemName: string,
@@ -119,7 +123,7 @@ test.describe("Editor page — file management", () => {
 		await expect(page.getByRole("dialog")).toBeVisible();
 		await expect(page.getByRole("heading", { name: "New File" })).toBeVisible();
 
-		await page.getByLabel("File name").fill(MARKDOWN_FILE_NAME);
+		await fillNewFileName(page, MARKDOWN_FILE_NAME);
 		await page.getByRole("button", { name: "Create" }).click();
 
 		await expect(page.getByRole("dialog")).not.toBeVisible();
@@ -131,7 +135,7 @@ test.describe("Editor page — file management", () => {
 
 	test("create a CSS file", async ({ page }) => {
 		await page.getByRole("button", { name: "New file" }).click();
-		await page.getByLabel("File name").fill(CSS_FILE_NAME);
+		await fillNewFileName(page, CSS_FILE_NAME);
 		await page.getByRole("button", { name: "Create" }).click();
 
 		await expect(page.getByRole("dialog")).not.toBeVisible();
@@ -152,7 +156,7 @@ test.describe("Editor page — file management", () => {
 
 	test("create a file inside a folder using slash syntax", async ({ page }) => {
 		await page.getByRole("button", { name: "New file" }).click();
-		await page.getByLabel("File name").fill(`${FOLDER_NAME}/notes.md`);
+		await fillNewFileName(page, `${FOLDER_NAME}/notes.md`);
 		await page.getByRole("button", { name: "Create" }).click();
 
 		await expect(page.getByRole("dialog")).not.toBeVisible();
@@ -162,7 +166,7 @@ test.describe("Editor page — file management", () => {
 
 	test("delete a file", async ({ page }) => {
 		await page.getByRole("button", { name: "New file" }).click();
-		await page.getByLabel("File name").fill("to-delete.md");
+		await fillNewFileName(page, "to-delete.md");
 		await page.getByRole("button", { name: "Create" }).click();
 		await expect(page.getByRole("dialog")).not.toBeVisible();
 		await expect(page.getByText("to-delete.md")).toBeVisible();
@@ -194,7 +198,7 @@ test.describe("Editor page — file management", () => {
 
 	test("cancel file deletion keeps the file", async ({ page }) => {
 		await page.getByRole("button", { name: "New file" }).click();
-		await page.getByLabel("File name").fill("keep-me.md");
+		await fillNewFileName(page, "keep-me.md");
 		await page.getByRole("button", { name: "Create" }).click();
 		await expect(page.getByRole("dialog")).not.toBeVisible();
 
@@ -283,6 +287,7 @@ test.describe("Presentation mode", () => {
 
 		await page.getByRole("link", { name: "Start presentation" }).click();
 		await expect(page).toHaveURL(/mode=present/);
+		await expect(page.getByRole("button", { name: "End presentation" })).toBeVisible();
 
 		await page.keyboard.press("Escape");
 		await expect(page).not.toHaveURL(/mode=present/);

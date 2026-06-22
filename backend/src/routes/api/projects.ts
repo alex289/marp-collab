@@ -1,5 +1,8 @@
 import { Hono } from "hono";
 import type { HonoVariables } from "../../types.ts";
+import { createReadStream } from "node:fs";
+import { stat } from "node:fs/promises";
+import { Readable } from "node:stream";
 import {
 	createProject,
 	deleteProject,
@@ -9,17 +12,18 @@ import {
 import { getUserProjectAccess } from "../../helpers/project-auth.ts";
 import {
 	createProjectDir,
-	createProjectZip,
+	createProjectZipStream,
 	deleteProjectFile,
 	deleteProjectFolder,
 	getDeckFiles,
-	getProjectFile,
 	isMarkdownFileId,
 	moveProjectFile,
+	resolveProjectFilePath,
 	saveDocumentContent,
 	saveProjectFile,
 	toDocumentName,
 } from "../../collab/files.ts";
+import { stream } from "hono/streaming";
 import {
 	getFileType,
 	getMimeType,
@@ -37,6 +41,7 @@ import {
 	removeCollaborator,
 } from "../../db/models/project-collaborator.ts";
 import { getUserByEmail } from "../../db/models/user.ts";
+import { closeProjectCollaboratorConnections } from "../../collab/connections.ts";
 
 const app = new Hono<{ Variables: HonoVariables }>();
 
@@ -79,24 +84,6 @@ app.get("/:projectId/collaborators", (c) => {
 	return c.json({ collaborators: collaborators });
 });
 
-app.get("/:projectId/collaborators", (c) => {
-	const user = c.get("user");
-	if (!user) {
-		return c.json({ error: "Unauthorized" }, 401);
-	}
-
-	const { projectId } = c.req.param();
-
-	const access = getUserProjectAccess(projectId, user.id);
-	if (!access) {
-		return c.json({ error: "Project not found or access denied" }, 403);
-	}
-
-	const collaborators = getCollaboratorsByProjectId(projectId);
-
-	return c.json({ collaborators: collaborators });
-});
-
 app.post("/:projectId/collaborators", async (c) => {
 	const user = c.get("user");
 	if (!user) {
@@ -118,6 +105,8 @@ app.post("/:projectId/collaborators", async (c) => {
 		return c.json({ error: z.prettifyError(parseResult.error) }, 400);
 	}
 
+	// User enumeration risk accepted: private OIDC-only deployment where all users
+	// are known within the organisation.
 	const userToAdd = getUserByEmail(parseResult.data.email);
 	if (!userToAdd) {
 		return c.json({ error: "User with that email not found" }, 404);
@@ -144,7 +133,7 @@ app.delete("/:projectId/collaborators/:userId", (c) => {
 	}
 
 	removeCollaborator(projectId, userId);
-	// to-do: close WebSocket connections for the removed collaborator
+	closeProjectCollaboratorConnections(projectId, userId);
 
 	return c.json({ success: true });
 });
@@ -209,16 +198,20 @@ app.get("/:projectId/export.zip", async (c) => {
 		return c.json({ error: "Project not found or access denied" }, 403);
 	}
 
-	const zip = await createProjectZip(projectId);
+	const zipStream = await createProjectZipStream(projectId);
 
-	return new Response(new Uint8Array(zip), {
-		status: 200,
-		headers: {
-			"Content-Type": "application/zip",
-			"Content-Disposition": `attachment; filename="${project.name}.zip"`,
-			"Content-Length": zip.length.toString(),
-			"Cache-Control": "no-store",
-		},
+	c.header("Content-Type", "application/zip");
+	c.header(
+		"Content-Disposition",
+		`attachment; filename*=UTF-8''${encodeURIComponent(project.name + ".zip")}`,
+	);
+	c.header("Cache-Control", "no-store");
+
+	return stream(c, async (s) => {
+		s.onAbort(() => {
+			zipStream.destroy();
+		});
+		await s.pipe(Readable.toWeb(zipStream) as ReadableStream);
 	});
 });
 
@@ -424,17 +417,27 @@ app.get("/:projectId/files/:fileId{.+}", async (c) => {
 		return c.json({ error: "Use the collaboration endpoint for markdown files" }, 400);
 	}
 
-	const data = await getProjectFile(projectId, fileId);
-	if (!data) {
+	const filePath = resolveProjectFilePath(projectId, fileId);
+	if (!filePath) {
 		return c.json({ error: "File not found" }, 404);
 	}
 
-	return new Response(new Uint8Array(data), {
-		status: 200,
-		headers: {
-			"Content-Type": getMimeType(fileId),
-			"Cache-Control": "private, max-age=3600",
-		},
+	try {
+		await stat(filePath);
+	} catch {
+		return c.json({ error: "File not found" }, 404);
+	}
+
+	c.header("Content-Type", getMimeType(fileId));
+	c.header("Content-Disposition", "attachment");
+	c.header("Cache-Control", "private, max-age=3600");
+
+	return stream(c, async (s) => {
+		const readStream = createReadStream(filePath);
+		s.onAbort(() => {
+			readStream.destroy();
+		});
+		await s.pipe(Readable.toWeb(readStream) as ReadableStream);
 	});
 });
 

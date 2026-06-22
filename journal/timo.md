@@ -15,6 +15,8 @@ Erkenntnisse:
 - PNPM in Docker Builds zu verwenden ist nicht sehr angenehm. Das pnpm Docker Image enthält kein Node.js, das Node.js Image enthält kein pnpm. Trick: PNPM binary aus dem pnpm Image kopieren und in einem Node.js Image verwenden. Siehe Dockerfile.
 - E2E-Tests für alle grundlegenden Operationen mit Claude Code generiert. Das Debugging warum einzelne Tests nicht erfolgreich waren hat einiges an Zeit gekostet. Allerdings konnte ein Bug im Backend wodurch leere Ordner wie Dateien behandelt wurden gefunden und behoben werden.
 
-Nächste Woche:
+# KW 26
 
-- ...
+Herausforderungen:
+
+- Marp hat leider keine TypeScript Types für die Plugin-API. Claude war allerdings in der Lage sich den Marp-Quelltext anzusehen um ein Plugin zu generieren, mit dem die URL von eingebetteten Bildern in den Folien modifiziert werden kann.

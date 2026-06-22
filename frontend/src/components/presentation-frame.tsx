@@ -1,9 +1,12 @@
 import { renderMarp } from "@/lib/marp";
 import { useEffect, useMemo, useRef } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 type PresentationFrameProps = {
 	markdown: string;
 	slideIndex: number;
+	projectId?: string;
+	selectedFileId?: string | null;
 	onMetaChange?: (meta: { active: number; total: number }) => void;
 	showSpeakerNotes?: boolean;
 	className?: string;
@@ -12,6 +15,8 @@ type PresentationFrameProps = {
 export function PresentationFrame({
 	markdown,
 	slideIndex,
+	projectId,
+	selectedFileId,
 	onMetaChange,
 	showSpeakerNotes = false,
 	className,
@@ -20,7 +25,7 @@ export function PresentationFrame({
 
 	const rendered = useMemo(() => {
 		try {
-			return renderMarp(markdown);
+			return renderMarp(markdown, projectId, selectedFileId);
 		} catch (error) {
 			return {
 				html: `<section><h1>Marp Render Error</h1><p>${error instanceof Error ? error.message : "Unknown error"}</p></section>`,
@@ -28,7 +33,7 @@ export function PresentationFrame({
 				comments: [[]],
 			};
 		}
-	}, [markdown]);
+	}, [markdown, projectId, selectedFileId]);
 
 	const activeComments = rendered.comments[slideIndex] ?? [];
 	const hasSpeakerNotes = activeComments.some((comment) => comment.trim().length > 0);
@@ -197,7 +202,7 @@ export function PresentationFrame({
 					? "h-full w-full border-0 bg-black"
 					: (className ?? "h-full w-full border-0")
 			}
-			sandbox="allow-scripts"
+			sandbox="allow-scripts allow-same-origin"
 		/>
 	);
 
@@ -211,11 +216,11 @@ export function PresentationFrame({
 				<div className="min-h-0 overflow-hidden rounded-md border border-white/10 shadow-2xl">
 					{iframe}
 				</div>
-				<aside className="flex min-h-0 flex-col overflow-hidden rounded-md border border-white/10 shadow-2xl">
-					<div className="border-b border-black/10 dark:border-white/10 px-4 py-3">
-						<h2 className="text-sm font-semibold">Speaker notes</h2>
-					</div>
-					<div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+				<Card className="flex min-h-0 flex-col overflow-hidden py-0 shadow-2xl">
+					<CardHeader className="shrink-0 border-b border-border px-4 py-3">
+						<CardTitle>Speaker notes</CardTitle>
+					</CardHeader>
+					<CardContent className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
 						{hasSpeakerNotes ? (
 							<div className="space-y-3 text-sm leading-6">
 								{activeComments.map((comment, index) => {
@@ -233,10 +238,10 @@ export function PresentationFrame({
 								})}
 							</div>
 						) : (
-							<p className="text-sm text-zinc-400">No speaker notes for this slide.</p>
+							<p className="text-sm text-muted-foreground">No speaker notes for this slide.</p>
 						)}
-					</div>
-				</aside>
+					</CardContent>
+				</Card>
 			</div>
 		</div>
 	);

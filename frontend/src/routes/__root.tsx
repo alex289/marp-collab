@@ -1,6 +1,7 @@
 import { LoadingScreen } from "@/components/loading-screen";
 import { ThemeProvider } from "@/components/theme-provider";
 import { Button } from "@/components/ui/button";
+import { Toaster } from "@/components/ui/sonner";
 import { useAuthSync } from "@/hooks/use-auth-sync";
 import { useHealthCheck } from "@/hooks/use-health-check";
 import useIsUserOffline from "@/hooks/use-is-user-offline";
@@ -50,6 +51,7 @@ function RootWrapper() {
 	return (
 		<ThemeProvider defaultTheme="system" storageKey="marp-collab-theme">
 			<RootComponent />
+			<Toaster />
 		</ThemeProvider>
 	);
 }

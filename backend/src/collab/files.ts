@@ -1,6 +1,6 @@
-import { Buffer } from "node:buffer";
 import { glob, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { Readable } from "node:stream";
 import { ZipArchive } from "archiver";
 import { getFileType, MARKDOWN_EXTENSIONS } from "../helpers/file-allowlist.ts";
 
@@ -97,7 +97,7 @@ type ZipSourceEntry = {
 	fullPath: string | null;
 };
 
-export async function createProjectZip(projectId: string): Promise<Buffer> {
+export async function createProjectZipStream(projectId: string): Promise<Readable> {
 	await ensurePresentationsDir(projectId);
 
 	const projectDir = resolve(presentationsDir, projectId);
@@ -135,13 +135,6 @@ export async function createProjectZip(projectId: string): Promise<Buffer> {
 	await collectEntries("");
 
 	const archive = new ZipArchive({ zlib: { level: 9 } });
-	const chunks: Buffer[] = [];
-	const archiveBuffer = new Promise<Buffer>((resolveArchive, rejectArchive) => {
-		archive.on("data", (chunk) => chunks.push(chunk));
-		archive.on("warning", rejectArchive);
-		archive.on("error", rejectArchive);
-		archive.on("end", () => resolveArchive(Buffer.concat(chunks)));
-	});
 
 	for (const entry of zipEntries) {
 		if (entry.type === "directory") {
@@ -155,7 +148,7 @@ export async function createProjectZip(projectId: string): Promise<Buffer> {
 	}
 
 	await archive.finalize();
-	return archiveBuffer;
+	return archive;
 }
 
 export async function createProjectDir(projectId: string, dirPath: string): Promise<void> {
@@ -230,7 +223,7 @@ export async function saveDocumentBinary(documentName: string, data: Uint8Array)
 	await writeFile(`${filePath}.yjs`, data);
 }
 
-function resolveProjectFilePath(projectId: string, fileId: string): string | null {
+export function resolveProjectFilePath(projectId: string, fileId: string): string | null {
 	if (!isValidProjectId(projectId)) {
 		return null;
 	}
@@ -263,25 +256,6 @@ export async function saveProjectFile(
 
 	await mkdir(dirname(filePath), { recursive: true });
 	await writeFile(filePath, data);
-}
-
-export async function getProjectFile(
-	projectId: string,
-	fileId: string,
-): Promise<Buffer | undefined> {
-	const filePath = resolveProjectFilePath(projectId, fileId);
-	if (!filePath) {
-		return undefined;
-	}
-
-	try {
-		return await readFile(filePath);
-	} catch (error) {
-		if (isMissingFileError(error)) {
-			return undefined;
-		}
-		throw error;
-	}
 }
 
 export async function moveProjectFile(

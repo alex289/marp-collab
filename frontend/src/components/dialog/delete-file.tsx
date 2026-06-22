@@ -67,7 +67,7 @@ export function DeleteFileDialog({ projectId, file, open, onOpenChange, onDelete
 
 	return (
 		<Dialog open={open} onOpenChange={handleOpenChange}>
-			<DialogContent className="sm:max-w-sm">
+			<DialogContent className="sm:max-w-md">
 				<DialogHeader>
 					<DialogTitle>{isFolder ? "Delete Folder" : "Delete File"}</DialogTitle>
 					<DialogDescription>

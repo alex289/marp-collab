@@ -66,7 +66,7 @@ export function CreateFileDialog({ projectId, open, onOpenChange, onCreated }: P
 
 	return (
 		<Dialog open={open} onOpenChange={handleOpenChange}>
-			<DialogContent className="sm:max-w-sm">
+			<DialogContent className="sm:max-w-md">
 				<form onSubmit={handleSubmit} className="flex flex-col gap-3">
 					<DialogHeader>
 						<DialogTitle>New File</DialogTitle>
