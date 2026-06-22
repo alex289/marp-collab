@@ -4,6 +4,19 @@ import { API_URL } from "./config";
 let currentProjectId = "";
 let currentMarkdownDir = "";
 
+function resolvePosixPath(dir: string, src: string): string {
+	const parts = (dir + src).split("/");
+	const stack: string[] = [];
+	for (const p of parts) {
+		if (p === "..") {
+			stack.pop();
+		} else if (p && p !== ".") {
+			stack.push(p);
+		}
+	}
+	return stack.join("/");
+}
+
 const marp = new Marp({ html: true });
 
 marp.use((md) => {
@@ -23,10 +36,7 @@ marp.use((md) => {
 				if (!src || /^(https?:\/\/|data:|\/\/)/.test(src) || src.startsWith("/")) {
 					continue;
 				}
-				const resolved = new URL(
-					src,
-					new URL(currentMarkdownDir, self.location.href),
-				).pathname.slice(1);
+				const resolved = resolvePosixPath(currentMarkdownDir, src);
 				const newSrc = `${API_URL}/projects/${currentProjectId}/files/${resolved}`;
 				token.attrSet("src", newSrc);
 				if (token.meta?.marpitImage) {
