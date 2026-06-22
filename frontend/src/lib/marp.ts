@@ -45,6 +45,24 @@ marp.use((md) => {
 			}
 		},
 	);
+
+	md.core.ruler.push("rewrite_html_img_urls", (state) => {
+		if (!currentProjectId) {
+			return;
+		}
+		for (const token of state.tokens) {
+			if (token.type !== "html_inline" && token.type !== "html_block") {
+				continue;
+			}
+			token.content = token.content.replace(
+				/(<img[^>]+src=["'])(?!https?:\/\/|data:|\/\/)([^"']+)(["'])/gi,
+				(_, pre, src, quote) => {
+					const resolved = resolvePosixPath(currentMarkdownDir, src);
+					return `${pre}${API_URL}/projects/${currentProjectId}/files/${resolved}${quote}`;
+				},
+			);
+		}
+	});
 });
 
 export const renderMarp = (
