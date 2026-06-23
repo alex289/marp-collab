@@ -83,7 +83,7 @@ function RootComponent() {
 										<p className="text-muted-foreground text-xs">
 											{new Date(project.createdAt).toLocaleDateString()}
 										</p>
-										<p className="text-muted-foreground text-xs">Shared by {project.userName}</p>
+										<p className="text-muted-foreground text-xs">Shared by {project.ownerName}</p>
 									</CardContent>
 								</Card>
 							</Link>

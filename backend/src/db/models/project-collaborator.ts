@@ -7,6 +7,7 @@ export type ProjectCollaborator = {
 	readOnly: boolean;
 	createdAt: Date;
 	userName: string;
+	ownerName: string;
 };
 
 type ProjectCollaboratorRow = {
@@ -16,6 +17,7 @@ type ProjectCollaboratorRow = {
 	readOnly: number;
 	createdAt: string;
 	userName: string;
+	ownerName: string;
 };
 
 function rowToProjectCollaborator(row: ProjectCollaboratorRow): ProjectCollaborator {
@@ -26,23 +28,26 @@ function rowToProjectCollaborator(row: ProjectCollaboratorRow): ProjectCollabora
 		readOnly: row.readOnly === 1,
 		createdAt: new Date(row.createdAt),
 		userName: row.userName,
+		ownerName: row.ownerName,
 	};
 }
 
 const preparedStatements = {
 	getCollaboratorsByProjectId: db.prepare(`
-        select projectId, userId, readOnly, pc.createdAt, u.name as userName, p.name as projectName
+        select projectId, userId, readOnly, pc.createdAt, u.name as userName, p.name as projectName, owner.name as ownerName
         from project_collaborator pc
 		join user u on userId = u.id
 		join project p on projectId = p.id
+		join user owner on p.ownerId = owner.id
         where projectId = ?
         order by pc.createdAt asc
     `),
 	getCollaborationsByUserId: db.prepare(`
-        select projectId, userId as ownerId, readOnly, pc.createdAt, u.name as userName, p.name as projectName
+        select projectId, userId, readOnly, pc.createdAt, u.name as userName, p.name as projectName, owner.name as ownerName
 		from project_collaborator pc
 		join user u on userId = u.id
 		join project p on projectId = p.id
+		join user owner on p.ownerId = owner.id
 		where userId = ?
 		order by pc.createdAt asc
     `),
