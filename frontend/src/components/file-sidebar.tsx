@@ -18,7 +18,8 @@ import {
 	Settings,
 } from "lucide-react";
 import { useHotkeys } from "@tanstack/react-hotkeys";
-import type { DeckFile } from "@/lib/types";
+import useSWR from "swr";
+import type { DeckFile, Project } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import {
 	Sidebar,
@@ -41,6 +42,7 @@ import { CreateFileDialog } from "@/components/dialog/create-file";
 import { CreateFolderDialog } from "@/components/dialog/create-folder";
 import { UploadFileDialog } from "@/components/dialog/upload-file";
 import { DeleteFileDialog } from "@/components/dialog/delete-file";
+import { DeleteProjectDialog } from "@/components/dialog/delete-project";
 import { API_URL } from "@/lib/config";
 import {
 	Select,
@@ -50,6 +52,8 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { ProjectNameSetting } from "@/components/project-name-setting";
+import { Label } from "./ui/label";
+import { Button } from "./ui/button";
 
 type NestedFileNode = {
 	name: string;
@@ -230,6 +234,19 @@ type DragState = {
 };
 
 type WorkspacePanel = "files" | "search" | "outline" | "settings";
+
+type ProjectSettingsResponse = {
+	project: Project;
+	isOwner: boolean;
+};
+
+const projectSettingsFetcher = async (url: string): Promise<ProjectSettingsResponse> => {
+	const res = await fetch(url, { credentials: "include" });
+	if (!res.ok) {
+		throw new Error(`Request failed: ${res.status} ${res.statusText}`);
+	}
+	return res.json() as Promise<ProjectSettingsResponse>;
+};
 
 const WORKSPACE_PANEL_HOTKEYS = {
 	files: "Alt+1",
@@ -487,6 +504,7 @@ type FileSidebarProps = {
 	currentTheme: string;
 	onThemeChange: (theme: string) => void;
 	themeSelectDisabled: boolean;
+	onProjectDeleted?: () => void;
 };
 
 export const FileSidebar = ({
@@ -505,6 +523,7 @@ export const FileSidebar = ({
 	currentTheme,
 	onThemeChange,
 	themeSelectDisabled,
+	onProjectDeleted,
 }: FileSidebarProps) => {
 	const nestedFileTree = useMemo(() => buildNestedFileTree(files), [files]);
 	const [activePanel, setActivePanel] = useState<WorkspacePanel>("files");
@@ -750,6 +769,11 @@ export const FileSidebar = ({
 		</SidebarGroup>
 	);
 	const themeOptions = Array.from(new Set([...themeNames, currentTheme]));
+	const projectSettingsKey = `${API_URL}/projects/${projectId}`;
+	const { data: projectSettings } = useSWR<ProjectSettingsResponse>(
+		projectSettingsKey,
+		projectSettingsFetcher,
+	);
 	const settingsPanel = (
 		<SidebarGroup>
 			<SidebarGroupLabel className="flex items-center gap-2 pb-2 pl-0">
@@ -758,23 +782,65 @@ export const FileSidebar = ({
 			</SidebarGroupLabel>
 			<SidebarGroupContent className="space-y-4">
 				<ProjectNameSetting projectId={projectId} />
-				<Select value={currentTheme} onValueChange={onThemeChange} disabled={themeSelectDisabled}>
-					<SelectTrigger className="w-full" aria-label="Slide theme">
-						<SelectValue placeholder="Theme" />
-					</SelectTrigger>
-					<SelectContent>
-						{themeOptions.map((name) => (
-							<SelectItem key={name} value={name}>
-								{name}
-							</SelectItem>
-						))}
-					</SelectContent>
-				</Select>
-				<p className="px-1 text-xs text-muted-foreground">
-					{themeSelectDisabled
-						? "Select a writable Markdown deck file to change its theme."
-						: "Theme changes update the active deck frontmatter."}
-				</p>
+
+				<div className="space-y-1.5">
+					<Label htmlFor="theme-select" className="px-1 text-xs font-medium">
+						Slide theme
+					</Label>
+					<Select value={currentTheme} onValueChange={onThemeChange} disabled={themeSelectDisabled}>
+						<SelectTrigger className="w-full" aria-label="Slide theme">
+							<SelectValue placeholder="Theme" />
+						</SelectTrigger>
+						<SelectContent>
+							{themeOptions.map((name) => (
+								<SelectItem key={name} value={name}>
+									{name}
+								</SelectItem>
+							))}
+						</SelectContent>
+					</Select>
+					<p className="px-1 text-xs text-muted-foreground">
+						{themeSelectDisabled
+							? "Select a writable Markdown deck file to change its theme."
+							: "Theme changes update the active deck frontmatter."}
+					</p>
+				</div>
+
+				<div className="space-y-1.5">
+					<Label className="px-1 text-xs font-medium">Danger zone</Label>
+					{projectSettings?.project ? (
+						<DeleteProjectDialog
+							project={projectSettings.project}
+							onDeleted={onProjectDeleted}
+							trigger={
+								<Button
+									type="button"
+									variant="destructive"
+									className="w-full justify-start"
+									disabled={!projectSettings.isOwner}
+								>
+									<Trash2 />
+									Delete presentation
+								</Button>
+							}
+						/>
+					) : (
+						<Button
+							type="button"
+							variant="destructive"
+							className="w-full justify-start"
+							disabled
+						>
+							<Trash2 />
+							Delete presentation
+						</Button>
+					)}
+					<p className="px-1 text-xs text-muted-foreground">
+						{projectSettings?.isOwner
+							? "Permanently delete this presentation and its files."
+							: "Only the project owner can delete this presentation."}
+					</p>
+				</div>
 			</SidebarGroupContent>
 		</SidebarGroup>
 	);

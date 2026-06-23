@@ -685,6 +685,9 @@ function RouteComponent() {
 						currentTheme={currentTheme}
 						onThemeChange={handleThemeChange}
 						themeSelectDisabled={!isMarkdownDeckFile(selectedFile) || collab.readOnly}
+						onProjectDeleted={() => {
+							void navigate({ to: "/", replace: true });
+						}}
 						searchPanel={
 							<SearchPanel
 								matches={searchMatches}

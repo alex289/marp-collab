@@ -1,5 +1,5 @@
 import type { Project } from "@/lib/types";
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import {
 	Dialog,
 	DialogClose,
@@ -16,7 +16,13 @@ import { API_URL } from "@/lib/config";
 import { Trash2Icon } from "lucide-react";
 import { mutate } from "swr";
 
-export function DeleteProjectDialog({ project }: { project: Project }) {
+type DeleteProjectDialogProps = {
+	project: Project;
+	trigger?: ReactNode;
+	onDeleted?: () => void;
+};
+
+export function DeleteProjectDialog({ project, trigger, onDeleted }: DeleteProjectDialogProps) {
 	const [open, setOpen] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [isSubmitting, setIsSubmitting] = useState(false);
@@ -48,6 +54,7 @@ export function DeleteProjectDialog({ project }: { project: Project }) {
 
 			await mutate(`${API_URL}/projects`);
 			setOpen(false);
+			onDeleted?.();
 		} catch {
 			setError("An unexpected error occurred. Please try again.");
 		} finally {
@@ -58,20 +65,22 @@ export function DeleteProjectDialog({ project }: { project: Project }) {
 	return (
 		<Dialog open={open} onOpenChange={handleOpenChange}>
 			<DialogTrigger asChild>
-				<Button
-					type="button"
-					size="icon-sm"
-					variant="ghost"
-					onClick={(e) => {
-						e.preventDefault();
-						e.stopPropagation();
-						setOpen(true);
-					}}
-					aria-label={`Delete ${project.name}`}
-					className="ml-1"
-				>
-					<Trash2Icon />
-				</Button>
+				{trigger ?? (
+					<Button
+						type="button"
+						size="icon-sm"
+						variant="ghost"
+						onClick={(e) => {
+							e.preventDefault();
+							e.stopPropagation();
+							setOpen(true);
+						}}
+						aria-label={`Delete ${project.name}`}
+						className="ml-1"
+					>
+						<Trash2Icon />
+					</Button>
+				)}
 			</DialogTrigger>
 			<DialogContent className="sm:max-w-md" showCloseButton={false}>
 				<DialogHeader>
