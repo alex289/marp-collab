@@ -51,7 +51,7 @@ function RootComponent() {
 								</CardHeader>
 								<CardContent>
 									<p className="text-muted-foreground text-xs">
-										{new Date(project.createdAt).toLocaleDateString()}
+										Created at {new Date(project.createdAt).toLocaleDateString()}
 									</p>
 								</CardContent>
 							</Card>
@@ -81,7 +81,7 @@ function RootComponent() {
 									</CardHeader>
 									<CardContent>
 										<p className="text-muted-foreground text-xs">
-											{new Date(project.createdAt).toLocaleDateString()}
+											Created at {new Date(project.createdAt).toLocaleDateString()}
 										</p>
 										<p className="text-muted-foreground text-xs">Shared by {project.ownerName}</p>
 									</CardContent>
