@@ -1,22 +1,24 @@
 import { CreatePresentationDialog } from "@/components/dialog/create-presentation";
 import { LoadingScreen } from "@/components/loading-screen";
 import Navbar from "@/components/navbar";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { API_URL } from "@/lib/config";
 import { fetcher } from "@/lib/fetcher";
 import type { Project, SharedProject } from "@/lib/types";
 import { Link, createFileRoute } from "@tanstack/react-router";
 import useSWR from "swr";
+import { DeleteProjectDialog } from "@/components/dialog/delete-project";
+import { RenameProjectDialog } from "@/components/dialog/rename-project";
 
 export const Route = createFileRoute("/")({
 	component: RootComponent,
 });
 
 function RootComponent() {
-	const { data, isLoading } = useSWR<{ projects: Project[]; sharedProjects: SharedProject[] }>(
-		`${API_URL}/projects`,
-		fetcher,
-	);
+	const { data, isLoading } = useSWR<{
+		projects: Project[];
+		sharedProjects: SharedProject[];
+	}>(`${API_URL}/projects`, fetcher);
 
 	if (isLoading) {
 		return <LoadingScreen />;
@@ -39,23 +41,7 @@ function RootComponent() {
 			) : (
 				<div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
 					{projects.map((project) => (
-						<Link
-							key={project.id}
-							to="/presentations/$id"
-							params={{ id: project.id }}
-							className="focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-lg"
-						>
-							<Card className="hover:ring-foreground/25 transition-shadow cursor-pointer h-full">
-								<CardHeader>
-									<CardTitle className="text-sm font-medium truncate">{project.name}</CardTitle>
-								</CardHeader>
-								<CardContent>
-									<p className="text-muted-foreground text-xs">
-										Created at {new Date(project.createdAt).toLocaleDateString()}
-									</p>
-								</CardContent>
-							</Card>
-						</Link>
+						<ProjectCard key={project.id} project={project} />
 					))}
 				</div>
 			)}
@@ -92,5 +78,31 @@ function RootComponent() {
 				</>
 			)}
 		</div>
+	);
+}
+
+function ProjectCard({ project }: { project: Project }) {
+	return (
+		<Card className="relative h-full transition-shadow hover:ring-foreground/25">
+			<Link
+				key={project.id}
+				to="/presentations/$id"
+				params={{ id: project.id }}
+				aria-label={`Open ${project.name}`}
+				className="absolute inset-0 z-10 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+			/>
+			<CardHeader>
+				<CardTitle className="truncate pr-16 text-sm font-medium">{project.name}</CardTitle>
+				<CardAction className="relative z-20">
+					<RenameProjectDialog project={project} />
+					<DeleteProjectDialog project={project} />
+				</CardAction>
+			</CardHeader>
+			<CardContent>
+				<p className="text-muted-foreground text-xs">
+					Created at {new Date(project.createdAt).toLocaleDateString()}
+				</p>
+			</CardContent>
+		</Card>
 	);
 }

@@ -3,6 +3,7 @@ import useSWR from "swr";
 import { API_URL } from "@/lib/config";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
+import { Label } from "./ui/label";
 
 type ProjectResponse = {
 	project: { id: string; name: string };
@@ -66,9 +67,9 @@ export const ProjectNameSetting = ({ projectId }: ProjectNameSettingProps) => {
 
 	return (
 		<div className="space-y-1.5">
-			<label htmlFor="project-name" className="px-1 text-xs font-medium">
+			<Label htmlFor="project-name" className="px-1 text-xs font-medium">
 				Project name
-			</label>
+			</Label>
 			<div className="flex items-center gap-1.5">
 				<Input
 					id="project-name"
@@ -95,11 +96,7 @@ export const ProjectNameSetting = ({ projectId }: ProjectNameSettingProps) => {
 				</Button>
 			</div>
 			<p className="px-1 text-xs text-muted-foreground">
-				{error
-					? error
-					: isOwner
-						? "Rename the project."
-						: "Only the project owner can rename it."}
+				{error ? error : isOwner ? "Rename the project." : "Only the project owner can rename it."}
 			</p>
 		</div>
 	);
