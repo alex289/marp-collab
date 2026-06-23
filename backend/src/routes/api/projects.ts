@@ -8,6 +8,7 @@ import {
 	deleteProject,
 	getProjectById,
 	getProjectsByOwnerId,
+	updateProject,
 } from "../../db/models/project.ts";
 import { getUserProjectAccess } from "../../helpers/project-auth.ts";
 import {
@@ -48,6 +49,10 @@ import { closeProjectCollaboratorConnections } from "../../collab/connections.ts
 const app = new Hono<{ Variables: HonoVariables }>();
 
 const createProjectSchema = z.object({
+	name: z.string().trim().min(1).max(255),
+});
+
+const updateProjectSchema = z.object({
 	name: z.string().trim().min(1).max(255),
 });
 
@@ -207,6 +212,51 @@ app.post("/", async (c) => {
 	);
 
 	return c.json({ projectId: id });
+});
+
+app.get("/:projectId", (c) => {
+	const user = c.get("user");
+	if (!user) {
+		return c.json({ error: "Unauthorized" }, 401);
+	}
+
+	const { projectId } = c.req.param();
+
+	const access = getUserProjectAccess(projectId, user.id);
+	if (!access) {
+		return c.json({ error: "Project not found or access denied" }, 403);
+	}
+
+	const project = getProjectById(projectId);
+	if (!project) {
+		return c.json({ error: "Project not found" }, 404);
+	}
+
+	return c.json({ project, isOwner: access.isOwner });
+});
+
+app.patch("/:projectId", async (c) => {
+	const user = c.get("user");
+	if (!user) {
+		return c.json({ error: "Unauthorized" }, 401);
+	}
+
+	const { projectId } = c.req.param();
+
+	const access = getUserProjectAccess(projectId, user.id);
+	if (!access || !access.isOwner) {
+		return c.json({ error: "Project not found or access denied" }, 403);
+	}
+
+	const body = await c.req.json();
+	const parseResult = updateProjectSchema.safeParse(body);
+	if (!parseResult.success) {
+		return c.json({ error: z.prettifyError(parseResult.error) }, 400);
+	}
+
+	updateProject({ id: projectId, name: parseResult.data.name });
+
+	return c.json({ success: true });
 });
 
 app.delete("/:projectId", (c) => {

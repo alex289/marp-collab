@@ -49,6 +49,7 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
+import { ProjectNameSetting } from "@/components/project-name-setting";
 
 type NestedFileNode = {
 	name: string;
@@ -755,7 +756,8 @@ export const FileSidebar = ({
 				<Settings className="size-4" />
 				Settings
 			</SidebarGroupLabel>
-			<SidebarGroupContent className="space-y-2">
+			<SidebarGroupContent className="space-y-4">
+				<ProjectNameSetting projectId={projectId} />
 				<Select value={currentTheme} onValueChange={onThemeChange} disabled={themeSelectDisabled}>
 					<SelectTrigger className="w-full" aria-label="Slide theme">
 						<SelectValue placeholder="Theme" />
