@@ -825,12 +825,7 @@ export const FileSidebar = ({
 							}
 						/>
 					) : (
-						<Button
-							type="button"
-							variant="destructive"
-							className="w-full justify-start"
-							disabled
-						>
+						<Button type="button" variant="destructive" className="w-full justify-start" disabled>
 							<Trash2 />
 							Delete presentation
 						</Button>
