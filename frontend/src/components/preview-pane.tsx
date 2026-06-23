@@ -10,13 +10,6 @@ import {
 import { renderMarp } from "@/lib/marp";
 import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
-import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "@/components/ui/select";
 import { useTheme } from "./theme-provider";
 
 type PreviewPaneProps = {
@@ -24,22 +17,9 @@ type PreviewPaneProps = {
 	label: string | null;
 	projectId: string;
 	selectedFileId: string | null;
-	themeNames: string[];
-	currentTheme: string;
-	onThemeChange: (theme: string) => void;
-	themeSelectDisabled: boolean;
 };
 
-export const PreviewPane = ({
-	markdown,
-	label,
-	projectId,
-	selectedFileId,
-	themeNames,
-	currentTheme,
-	onThemeChange,
-	themeSelectDisabled,
-}: PreviewPaneProps) => {
+export const PreviewPane = ({ markdown, label, projectId, selectedFileId }: PreviewPaneProps) => {
 	const { resolvedTheme } = useTheme();
 	const rendered = useMemo(() => {
 		try {
@@ -91,18 +71,6 @@ export const PreviewPane = ({
 			<CardHeader className="shrink-0 border border-border px-4 py-3">
 				<CardTitle>Live Preview</CardTitle>
 				<CardAction className="flex items-center gap-2">
-					<Select value={currentTheme} onValueChange={onThemeChange} disabled={themeSelectDisabled}>
-						<SelectTrigger size="sm" className="w-[150px]" aria-label="Slide theme">
-							<SelectValue placeholder="Theme" />
-						</SelectTrigger>
-						<SelectContent>
-							{Array.from(new Set([...themeNames, currentTheme])).map((name) => (
-								<SelectItem key={name} value={name}>
-									{name}
-								</SelectItem>
-							))}
-						</SelectContent>
-					</Select>
 					{label ? (
 						<Button asChild variant="outline" size="sm">
 							<Link

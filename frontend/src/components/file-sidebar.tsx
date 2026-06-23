@@ -15,6 +15,7 @@ import {
 	Type,
 	Search,
 	ListTree,
+	Settings,
 } from "lucide-react";
 import { useHotkeys } from "@tanstack/react-hotkeys";
 import type { DeckFile } from "@/lib/types";
@@ -41,6 +42,13 @@ import { CreateFolderDialog } from "@/components/dialog/create-folder";
 import { UploadFileDialog } from "@/components/dialog/upload-file";
 import { DeleteFileDialog } from "@/components/dialog/delete-file";
 import { API_URL } from "@/lib/config";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select";
 
 type NestedFileNode = {
 	name: string;
@@ -220,12 +228,13 @@ type DragState = {
 	dragOverPath: string | null;
 };
 
-type WorkspacePanel = "files" | "search" | "outline";
+type WorkspacePanel = "files" | "search" | "outline" | "settings";
 
 const WORKSPACE_PANEL_HOTKEYS = {
 	files: "Alt+1",
 	search: "Alt+2",
 	outline: "Alt+3",
+	settings: "Alt+4",
 } as const;
 
 type WorkspaceRailButtonsProps = {
@@ -258,6 +267,14 @@ const WorkspaceRailButtons = ({ activePanel, onPanelClick }: WorkspaceRailButton
 			onClick={() => onPanelClick("outline")}
 		>
 			<ListTree />
+		</WorkspaceRailButton>
+		<WorkspaceRailButton
+			active={activePanel === "settings"}
+			label="Settings"
+			hotkey={WORKSPACE_PANEL_HOTKEYS.settings}
+			onClick={() => onPanelClick("settings")}
+		>
+			<Settings />
 		</WorkspaceRailButton>
 	</>
 );
@@ -465,6 +482,10 @@ type FileSidebarProps = {
 	setSidebarOpen: (open: boolean) => void;
 	searchPanel?: React.ReactNode;
 	outlinePanel?: React.ReactNode;
+	themeNames: string[];
+	currentTheme: string;
+	onThemeChange: (theme: string) => void;
+	themeSelectDisabled: boolean;
 };
 
 export const FileSidebar = ({
@@ -479,6 +500,10 @@ export const FileSidebar = ({
 	setSidebarOpen,
 	searchPanel = null,
 	outlinePanel = null,
+	themeNames,
+	currentTheme,
+	onThemeChange,
+	themeSelectDisabled,
 }: FileSidebarProps) => {
 	const nestedFileTree = useMemo(() => buildNestedFileTree(files), [files]);
 	const [activePanel, setActivePanel] = useState<WorkspacePanel>("files");
@@ -616,6 +641,10 @@ export const FileSidebar = ({
 			hotkey: WORKSPACE_PANEL_HOTKEYS.outline,
 			callback: () => handlePanelButtonClick("outline"),
 		},
+		{
+			hotkey: WORKSPACE_PANEL_HOTKEYS.settings,
+			callback: () => handlePanelButtonClick("settings"),
+		},
 	]);
 
 	const isRootDragOver = dragState.dragOverPath === "" && dragState.draggingFileId !== null;
@@ -719,6 +748,34 @@ export const FileSidebar = ({
 			<SidebarGroupContent>{filesPanelMenu}</SidebarGroupContent>
 		</SidebarGroup>
 	);
+	const themeOptions = Array.from(new Set([...themeNames, currentTheme]));
+	const settingsPanel = (
+		<SidebarGroup>
+			<SidebarGroupLabel className="flex items-center gap-2 pb-2 pl-0">
+				<Settings className="size-4" />
+				Settings
+			</SidebarGroupLabel>
+			<SidebarGroupContent className="space-y-2">
+				<Select value={currentTheme} onValueChange={onThemeChange} disabled={themeSelectDisabled}>
+					<SelectTrigger className="w-full" aria-label="Slide theme">
+						<SelectValue placeholder="Theme" />
+					</SelectTrigger>
+					<SelectContent>
+						{themeOptions.map((name) => (
+							<SelectItem key={name} value={name}>
+								{name}
+							</SelectItem>
+						))}
+					</SelectContent>
+				</Select>
+				<p className="px-1 text-xs text-muted-foreground">
+					{themeSelectDisabled
+						? "Select a writable Markdown deck file to change its theme."
+						: "Theme changes update the active deck frontmatter."}
+				</p>
+			</SidebarGroupContent>
+		</SidebarGroup>
+	);
 
 	return (
 		<>
@@ -781,6 +838,7 @@ export const FileSidebar = ({
 									{activePanel === "files" ? filesPanel : null}
 									{activePanel === "search" ? (searchPanel ?? emptyPanel) : null}
 									{activePanel === "outline" ? (outlinePanel ?? emptyPanel) : null}
+									{activePanel === "settings" ? settingsPanel : null}
 								</div>
 							</div>
 						</SidebarContent>

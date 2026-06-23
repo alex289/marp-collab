@@ -681,6 +681,10 @@ function RouteComponent() {
 						onRetry={reload}
 						sidebarOpen={sidebarOpen}
 						setSidebarOpen={setSidebarOpen}
+						themeNames={themeNames}
+						currentTheme={currentTheme}
+						onThemeChange={handleThemeChange}
+						themeSelectDisabled={!isMarkdownDeckFile(selectedFile) || collab.readOnly}
 						searchPanel={
 							<SearchPanel
 								matches={searchMatches}
@@ -725,10 +729,6 @@ function RouteComponent() {
 							label={selectedFile?.label ?? null}
 							projectId={id}
 							selectedFileId={selectedFile?.id ?? null}
-							themeNames={themeNames}
-							currentTheme={currentTheme}
-							onThemeChange={handleThemeChange}
-							themeSelectDisabled={!isMarkdownDeckFile(selectedFile) || collab.readOnly}
 						/>
 					</Suspense>
 				</main>
