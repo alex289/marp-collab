@@ -522,7 +522,14 @@ function RouteComponent() {
 			updatedAt,
 			userId: presenceUser.userId,
 		} satisfies PresentationAwarenessState);
-	}, [collab.awareness, isPresentation, presenceUser.userId, selectedFile?.id, selectedFile?.type, slideIndex]);
+	}, [
+		collab.awareness,
+		isPresentation,
+		presenceUser.userId,
+		selectedFile?.id,
+		selectedFile?.type,
+		slideIndex,
+	]);
 
 	useHotkeys(
 		[
