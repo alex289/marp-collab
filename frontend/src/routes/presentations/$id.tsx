@@ -41,31 +41,35 @@ const searchValidator = z.object({
 	file: z.optional(z.string()),
 });
 
-const PRESENTATION_SYNC_CHANNEL_PREFIX = "marp-collab-presentation";
-
-type PresentationSlideSyncMessage = {
-	type: "presentation-slide";
+type PresentationAwarenessState = {
+	fileId: string;
 	slideIndex: number;
+	updatedAt: number;
+	userId: string;
 };
 
-function parseSlideSyncMessage(data: unknown): PresentationSlideSyncMessage | null {
+function parsePresentationAwarenessState(data: unknown): PresentationAwarenessState | null {
 	if (!data || typeof data !== "object") {
 		return null;
 	}
 
-	const payload = data as Partial<PresentationSlideSyncMessage>;
-	const slideIndex = payload.slideIndex;
+	const payload = data as Partial<PresentationAwarenessState>;
 	if (
-		payload.type !== "presentation-slide" ||
-		typeof slideIndex !== "number" ||
-		!Number.isFinite(slideIndex)
+		typeof payload.fileId !== "string" ||
+		typeof payload.slideIndex !== "number" ||
+		!Number.isFinite(payload.slideIndex) ||
+		typeof payload.updatedAt !== "number" ||
+		!Number.isFinite(payload.updatedAt) ||
+		typeof payload.userId !== "string"
 	) {
 		return null;
 	}
 
 	return {
-		type: "presentation-slide",
-		slideIndex: Math.max(0, Math.trunc(slideIndex)),
+		fileId: payload.fileId,
+		slideIndex: Math.max(0, Math.trunc(payload.slideIndex)),
+		updatedAt: payload.updatedAt,
+		userId: payload.userId,
 	};
 }
 
@@ -135,15 +139,11 @@ function RouteComponent() {
 	const [searchError, setSearchError] = useState<string | null>(null);
 	const editorPaneRef = useRef<EditorPaneHandle | null>(null);
 	const viewerContainerRef = useRef<HTMLDivElement | null>(null);
-	const slideSyncChannelRef = useRef<BroadcastChannel | null>(null);
-	const suppressNextSlideBroadcastRef = useRef(false);
+	const suppressNextSlideAwarenessUpdateRef = useRef(false);
+	const lastAppliedPresentationUpdateRef = useRef(0);
 
 	const isPresentation = search.mode === "present" || search.mode === "viewer";
 	const isViewer = search.mode === "viewer";
-	const slideSyncChannelName =
-		isPresentation && selectedFile?.type === "markdown"
-			? `${PRESENTATION_SYNC_CHANNEL_PREFIX}:${id}:${selectedFile.id}`
-			: null;
 	const outlineItems = useMemo(() => parseMarkdownOutline(markdown), [markdown]);
 
 	useEffect(() => {
@@ -409,7 +409,7 @@ function RouteComponent() {
 				return current;
 			}
 
-			suppressNextSlideBroadcastRef.current = true;
+			suppressNextSlideAwarenessUpdateRef.current = true;
 			return initialSlide;
 		});
 	}, [isPresentation, search.slide]);
@@ -438,57 +438,91 @@ function RouteComponent() {
 	}, [isViewer]);
 
 	useEffect(() => {
-		if (!slideSyncChannelName) {
-			slideSyncChannelRef.current?.close();
-			slideSyncChannelRef.current = null;
+		if (!isPresentation || selectedFile?.type !== "markdown" || !collab.awareness) {
 			return;
 		}
 
-		const channel = new BroadcastChannel(slideSyncChannelName);
-		slideSyncChannelRef.current = channel;
+		const applyNewestPresentationState = () => {
+			let newestState: PresentationAwarenessState | null = null;
 
-		const onMessage = (event: MessageEvent) => {
-			const message = parseSlideSyncMessage(event.data);
-			if (!message) {
+			for (const state of collab.awareness?.getStates().values() ?? []) {
+				const presentationState = parsePresentationAwarenessState(
+					(state as { presentation?: unknown }).presentation,
+				);
+				if (!presentationState || presentationState.fileId !== selectedFile.id) {
+					continue;
+				}
+
+				if (!newestState || presentationState.updatedAt > newestState.updatedAt) {
+					newestState = presentationState;
+				}
+			}
+
+			if (!newestState || newestState.updatedAt < lastAppliedPresentationUpdateRef.current) {
 				return;
 			}
 
+			const nextSlideIndex = Math.min(newestState.slideIndex, maxSlideIndex);
 			setSlideIndex((current) => {
-				if (current === message.slideIndex) {
+				if (
+					newestState.updatedAt === lastAppliedPresentationUpdateRef.current &&
+					current === nextSlideIndex
+				) {
 					return current;
 				}
 
-				suppressNextSlideBroadcastRef.current = true;
-				return message.slideIndex;
+				lastAppliedPresentationUpdateRef.current = newestState.updatedAt;
+				if (current === nextSlideIndex) {
+					return current;
+				}
+
+				suppressNextSlideAwarenessUpdateRef.current = true;
+				return nextSlideIndex;
 			});
 		};
 
-		channel.addEventListener("message", onMessage);
+		applyNewestPresentationState();
+		collab.awareness.on("change", applyNewestPresentationState);
 
 		return () => {
-			channel.removeEventListener("message", onMessage);
-			channel.close();
-			if (slideSyncChannelRef.current === channel) {
-				slideSyncChannelRef.current = null;
-			}
+			collab.awareness?.off("change", applyNewestPresentationState);
 		};
-	}, [slideSyncChannelName]);
+	}, [collab.awareness, isPresentation, maxSlideIndex, selectedFile?.id, selectedFile?.type]);
 
 	useEffect(() => {
-		if (!slideSyncChannelName) {
+		if (!collab.awareness) {
 			return;
 		}
 
-		if (suppressNextSlideBroadcastRef.current) {
-			suppressNextSlideBroadcastRef.current = false;
+		if (!isPresentation || selectedFile?.type !== "markdown") {
+			collab.awareness.setLocalStateField("presentation", null);
 			return;
 		}
 
-		slideSyncChannelRef.current?.postMessage({
-			type: "presentation-slide",
+		return () => {
+			collab.awareness?.setLocalStateField("presentation", null);
+		};
+	}, [collab.awareness, isPresentation, selectedFile?.id, selectedFile?.type]);
+
+	useEffect(() => {
+		if (!isPresentation || selectedFile?.type !== "markdown" || !collab.awareness) {
+			return;
+		}
+
+		if (suppressNextSlideAwarenessUpdateRef.current) {
+			suppressNextSlideAwarenessUpdateRef.current = false;
+			return;
+		}
+
+		const updatedAt = Date.now();
+		lastAppliedPresentationUpdateRef.current = updatedAt;
+		collab.awareness.setLocalStateField("presentation", {
+			fileId: selectedFile.id,
 			slideIndex,
-		} satisfies PresentationSlideSyncMessage);
-	}, [slideIndex, slideSyncChannelName]);
+			updatedAt,
+			userId: presenceUser.userId,
+		} satisfies PresentationAwarenessState);
+	}, [collab.awareness, isPresentation, presenceUser.userId, selectedFile?.id, selectedFile?.type, slideIndex]);
 
 	useHotkeys(
 		[
