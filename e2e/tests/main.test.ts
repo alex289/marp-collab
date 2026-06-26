@@ -18,6 +18,10 @@ async function waitForSidebar(page: Page) {
 	});
 }
 
+async function fillPresentationName(page: Page, name: string) {
+	await page.getByRole("textbox", { name: "Name" }).fill(name);
+}
+
 async function fillNewFileName(page: Page, fileName: string) {
 	await page.getByRole("textbox", { name: "File name" }).fill(fileName);
 }
@@ -54,7 +58,7 @@ test.describe("Presentation lifecycle", () => {
 		await expect(page.getByRole("dialog")).toBeVisible();
 		await expect(page.getByRole("heading", { name: "Create Presentation" })).toBeVisible();
 
-		await page.getByLabel("Name").fill(PRESENTATION_NAME);
+		await fillPresentationName(page, PRESENTATION_NAME);
 		await page.getByRole("button", { name: "Create" }).click();
 
 		await expect(page.getByRole("dialog")).not.toBeVisible();
@@ -83,7 +87,7 @@ test.describe("Presentation lifecycle", () => {
 		await page.goto("/");
 
 		await page.getByRole("button", { name: "Create Presentation" }).click();
-		await page.getByLabel("Name").fill("Draft");
+		await fillPresentationName(page, "Draft");
 		await page.getByRole("button", { name: "Cancel" }).click();
 
 		await expect(page.getByRole("dialog")).not.toBeVisible();
@@ -96,7 +100,7 @@ test.describe("Editor page — file management", () => {
 		await page.goto("/");
 
 		await page.getByRole("button", { name: "Create Presentation" }).click();
-		await page.getByLabel("Name").fill(PRESENTATION_NAME);
+		await fillPresentationName(page, PRESENTATION_NAME);
 		await page.getByRole("button", { name: "Create" }).click();
 		await expect(page.getByRole("dialog")).not.toBeVisible();
 
@@ -217,7 +221,7 @@ test.describe("Editor: content editing", () => {
 		await page.goto("/");
 
 		await page.getByRole("button", { name: "Create Presentation" }).click();
-		await page.getByLabel("Name").fill("Editor Flow Test");
+		await fillPresentationName(page, "Editor Flow Test");
 		await page.getByRole("button", { name: "Create" }).click();
 		await expect(page.getByRole("dialog")).not.toBeVisible();
 		await clickLastCard(page, "Editor Flow Test");
@@ -242,7 +246,7 @@ test.describe("Presentation mode", () => {
 		await page.goto("/");
 
 		await page.getByRole("button", { name: "Create Presentation" }).click();
-		await page.getByLabel("Name").fill("Presentation Mode Test");
+		await fillPresentationName(page, "Presentation Mode Test");
 		await page.getByRole("button", { name: "Create" }).click();
 		await expect(page.getByRole("dialog")).not.toBeVisible();
 		await clickLastCard(page, "Presentation Mode Test");
@@ -275,7 +279,7 @@ test.describe("Presentation mode", () => {
 		await page.goto("/");
 
 		await page.getByRole("button", { name: "Create Presentation" }).click();
-		await page.getByLabel("Name").fill("Escape Test");
+		await fillPresentationName(page, "Escape Test");
 		await page.getByRole("button", { name: "Create" }).click();
 		await expect(page.getByRole("dialog")).not.toBeVisible();
 		await clickLastCard(page, "Escape Test");
@@ -299,7 +303,7 @@ test.describe("Navigation", () => {
 		await page.goto("/");
 
 		await page.getByRole("button", { name: "Create Presentation" }).click();
-		await page.getByLabel("Name").fill("Nav Test");
+		await fillPresentationName(page, "Nav Test");
 		await page.getByRole("button", { name: "Create" }).click();
 		await expect(page.getByRole("dialog")).not.toBeVisible();
 		await clickLastCard(page, "Nav Test");
