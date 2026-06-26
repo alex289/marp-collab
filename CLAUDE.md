@@ -55,6 +55,7 @@ The backend is a single Hono app (`backend/src/app.ts`) that handles:
 **Collab document naming**: Documents follow the pattern `project/<projectId>/<fileId>`. Only files with editable extensions (`.md`, `.markdown`, `.css`) open over WebSocket. Hocuspocus authenticates the WS connection by checking the session and project access rights.
 
 **Persistence**: Each Yjs document is stored as:
+
 - `<DATA_PATH>/presentations/<projectId>/<fileId>` — plain text (authoritative source for non-collab reads)
 - `<DATA_PATH>/presentations/<projectId>/<fileId>.yjs` — binary Yjs state (loaded preferentially to restore CRDT history)
 
@@ -71,6 +72,7 @@ The backend is a single Hono app (`backend/src/app.ts`) that handles:
 - `/presentations/$id` — the main editor view
 
 **Editor route** (`routes/presentations/$id.tsx`) orchestrates:
+
 - `useCollabDocument` — creates/destroys `HocuspocusProvider` + `Y.Doc` per selected file
 - `useFiles` — SWR-fetched file tree for the project
 - `EditorPane` — CodeMirror 6 with `y-codemirror.next` binding (lazy loaded)
