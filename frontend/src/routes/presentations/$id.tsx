@@ -39,6 +39,7 @@ const paramsValidator = z.object({
 const searchValidator = z.object({
 	mode: z.optional(z.enum(["present", "viewer"])),
 	file: z.optional(z.string()),
+	fullscreen: z.optional(z.boolean()),
 });
 
 type PresentationAwarenessState = {
@@ -144,6 +145,7 @@ function RouteComponent() {
 
 	const isPresentation = search.mode === "present" || search.mode === "viewer";
 	const isViewer = search.mode === "viewer";
+	const autoFullscreen = search.fullscreen === true;
 	const outlineItems = useMemo(() => parseMarkdownOutline(markdown), [markdown]);
 
 	useEffect(() => {
@@ -424,8 +426,20 @@ function RouteComponent() {
 	}, [slideCount]);
 
 	const maxSlideIndex = Math.max(0, slideCount - 1);
+	const [fullscreenPromptVisible, setFullscreenPromptVisible] = useState(autoFullscreen);
+
+	const enterFullscreen = useCallback(() => {
+		void (viewerContainerRef.current ?? document.documentElement).requestFullscreen();
+		setFullscreenPromptVisible(false);
+	}, []);
+
 	const toggleViewerFullscreen = useCallback(() => {
 		if (!isViewer) {
+			return;
+		}
+
+		if (fullscreenPromptVisible) {
+			enterFullscreen();
 			return;
 		}
 
@@ -435,7 +449,7 @@ function RouteComponent() {
 		}
 
 		void (viewerContainerRef.current ?? document.documentElement).requestFullscreen();
-	}, [isViewer]);
+	}, [isViewer, fullscreenPromptVisible, enterFullscreen]);
 
 	useEffect(() => {
 		if (!isPresentation || selectedFile?.type !== "markdown" || !collab.awareness) {
@@ -626,9 +640,20 @@ function RouteComponent() {
 			return (
 				<div
 					ref={viewerContainerRef}
-					className="h-screen w-screen overflow-hidden bg-black text-white"
+					className="relative h-screen w-screen overflow-hidden bg-black text-white"
 				>
 					{frame}
+					{fullscreenPromptVisible && (
+						<div
+							className="absolute inset-0 z-50 flex cursor-pointer flex-col items-center justify-center gap-3 bg-black/70"
+							onClick={enterFullscreen}
+						>
+							<p className="select-none text-xl font-medium text-white">
+								Click to enter fullscreen
+							</p>
+							<p className="select-none text-sm text-white/50">Press Esc to exit</p>
+						</div>
+					)}
 				</div>
 			);
 		}

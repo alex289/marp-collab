@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useCallback, useMemo } from "react";
 import {
 	Card,
 	CardAction,
@@ -8,9 +8,10 @@ import {
 	CardTitle,
 } from "@/components/ui/card";
 import { renderMarp } from "@/lib/marp";
-import { Link } from "@tanstack/react-router";
+import { useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { useTheme } from "./theme-provider";
+import { getSecondaryScreen } from "@/lib/screen-management";
 
 type PreviewPaneProps = {
 	markdown: string;
@@ -21,6 +22,26 @@ type PreviewPaneProps = {
 
 export const PreviewPane = ({ markdown, label, projectId, selectedFileId }: PreviewPaneProps) => {
 	const { resolvedTheme } = useTheme();
+	const navigate = useNavigate();
+
+	const handleStartPresentation = useCallback(async () => {
+		const secondaryScreen = await getSecondaryScreen();
+
+		if (secondaryScreen) {
+			const viewerPath = `/presentations/${projectId}?mode=viewer&fullscreen=true${selectedFileId ? `&file=${encodeURIComponent(selectedFileId)}` : ""}`;
+			window.open(
+				viewerPath,
+				"_blank",
+				`left=${secondaryScreen.left},top=${secondaryScreen.top},width=${secondaryScreen.width},height=${secondaryScreen.height}`,
+			);
+		}
+
+		void navigate({
+			to: "/presentations/$id",
+			params: { id: projectId },
+			search: { mode: "present", file: selectedFileId ?? undefined },
+		});
+	}, [navigate, projectId, selectedFileId]);
 	const rendered = useMemo(() => {
 		try {
 			return renderMarp(markdown, projectId, selectedFileId);
@@ -72,17 +93,8 @@ export const PreviewPane = ({ markdown, label, projectId, selectedFileId }: Prev
 				<CardTitle>Live Preview</CardTitle>
 				<CardAction className="flex items-center gap-2">
 					{label ? (
-						<Button asChild variant="outline" size="sm">
-							<Link
-								to="/presentations/$id"
-								params={{ id: projectId }}
-								search={{
-									mode: "present",
-									file: selectedFileId ?? undefined,
-								}}
-							>
-								Start presentation
-							</Link>
+						<Button variant="outline" size="sm" onClick={() => void handleStartPresentation()}>
+							Start presentation
 						</Button>
 					) : (
 						<Button variant="outline" size="sm" disabled>
