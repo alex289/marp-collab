@@ -222,8 +222,7 @@ export function ManageProjectCollaborator({ projectId }: { projectId: string }) 
 								<Button
 									type="button"
 									variant="outline"
-									title="Share the document with others"
-									aria-label="Share document"
+									title="Add collaborator"
 									disabled={isSubmitting || !isEmailValid}
 									onClick={handleAddCollaborator}
 								>

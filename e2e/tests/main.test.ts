@@ -8,7 +8,7 @@ const FOLDER_NAME = "assets";
 async function clickLastCard(page: Page, name: string) {
 	await page
 		.getByRole("link", { name: new RegExp(name) })
-		.last()
+		.first()
 		.click();
 }
 
@@ -311,7 +311,7 @@ test.describe("Dashboard: card actions", () => {
 		await page.getByRole("button", { name: `Rename ${ORIGINAL}` }).click();
 		await expect(page.getByRole("heading", { name: "Rename Presentation" })).toBeVisible();
 
-		await page.getByLabel("Name").fill(RENAMED);
+		await page.getByRole("dialog").getByLabel("Name").fill(RENAMED);
 		await page.getByRole("button", { name: "Rename" }).click();
 
 		await expect(page.getByRole("dialog")).not.toBeVisible();
@@ -443,7 +443,7 @@ test.describe("Editor: file upload", () => {
 		});
 		await expect(page.getByText("theme.css")).toBeVisible();
 
-		await page.getByRole("button", { name: "Upload" }).click();
+		await page.getByRole("button", { name: "Upload", exact: true }).click();
 		await expect(page.getByRole("dialog")).not.toBeVisible();
 		await expect(page.getByRole("button", { name: "theme.css" })).toBeVisible({ timeout: 5_000 });
 	});
@@ -457,7 +457,7 @@ test.describe("Editor: file upload", () => {
 
 	test("upload button is disabled until a file is selected", async ({ page }) => {
 		await page.getByTitle("Upload file").click();
-		await expect(page.getByRole("button", { name: "Upload" })).toBeDisabled();
+		await expect(page.getByRole("button", { name: "Upload", exact: true })).toBeDisabled();
 	});
 });
 
@@ -516,9 +516,9 @@ test.describe("Editor: outline panel", () => {
 			.getByRole("button", { name: /^Outline/ })
 			.first()
 			.click();
-		await expect(page.getByText("Introduction")).toBeVisible({ timeout: 5_000 });
-		await expect(page.getByText("Background")).toBeVisible();
-		await expect(page.getByText("Conclusion")).toBeVisible();
+		await expect(page.getByRole("button", { name: "Introduction" })).toBeVisible({ timeout: 5_000 });
+		await expect(page.getByRole("button", { name: "Background" })).toBeVisible();
+		await expect(page.getByRole("button", { name: "Conclusion" })).toBeVisible();
 	});
 });
 
