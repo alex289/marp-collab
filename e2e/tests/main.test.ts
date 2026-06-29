@@ -516,7 +516,9 @@ test.describe("Editor: outline panel", () => {
 			.getByRole("button", { name: /^Outline/ })
 			.first()
 			.click();
-		await expect(page.getByRole("button", { name: "Introduction" })).toBeVisible({ timeout: 5_000 });
+		await expect(page.getByRole("button", { name: "Introduction" })).toBeVisible({
+			timeout: 5_000,
+		});
 		await expect(page.getByRole("button", { name: "Background" })).toBeVisible();
 		await expect(page.getByRole("button", { name: "Conclusion" })).toBeVisible();
 	});
