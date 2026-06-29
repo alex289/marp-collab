@@ -27,6 +27,10 @@ export const ALLOWED_ASSET_EXTENSIONS = new Set([
 	".woff2",
 	".ttf",
 	".otf",
+	".mp4",
+	".webm",
+	".ogv",
+	".mov",
 ]);
 
 export const MARKDOWN_EXTENSIONS = new Set([".md", ".markdown"]);
@@ -49,6 +53,10 @@ const EXTENSION_TO_MIME: Record<string, string> = {
 	".woff2": "font/woff2",
 	".ttf": "font/ttf",
 	".otf": "font/otf",
+	".mp4": "video/mp4",
+	".webm": "video/webm",
+	".ogv": "video/ogg",
+	".mov": "video/quicktime",
 };
 
 export function isAllowedUpload(filename: string, mimeType: string): boolean {

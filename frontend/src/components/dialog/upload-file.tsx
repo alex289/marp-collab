@@ -75,11 +75,11 @@ export function UploadFileDialog({ projectId, open, onOpenChange, onUploaded }: 
 					<DialogHeader>
 						<DialogTitle>Upload File</DialogTitle>
 						<DialogDescription>
-							Markdown, images, CSS, and font files are allowed.
+							Markdown, images, videos, CSS, and font files are allowed.
 						</DialogDescription>
 					</DialogHeader>
 					<FileDropZone
-						accept="image/*,.css,.md,.markdown,.woff,.woff2,.ttf,.otf"
+						accept="image/*,video/*,.css,.md,.markdown,.woff,.woff2,.ttf,.otf"
 						onChange={setSelectedFile}
 					/>
 					{selectedFile && (

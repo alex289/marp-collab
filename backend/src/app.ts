@@ -28,7 +28,7 @@ app.use((c, next) => {
 
 app.use(
 	bodyLimit({
-		maxSize: 10 * 1024 * 1024, // 10 MB
+		maxSize: 200 * 1024 * 1024, // 200 MB (supports video uploads)
 		onError: (c) => {
 			return c.text("Body is too large", { status: 413 });
 		},

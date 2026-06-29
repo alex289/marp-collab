@@ -26,6 +26,8 @@ describe("file-allowlist", () => {
 	test("isAllowedUpload should return true for allowed uploads", () => {
 		equal(isAllowedUpload("test.jpg", "image/jpeg"), true);
 		equal(isAllowedUpload("test.md", "text/markdown"), true);
+		equal(isAllowedUpload("test.mp4", "video/mp4"), true);
+		equal(isAllowedUpload("test.webm", "video/webm"), true);
 	});
 
 	test("isAllowedUpload should return false for disallowed uploads", () => {
