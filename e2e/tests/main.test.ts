@@ -298,6 +298,339 @@ test.describe("Presentation mode", () => {
 	});
 });
 
+test.describe("Dashboard: card actions", () => {
+	test("rename a presentation from the card", async ({ page }) => {
+		const ORIGINAL = "Card Rename Original";
+		const RENAMED = "Card Rename Updated";
+		await page.goto("/");
+		await page.getByRole("button", { name: "Create Presentation" }).click();
+		await fillPresentationName(page, ORIGINAL);
+		await page.getByRole("button", { name: "Create" }).click();
+		await expect(page.getByRole("dialog")).not.toBeVisible();
+
+		await page.getByRole("button", { name: `Rename ${ORIGINAL}` }).click();
+		await expect(page.getByRole("heading", { name: "Rename Presentation" })).toBeVisible();
+
+		await page.getByLabel("Name").fill(RENAMED);
+		await page.getByRole("button", { name: "Rename" }).click();
+
+		await expect(page.getByRole("dialog")).not.toBeVisible();
+		await expect(page.getByRole("link", { name: new RegExp(RENAMED) })).toBeVisible();
+	});
+
+	test("rename submit button is disabled when name is unchanged", async ({ page }) => {
+		const NAME = "Rename Unchanged Test";
+		await page.goto("/");
+		await page.getByRole("button", { name: "Create Presentation" }).click();
+		await fillPresentationName(page, NAME);
+		await page.getByRole("button", { name: "Create" }).click();
+		await expect(page.getByRole("dialog")).not.toBeVisible();
+
+		await page.getByRole("button", { name: `Rename ${NAME}` }).click();
+		await expect(page.getByRole("heading", { name: "Rename Presentation" })).toBeVisible();
+
+		await expect(page.getByRole("button", { name: "Rename" })).toBeDisabled();
+	});
+
+	test("cancel rename keeps the original name", async ({ page }) => {
+		const NAME = "Cancel Rename Test";
+		await page.goto("/");
+		await page.getByRole("button", { name: "Create Presentation" }).click();
+		await fillPresentationName(page, NAME);
+		await page.getByRole("button", { name: "Create" }).click();
+		await expect(page.getByRole("dialog")).not.toBeVisible();
+
+		await page.getByRole("button", { name: `Rename ${NAME}` }).click();
+		await expect(page.getByRole("heading", { name: "Rename Presentation" })).toBeVisible();
+		await page.getByRole("button", { name: "Cancel" }).click();
+
+		await expect(page.getByRole("dialog")).not.toBeVisible();
+		await expect(page.getByRole("link", { name: new RegExp(NAME) })).toBeVisible();
+	});
+
+	test("delete a presentation from the card", async ({ page }) => {
+		const NAME = "Card Delete Test";
+		await page.goto("/");
+		await page.getByRole("button", { name: "Create Presentation" }).click();
+		await fillPresentationName(page, NAME);
+		await page.getByRole("button", { name: "Create" }).click();
+		await expect(page.getByRole("dialog")).not.toBeVisible();
+		await expect(page.getByRole("link", { name: new RegExp(NAME) })).toBeVisible();
+
+		await page.getByRole("button", { name: `Delete ${NAME}` }).click();
+		await expect(page.getByRole("heading", { name: "Delete Presentation" })).toBeVisible();
+		await page.getByRole("button", { name: "Delete" }).click();
+
+		await expect(page.getByRole("dialog")).not.toBeVisible();
+		await expect(page.getByRole("link", { name: new RegExp(NAME) })).not.toBeVisible();
+	});
+
+	test("cancel delete keeps the presentation", async ({ page }) => {
+		const NAME = "Cancel Delete Test";
+		await page.goto("/");
+		await page.getByRole("button", { name: "Create Presentation" }).click();
+		await fillPresentationName(page, NAME);
+		await page.getByRole("button", { name: "Create" }).click();
+		await expect(page.getByRole("dialog")).not.toBeVisible();
+
+		await page.getByRole("button", { name: `Delete ${NAME}` }).click();
+		await expect(page.getByRole("heading", { name: "Delete Presentation" })).toBeVisible();
+		await page.getByRole("button", { name: "Cancel" }).click();
+
+		await expect(page.getByRole("dialog")).not.toBeVisible();
+		await expect(page.getByRole("link", { name: new RegExp(NAME) })).toBeVisible();
+	});
+});
+
+test.describe("Editor: settings panel", () => {
+	test.beforeEach(async ({ page }) => {
+		await page.goto("/");
+		await page.getByRole("button", { name: "Create Presentation" }).click();
+		await fillPresentationName(page, "Settings Panel Test");
+		await page.getByRole("button", { name: "Create" }).click();
+		await expect(page.getByRole("dialog")).not.toBeVisible();
+		await clickLastCard(page, "Settings Panel Test");
+		await page.waitForURL(/\/presentations\/.+/);
+		await waitForSidebar(page);
+		await page
+			.getByRole("button", { name: /^Settings/ })
+			.first()
+			.click();
+		await expect(page.getByLabel("Project name")).toBeVisible({ timeout: 5_000 });
+	});
+
+	test("settings panel shows the current project name", async ({ page }) => {
+		await expect(page.getByLabel("Project name")).toHaveValue("Settings Panel Test");
+	});
+
+	test("rename project from settings panel saves the new name", async ({ page }) => {
+		const input = page.getByLabel("Project name");
+		await input.fill("Settings Panel Renamed");
+		await page.getByRole("button", { name: "Save" }).click();
+		await expect(input).toHaveValue("Settings Panel Renamed", { timeout: 5_000 });
+	});
+
+	test("delete presentation from danger zone navigates to dashboard", async ({ page }) => {
+		await page.getByRole("button", { name: "Delete presentation" }).click();
+		await expect(page.getByRole("heading", { name: "Delete Presentation" })).toBeVisible();
+		await page.getByRole("button", { name: "Delete" }).click();
+
+		await expect(page).toHaveURL("/", { timeout: 10_000 });
+		await expect(page.getByRole("heading", { name: "Presentations" })).toBeVisible();
+	});
+});
+
+test.describe("Editor: file upload", () => {
+	test.beforeEach(async ({ page }) => {
+		await page.goto("/");
+		await page.getByRole("button", { name: "Create Presentation" }).click();
+		await fillPresentationName(page, "Upload Test");
+		await page.getByRole("button", { name: "Create" }).click();
+		await expect(page.getByRole("dialog")).not.toBeVisible();
+		await clickLastCard(page, "Upload Test");
+		await page.waitForURL(/\/presentations\/.+/);
+		await waitForSidebar(page);
+	});
+
+	test("upload a CSS file and it appears in the sidebar", async ({ page }) => {
+		await page.getByTitle("Upload file").click();
+		await expect(page.getByRole("heading", { name: "Upload File" })).toBeVisible();
+
+		await page.locator('input[type="file"]').setInputFiles({
+			name: "theme.css",
+			mimeType: "text/css",
+			buffer: Buffer.from("body { color: red; }"),
+		});
+		await expect(page.getByText("theme.css")).toBeVisible();
+
+		await page.getByRole("button", { name: "Upload" }).click();
+		await expect(page.getByRole("dialog")).not.toBeVisible();
+		await expect(page.getByRole("button", { name: "theme.css" })).toBeVisible({ timeout: 5_000 });
+	});
+
+	test("cancel upload closes the dialog without adding a file", async ({ page }) => {
+		await page.getByTitle("Upload file").click();
+		await expect(page.getByRole("heading", { name: "Upload File" })).toBeVisible();
+		await page.getByRole("button", { name: "Cancel" }).click();
+		await expect(page.getByRole("dialog")).not.toBeVisible();
+	});
+
+	test("upload button is disabled until a file is selected", async ({ page }) => {
+		await page.getByTitle("Upload file").click();
+		await expect(page.getByRole("button", { name: "Upload" })).toBeDisabled();
+	});
+});
+
+test.describe("Editor: export", () => {
+	test("export project as ZIP triggers a download", async ({ page }) => {
+		await page.goto("/");
+		await page.getByRole("button", { name: "Create Presentation" }).click();
+		await fillPresentationName(page, "Export Test");
+		await page.getByRole("button", { name: "Create" }).click();
+		await expect(page.getByRole("dialog")).not.toBeVisible();
+		await clickLastCard(page, "Export Test");
+		await page.waitForURL(/\/presentations\/.+/);
+		await waitForSidebar(page);
+
+		const [download] = await Promise.all([
+			page.waitForEvent("download"),
+			page.getByTitle("Export project as ZIP").click(),
+		]);
+		expect(download.suggestedFilename()).toMatch(/\.zip$/);
+	});
+});
+
+test.describe("Editor: outline panel", () => {
+	test.beforeEach(async ({ page }) => {
+		await page.goto("/");
+		await page.getByRole("button", { name: "Create Presentation" }).click();
+		await fillPresentationName(page, "Outline Test");
+		await page.getByRole("button", { name: "Create" }).click();
+		await expect(page.getByRole("dialog")).not.toBeVisible();
+		await clickLastCard(page, "Outline Test");
+		await page.waitForURL(/\/presentations\/.+/);
+	});
+
+	test("shows 'No headings' message when file has no headings", async ({ page }) => {
+		const editor = page.locator(".cm-content");
+		await expect(editor).toBeVisible({ timeout: 10_000 });
+		await editor.click();
+		await page.keyboard.press("Control+A");
+		await page.keyboard.type("Just plain text, no headings here.");
+
+		await page
+			.getByRole("button", { name: /^Outline/ })
+			.first()
+			.click();
+		await expect(page.getByText("No headings in this file.")).toBeVisible({ timeout: 5_000 });
+	});
+
+	test("lists headings extracted from the markdown content", async ({ page }) => {
+		const editor = page.locator(".cm-content");
+		await expect(editor).toBeVisible({ timeout: 10_000 });
+		await editor.click();
+		await page.keyboard.press("Control+A");
+		await page.keyboard.type("# Introduction\n\n## Background\n\n# Conclusion");
+
+		await page
+			.getByRole("button", { name: /^Outline/ })
+			.first()
+			.click();
+		await expect(page.getByText("Introduction")).toBeVisible({ timeout: 5_000 });
+		await expect(page.getByText("Background")).toBeVisible();
+		await expect(page.getByText("Conclusion")).toBeVisible();
+	});
+});
+
+test.describe("Editor: search panel", () => {
+	test.beforeEach(async ({ page }) => {
+		await page.goto("/");
+		await page.getByRole("button", { name: "Create Presentation" }).click();
+		await fillPresentationName(page, "Search Test");
+		await page.getByRole("button", { name: "Create" }).click();
+		await expect(page.getByRole("dialog")).not.toBeVisible();
+		await clickLastCard(page, "Search Test");
+		await page.waitForURL(/\/presentations\/.+/);
+
+		const editor = page.locator(".cm-content");
+		await expect(editor).toBeVisible({ timeout: 10_000 });
+		await editor.click();
+		await page.keyboard.press("Control+A");
+		await page.keyboard.type("Hello world\n\nHello again");
+
+		await page
+			.getByRole("button", { name: /^Search/ })
+			.first()
+			.click();
+		await expect(page.getByLabel("Find")).toBeVisible({ timeout: 5_000 });
+	});
+
+	test("shows zero matches before a search is run", async ({ page }) => {
+		await expect(page.getByText("0 matches")).toBeVisible();
+	});
+
+	test("find returns matches for text present in the file", async ({ page }) => {
+		await page.getByLabel("Find").fill("Hello");
+		await page.getByRole("button", { name: "Find" }).click();
+		await expect(page.getByText("2 matches")).toBeVisible({ timeout: 5_000 });
+	});
+
+	test("find returns zero matches for text not in the file", async ({ page }) => {
+		await page.getByLabel("Find").fill("zzznomatch");
+		await page.getByRole("button", { name: "Find" }).click();
+		await expect(page.getByText("0 matches")).toBeVisible({ timeout: 5_000 });
+	});
+});
+
+test.describe("Editor: collaboration", () => {
+	test.beforeEach(async ({ page }) => {
+		await page.goto("/");
+		await page.getByRole("button", { name: "Create Presentation" }).click();
+		await fillPresentationName(page, "Collab Test");
+		await page.getByRole("button", { name: "Create" }).click();
+		await expect(page.getByRole("dialog")).not.toBeVisible();
+		await clickLastCard(page, "Collab Test");
+		await page.waitForURL(/\/presentations\/.+/);
+		await waitForSidebar(page);
+	});
+
+	test("opens the Manage Collaboration dialog", async ({ page }) => {
+		await page.getByRole("button", { name: "Share document" }).click();
+		await expect(page.getByRole("heading", { name: "Manage Collaboration" })).toBeVisible();
+		await expect(page.getByPlaceholder("Collaborator's email")).toBeVisible();
+	});
+
+	test("Add button is disabled with invalid email and enabled with valid email", async ({
+		page,
+	}) => {
+		await page.getByRole("button", { name: "Share document" }).click();
+		await expect(page.getByRole("heading", { name: "Manage Collaboration" })).toBeVisible();
+
+		const addButton = page.getByRole("button", { name: "Add" });
+		await expect(addButton).toBeDisabled();
+
+		await page.getByPlaceholder("Collaborator's email").fill("not-an-email");
+		await expect(addButton).toBeDisabled();
+
+		await page.getByPlaceholder("Collaborator's email").fill("valid@example.com");
+		await expect(addButton).toBeEnabled();
+	});
+});
+
+test.describe("Presentation mode: slide counter and timer", () => {
+	test.beforeEach(async ({ page }) => {
+		await page.goto("/");
+		await page.getByRole("button", { name: "Create Presentation" }).click();
+		await fillPresentationName(page, "Counter Timer Test");
+		await page.getByRole("button", { name: "Create" }).click();
+		await expect(page.getByRole("dialog")).not.toBeVisible();
+		await clickLastCard(page, "Counter Timer Test");
+		await page.waitForURL(/\/presentations\/.+/);
+
+		const editor = page.locator(".cm-content");
+		await expect(editor).toBeVisible({ timeout: 10_000 });
+		await editor.click();
+		await page.keyboard.press("Control+A");
+		await page.keyboard.type("# Slide 1\n\n---\n\n# Slide 2\n\n---\n\n# Slide 3");
+
+		await page.getByRole("button", { name: "Start presentation" }).click();
+		await expect(page).toHaveURL(/mode=present/);
+		await expect(page.getByRole("button", { name: "Next" })).toBeEnabled({ timeout: 15_000 });
+	});
+
+	test("slide counter resets to slide 1 when clicked", async ({ page }) => {
+		await page.getByRole("button", { name: "Next" }).click();
+		await expect(page.getByText(/Slide 2/)).toBeVisible();
+
+		await page.getByRole("button", { name: /Slide 2\// }).click();
+		await expect(page.getByText(/Slide 1\//)).toBeVisible();
+	});
+
+	test("timer display is visible in presentation mode", async ({ page }) => {
+		await expect(page.getByText(/^\d+:\d{2}$/)).toBeVisible({ timeout: 5_000 });
+	});
+});
+
 test.describe("Navigation", () => {
 	test("logo link navigates back to dashboard", async ({ page }) => {
 		await page.goto("/");
