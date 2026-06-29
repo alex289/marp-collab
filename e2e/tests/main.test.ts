@@ -254,7 +254,7 @@ test.describe("Presentation mode", () => {
 
 		await waitForSidebar(page);
 
-		await page.getByRole("link", { name: "Start presentation" }).click();
+		await page.getByRole("button", { name: "Start presentation" }).click();
 		await expect(page).toHaveURL(/mode=present/);
 
 		await expect(page.getByRole("button", { name: "End presentation" })).toBeVisible();
@@ -285,11 +285,11 @@ test.describe("Presentation mode", () => {
 		await clickLastCard(page, "Escape Test");
 		await page.waitForURL(/\/presentations\/.+/);
 
-		await expect(page.getByRole("link", { name: "Start presentation" })).toBeVisible({
+		await expect(page.getByRole("button", { name: "Start presentation" })).toBeVisible({
 			timeout: 10_000,
 		});
 
-		await page.getByRole("link", { name: "Start presentation" }).click();
+		await page.getByRole("button", { name: "Start presentation" }).click();
 		await expect(page).toHaveURL(/mode=present/);
 		await expect(page.getByRole("button", { name: "End presentation" })).toBeVisible();
 
