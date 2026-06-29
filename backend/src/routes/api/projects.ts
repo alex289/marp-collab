@@ -449,7 +449,10 @@ app.post("/:projectId/files/upload", async (c) => {
 	const isEditable = isEditableExtension(uploadedFile.name);
 	if (!isAllowedUpload(uploadedFile.name, uploadedFile.type)) {
 		return c.json(
-			{ error: "File type not allowed. Only images, videos, CSS, Markdown, and font files are permitted." },
+			{
+				error:
+					"File type not allowed. Only images, videos, CSS, Markdown, and font files are permitted.",
+			},
 			400,
 		);
 	}

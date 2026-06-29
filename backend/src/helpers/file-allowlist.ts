@@ -9,6 +9,10 @@ export const ALLOWED_ASSET_MIME_TYPES = new Set([
 	"image/bmp",
 	"image/tiff",
 	"text/css",
+	"video/mp4",
+	"video/webm",
+	"video/ogg",
+	"video/quicktime",
 ]);
 
 export const FONT_EXTENSIONS = new Set([".woff", ".woff2", ".ttf", ".otf"]);

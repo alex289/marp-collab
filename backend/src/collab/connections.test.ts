@@ -84,4 +84,65 @@ describe("collab connection registry", () => {
 		equal(closeProjectCollaboratorConnections("project-1", "user-1"), 1);
 		equal(connection.closeCalls, 1);
 	});
+
+	test("ref-counting: two registrations for the same socket+project require two unregisters", () => {
+		const connection = createConnection();
+
+		registerProjectConnection({
+			socketId: "rc-socket-1",
+			documentName: "project/rc-proj/presentation.md",
+			userId: "rc-user",
+			connection: connection.connection,
+		});
+		// Second registration for same socket and same project increments ref count
+		registerProjectConnection({
+			socketId: "rc-socket-1",
+			documentName: "project/rc-proj/notes.md",
+			userId: "rc-user",
+			connection: connection.connection,
+		});
+
+		// First unregister: ref count drops to 1, socket stays
+		unregisterProjectConnection("rc-socket-1", "project/rc-proj/presentation.md");
+		equal(closeProjectCollaboratorConnections("rc-proj", "rc-user"), 1);
+		equal(connection.closeCalls, 1);
+	});
+
+	test("unregisterProjectConnection without documentName removes the socket entirely", () => {
+		const connection = createConnection();
+
+		registerProjectConnection({
+			socketId: "rc-socket-2",
+			documentName: "project/rc-proj-2/presentation.md",
+			userId: "rc-user-2",
+			connection: connection.connection,
+		});
+
+		unregisterProjectConnection("rc-socket-2");
+
+		// Socket is gone, so close finds nothing
+		equal(closeProjectCollaboratorConnections("rc-proj-2", "rc-user-2"), 0);
+		equal(connection.closeCalls, 0);
+	});
+
+	test("registerProjectConnection ignores invalid documentName (no project/ prefix)", () => {
+		const connection = createConnection();
+
+		registerProjectConnection({
+			socketId: "rc-socket-3",
+			documentName: "invalid-name",
+			userId: "rc-user-3",
+			connection: connection.connection,
+		});
+
+		// Nothing was registered, so close finds nothing
+		equal(closeProjectCollaboratorConnections("invalid-name", "rc-user-3"), 0);
+		equal(connection.closeCalls, 0);
+	});
+
+	test("unregisterProjectConnection is a no-op for an unknown socket id", () => {
+		// Should not throw
+		unregisterProjectConnection("nonexistent-socket", "project/any-proj/file.md");
+		unregisterProjectConnection("nonexistent-socket");
+	});
 });
