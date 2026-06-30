@@ -5,6 +5,7 @@
 Gelernt:
 
 - Browser senden keine einheitlichen MIME-Typen für Schriftdateien, was die Validierung von Schriftdatei-Uploads erschwert. Es existieren verschiedene MIME-Typen wie `font/*`, `application/font-*` oder `application/x-font-*`, abhängig von Browser und Betriebssystem. Allerdings hat Firefox unter Windows bei einem Test den generischen MIME-Typ `application/octet-stream` gesendet.
+- Das Lazy-Loading von React-Komponenten kann mithilfe von Suspense und der lazy-Funktion implementiert werden.
 
 Herausforderungen:
 
@@ -25,4 +26,5 @@ Herausforderungen:
 
 Erkenntnisse:
 
-- Das Vite-PWA Plugin (genauer gesagt Workbox) versucht standardmäßig alle Assets zu cachen. Diese führte in Produktion zu seltsamen Problemen mit dem Login, da zumindestens teilweise auch API Antworten gecached wurden. Workbox kann so konfiguriert werden, dass nur bestimmte Assets gecached werden. Der Ausschluss von allen API-Routen sollte das Problem lösen.
+- Das Vite-PWA Plugin (genauer gesagt Workbox) versucht standardmäßig alle Assets zu cachen. Diese führte in Produktion zu seltsamen Problemen mit dem Login, da zumindestens teilweise auch API Antworten gecached wurden. Workbox kann so konfiguriert werden, dass nur bestimmte Assets gecached werden. Der Ausschluss von allen API-Routen sollte das Problem lösen. Claude Code hat dieses Problem schnell erkannt und die Lösung vorgeschlagen.
+- Playwright generiert Markdown Berichte für fehlgeschlagene E2e-Tests, die sehr gut von KI-Tools analyisiert werden können um Probleme bei E2e tests zu beheben.
