@@ -213,7 +213,7 @@ export function PresentationFrame({
 	return (
 		<div className={className ?? "h-full w-full"}>
 			<div className="grid h-full w-full grid-cols-1 gap-3  p-4 md:grid-cols-[minmax(0,1fr)_minmax(280px,24vw)]">
-				<div className="min-h-0 overflow-hidden rounded-md border border-white/10 shadow-2xl">
+				<div className="hidden min-h-0 overflow-hidden rounded-md border border-white/10 shadow-2xl md:block">
 					{iframe}
 				</div>
 				<Card className="flex min-h-0 flex-col overflow-hidden py-0 shadow-2xl">

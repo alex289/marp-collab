@@ -21,7 +21,7 @@ import { isEditableDeckFile, isMarkdownDeckFile } from "@/lib/file-types";
 import { listThemeNames, setProjectThemes } from "@/lib/marp";
 import { applyThemeToYText, getMarkdownTheme } from "@/lib/markdown-theme";
 import { API_URL } from "@/lib/config";
-import { PauseIcon, PlayIcon } from "lucide-react";
+import { MonitorPlayIcon, PauseIcon, PlayIcon, XIcon } from "lucide-react";
 
 const EditorPane = lazy(async () => {
 	const m = await import("@/components/editor-pane");
@@ -660,11 +660,11 @@ function RouteComponent() {
 
 		return (
 			<div className="grid h-screen w-screen grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden">
-				<div className="flex items-center justify-between gap-3 px-4 py-3">
+				<div className="flex items-center justify-between gap-2 overflow-x-auto px-4 py-3 md:gap-3">
 					<Button variant="secondary" size="sm" onClick={() => setSlideIndex(0)}>
 						Slide {slideIndex + 1}/{Math.max(slideCount, 1)}
 					</Button>
-					<div className="flex items-center gap-2">
+					<div className="flex items-center gap-1 md:gap-2">
 						<ButtonGroup>
 							<Button
 								type="button"
@@ -681,13 +681,18 @@ function RouteComponent() {
 						<Button
 							type="button"
 							variant="secondary"
+							size="icon"
+							className="md:h-7 md:w-auto md:gap-1 md:px-2 md:text-xs/relaxed"
 							onClick={() => window.open(viewerUrl, "_blank", "noopener,noreferrer")}
 						>
-							Open clean screen
+							<MonitorPlayIcon />
+							<span className="hidden md:inline">Open clean screen</span>
 						</Button>
 						<Button
 							type="button"
 							variant="secondary"
+							size="icon"
+							className="md:h-7 md:w-auto md:gap-1 md:px-2 md:text-xs/relaxed"
 							onClick={() =>
 								void navigate({
 									to: "/presentations/$id",
@@ -696,7 +701,8 @@ function RouteComponent() {
 								})
 							}
 						>
-							End presentation
+							<XIcon />
+							<span className="hidden md:inline">End presentation</span>
 						</Button>
 					</div>
 				</div>
@@ -707,6 +713,7 @@ function RouteComponent() {
 					<Button
 						type="button"
 						variant="secondary"
+						className="max-md:h-14 max-md:flex-1 max-md:text-base"
 						onClick={() => setSlideIndex((current) => Math.max(current - 1, 0))}
 						disabled={slideIndex <= 0}
 					>
@@ -715,6 +722,7 @@ function RouteComponent() {
 					<Button
 						type="button"
 						variant="secondary"
+						className="max-md:h-14 max-md:flex-1 max-md:text-base"
 						onClick={() => setSlideIndex((current) => Math.min(current + 1, maxSlideIndex))}
 						disabled={slideIndex >= maxSlideIndex}
 					>
