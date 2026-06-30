@@ -132,6 +132,9 @@ const editorTheme = EditorView.theme({
 	"&.cm-focused": {
 		outline: "none",
 	},
+	".cm-ySelectionInfo": {
+		fontFamily: "'Geist Variable', monospace",
+	},
 });
 
 export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function EditorPane(
