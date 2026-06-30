@@ -35,13 +35,14 @@ const hashString = (value: string): number => {
 export const usePresenceUser = (sessionUser: SessionUser | null): PresenceUser => {
 	return useMemo(() => {
 		if (!sessionUser) {
-			return { userId: "", userName: "", color: "#0ea5e9" };
+			return { userId: "", userName: "", color: "#0ea5e9", image: null };
 		}
 		const seed = sessionUser.id ?? sessionUser.email;
 		return {
 			userId: sessionUser.id,
 			userName: sessionUser.name || sessionUser.email,
 			color: palette[hashString(seed) % palette.length] ?? "#0ea5e9",
+			image: sessionUser.image ?? null,
 		};
 	}, [sessionUser]);
 };
@@ -91,6 +92,7 @@ export const useCollabDocument = (
 			id: user.userId,
 			name: user.userName,
 			color: user.color,
+			image: user.image,
 		});
 
 		setState({

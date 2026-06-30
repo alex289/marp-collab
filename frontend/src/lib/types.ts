@@ -11,6 +11,7 @@ export type PresenceUser = {
 	userId: string;
 	userName: string;
 	color: string;
+	image: string | null;
 };
 
 export type SessionUser = typeof authClient.$Infer.Session.user;

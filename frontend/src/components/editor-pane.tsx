@@ -10,6 +10,13 @@ import * as Y from "yjs";
 import { yCollab, yUndoManagerKeymap } from "y-codemirror.next";
 import { Badge } from "@/components/ui/badge";
 import {
+	Avatar,
+	AvatarFallback,
+	AvatarGroup,
+	AvatarGroupCount,
+	AvatarImage,
+} from "@/components/ui/avatar";
+import {
 	Card,
 	CardAction,
 	CardContent,
@@ -25,11 +32,13 @@ import { vsCodeLight } from "@fsegurai/codemirror-theme-vscode-light";
 import { vsCodeDark } from "@fsegurai/codemirror-theme-vscode-dark";
 import { ManageProjectCollaborator } from "./dialog/manage-project-collaborator";
 import { toast } from "sonner";
+import { getInitials } from "@/lib/utils";
 
 type Participant = {
 	id: string;
 	name: string;
 	color: string;
+	image: string | null;
 };
 
 type EditorPaneProps = {
@@ -247,6 +256,7 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 					id: user.id ?? crypto.randomUUID(),
 					name: user.name ?? "Unknown",
 					color: user.color ?? "#0ea5e9",
+					image: user.image ?? null,
 				}));
 
 			setParticipants(next);
@@ -375,28 +385,31 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 						<Users className="size-3" />
 						<span>{participants.length} online</span>
 					</div>
-					<div className="flex -space-x-1">
+					<AvatarGroup>
 						{visibleParticipants.map((participant) => (
 							<TooltipProvider key={participant.id}>
 								<Tooltip>
 									<TooltipTrigger asChild>
-										<span
-											className="flex size-6 items-center justify-center rounded-full border border-card text-[10px] font-semibold text-white shadow-sm"
-											style={{ backgroundColor: participant.color }}
-										>
-											{participant.name.slice(0, 1).toUpperCase()}
-										</span>
+										<Avatar size="sm" className="ring-1 ring-card after:border-0">
+											{participant.image ? (
+												<AvatarImage src={participant.image} alt={participant.name} />
+											) : null}
+											<AvatarFallback
+												className="text-white"
+												style={{ backgroundColor: participant.color }}
+											>
+												{getInitials(participant.name)}
+											</AvatarFallback>
+										</Avatar>
 									</TooltipTrigger>
 									<TooltipContent>{participant.name}</TooltipContent>
 								</Tooltip>
 							</TooltipProvider>
 						))}
 						{hiddenParticipants > 0 ? (
-							<span className="flex size-6 items-center justify-center rounded-full border border-card bg-muted text-[10px] font-semibold text-muted-foreground shadow-sm">
-								+{hiddenParticipants}
-							</span>
+							<AvatarGroupCount>+{hiddenParticipants}</AvatarGroupCount>
 						) : null}
-					</div>
+					</AvatarGroup>
 					<span className="font-mono text-[11px] text-muted-foreground">
 						Ln {stats.cursorLine}, Col {stats.cursorColumn}
 					</span>
