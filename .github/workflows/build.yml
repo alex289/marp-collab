@@ -4,6 +4,10 @@ on:
   push:
     branches:
       - main
+    paths-ignore:
+      - 'e2e/**'
+      - 'journal/**'
+      - 'presentation/**'
   workflow_dispatch:
 
 jobs:
