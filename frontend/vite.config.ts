@@ -19,11 +19,12 @@ export default defineConfig(({ mode }) => ({
 			devOptions: {
 				enabled: true,
 			},
-			...(mode !== "development" && {
-				workbox: {
+			workbox: {
+				navigateFallbackDenylist: [/^\/api\//],
+				...(mode !== "development" && {
 					globPatterns: ["**/*.{html,ico,png,svg,woff2,webmanifest}", "assets/*.css"],
-				},
-			}),
+				}),
+			},
 			manifest: {
 				name: "Marp Collab",
 				short_name: "Marp Collab",

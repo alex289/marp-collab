@@ -20,3 +20,9 @@ Erkenntnisse:
 Herausforderungen:
 
 - Marp hat leider keine TypeScript Types für die Plugin-API. Claude war allerdings in der Lage sich den Marp-Quelltext anzusehen um ein Plugin zu generieren, mit dem die URL von eingebetteten Bildern in den Folien modifiziert werden kann.
+
+# KW 27
+
+Erkenntnisse:
+
+- Das Vite-PWA Plugin (genauer gesagt Workbox) versucht standardmäßig alle Assets zu cachen. Diese führte in Produktion zu seltsamen Problemen mit dem Login, da zumindestens teilweise auch API Antworten gecached wurden. Workbox kann so konfiguriert werden, dass nur bestimmte Assets gecached werden. Der Ausschluss von allen API-Routen sollte das Problem lösen.
