@@ -71,16 +71,16 @@ export async function getDeckFiles(projectId: string): Promise<DeckFile[]> {
 		glob("**/*", {
 			cwd: projectDir,
 			withFileTypes: true,
-			exclude: (dirent) => {
-				return (
-					dirent.name.startsWith(".") ||
-					EXCLUDED_FILE_EXTENSIONS.has(extname(dirent.name).toLowerCase())
-				);
-			},
+			exclude: (dirent) => dirent.name.startsWith("."),
 		}),
 	);
 
 	return entries
+		.filter(
+			(dirent) =>
+				dirent.isDirectory() ||
+				!EXCLUDED_FILE_EXTENSIONS.has(extname(dirent.name).toLowerCase()),
+		)
 		.map((dirent) => {
 			const id = relative(projectDir, join(dirent.parentPath, dirent.name)).replace(/\\/g, "/");
 			if (dirent.isDirectory()) {
@@ -277,6 +277,13 @@ export async function moveProjectFile(
 	}
 
 	await rename(sourcePath, destPath);
+
+	try {
+		await rename(`${sourcePath}.yjs`, `${destPath}.yjs`);
+	} catch {
+		// .yjs companion may not exist
+	}
+
 	return newFileId;
 }
 
@@ -305,11 +312,18 @@ export async function deleteProjectFile(projectId: string, fileId: string): Prom
 
 	try {
 		await rm(filePath);
-		return true;
 	} catch (error) {
 		if (isMissingFileError(error)) {
 			return false;
 		}
 		throw error;
 	}
+
+	try {
+		await rm(`${filePath}.yjs`);
+	} catch {
+		// .yjs companion may not exist for files that were never collab-edited
+	}
+
+	return true;
 }
