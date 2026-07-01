@@ -33,6 +33,7 @@ import { vsCodeDark } from "@fsegurai/codemirror-theme-vscode-dark";
 import { ManageProjectCollaborator } from "./dialog/manage-project-collaborator";
 import { toast } from "sonner";
 import { getInitials } from "@/lib/utils";
+import { useHotkey } from "@tanstack/react-hotkeys";
 
 type Participant = {
 	id: string;
@@ -289,6 +290,14 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 			view.focus();
 		},
 	}));
+
+	useHotkey(
+		"Escape",
+		() => {
+			setIsFocused(false);
+		},
+		{ enabled: isFocused },
+	);
 
 	return (
 		<Card
