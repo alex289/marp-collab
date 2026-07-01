@@ -189,7 +189,6 @@ function RouteComponent() {
 
 	useEffect(() => {
 		if (selectedFile?.id.endsWith(".css")) {
-			setMarkdown("");
 			return;
 		}
 

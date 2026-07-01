@@ -78,8 +78,7 @@ export async function getDeckFiles(projectId: string): Promise<DeckFile[]> {
 	return entries
 		.filter(
 			(dirent) =>
-				dirent.isDirectory() ||
-				!EXCLUDED_FILE_EXTENSIONS.has(extname(dirent.name).toLowerCase()),
+				dirent.isDirectory() || !EXCLUDED_FILE_EXTENSIONS.has(extname(dirent.name).toLowerCase()),
 		)
 		.map((dirent) => {
 			const id = relative(projectDir, join(dirent.parentPath, dirent.name)).replace(/\\/g, "/");
