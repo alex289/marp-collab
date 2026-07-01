@@ -463,7 +463,24 @@ const NestedFileItem = ({
 						<Trash2 />
 					</SidebarMenuAction>
 				)}
-				<CollapsibleContent>
+				<CollapsibleContent
+					onDragOver={(e) => {
+						e.preventDefault();
+						e.stopPropagation();
+						e.dataTransfer.dropEffect = "move";
+						onDragOverPath(node.path);
+					}}
+					onDragLeave={(e) => {
+						if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+							onDragOverPath(null);
+						}
+					}}
+					onDrop={(e) => {
+						e.preventDefault();
+						e.stopPropagation();
+						onDropOnPath(node.path);
+					}}
+				>
 					<SidebarMenuSub>
 						{node.children.map((child) => (
 							<NestedFileItem
