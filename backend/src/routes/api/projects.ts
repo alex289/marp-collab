@@ -529,7 +529,7 @@ app.get("/:projectId/files/:fileId{.+}", async (c) => {
 
 	c.header("Content-Type", getMimeType(fileId));
 	c.header("Content-Disposition", "attachment");
-	c.header("Cache-Control", "private, max-age=3600");
+	c.header("Cache-Control", "no-cache");
 
 	return stream(c, async (s) => {
 		const readStream = createReadStream(filePath);
