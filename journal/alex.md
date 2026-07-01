@@ -1,5 +1,16 @@
 # Development Journal
 
+## KW 26
+
+Gelernt:
+
+- Sowohl Unit-Tests als auch E2E-Tests lassen sich gut durch KI schreiben. Das wird durch Playwright gut unterstützt.
+
+KI Unterstützung:
+
+- Unit-Tests: Claude Sonnet 4.6
+- E2E-Tests: Claude Sonnet 4.6
+
 ## KW 25
 
 Gelernt:
