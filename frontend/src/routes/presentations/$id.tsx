@@ -638,7 +638,7 @@ function RouteComponent() {
 			return (
 				<div
 					ref={viewerContainerRef}
-					className="relative h-screen w-screen overflow-hidden bg-black text-white"
+					className="relative h-svh w-svw overflow-hidden bg-black text-white"
 				>
 					{frame}
 					{fullscreenPromptVisible && (
@@ -657,7 +657,7 @@ function RouteComponent() {
 		}
 
 		return (
-			<div className="grid h-screen w-screen grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden">
+			<div className="grid h-svh w-svw grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden">
 				<div className="flex items-center justify-between gap-2 overflow-x-auto px-4 py-3 md:gap-3">
 					<Button variant="secondary" size="sm" onClick={() => setSlideIndex(0)}>
 						Slide {slideIndex + 1}/{Math.max(slideCount, 1)}
