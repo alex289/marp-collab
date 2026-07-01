@@ -58,7 +58,7 @@ export function ManageProjectCollaborator({ projectId }: { projectId: string }) 
 		try {
 			const res = await fetch(`${API_URL}/projects/${projectId}/collaborators`, {
 				method: "POST",
-				credentials: "include",
+
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({ email: collaboratorEmail, readOnly: accessLevel === "read-only" }),
 			});
@@ -86,7 +86,7 @@ export function ManageProjectCollaborator({ projectId }: { projectId: string }) 
 		try {
 			const res = await fetch(`${API_URL}/projects/${projectId}/collaborators/${userId}`, {
 				method: "PATCH",
-				credentials: "include",
+
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({ readOnly }),
 			});
@@ -110,7 +110,7 @@ export function ManageProjectCollaborator({ projectId }: { projectId: string }) 
 		try {
 			const res = await fetch(`${API_URL}/projects/${projectId}/collaborators/${userId}`, {
 				method: "DELETE",
-				credentials: "include",
+
 				headers: { "Content-Type": "application/json" },
 			});
 

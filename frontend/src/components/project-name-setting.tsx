@@ -11,7 +11,7 @@ type ProjectResponse = {
 };
 
 const credentialedFetcher = async (url: string): Promise<ProjectResponse> => {
-	const res = await fetch(url, { credentials: "include" });
+	const res = await fetch(url);
 	if (!res.ok) {
 		throw new Error(`Request failed: ${res.status} ${res.statusText}`);
 	}
@@ -50,7 +50,7 @@ export const ProjectNameSetting = ({ projectId }: ProjectNameSettingProps) => {
 
 		const res = await fetch(key, {
 			method: "PATCH",
-			credentials: "include",
+
 			headers: { "Content-Type": "application/json" },
 			body: JSON.stringify({ name: trimmed }),
 		});

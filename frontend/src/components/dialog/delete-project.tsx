@@ -43,7 +43,6 @@ export function DeleteProjectDialog({ project, trigger, onDeleted }: DeleteProje
 		try {
 			const res = await fetch(`${API_URL}/projects/${project.id}`, {
 				method: "DELETE",
-				credentials: "include",
 			});
 
 			if (!res.ok) {

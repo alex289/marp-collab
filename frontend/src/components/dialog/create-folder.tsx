@@ -44,7 +44,7 @@ export function CreateFolderDialog({ projectId, open, onOpenChange, onCreated }:
 		try {
 			const res = await fetch(`${API_URL}/projects/${projectId}/folders`, {
 				method: "POST",
-				credentials: "include",
+
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({ name: name.trim() }),
 			});

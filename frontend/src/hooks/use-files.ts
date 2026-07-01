@@ -16,9 +16,7 @@ export const useFiles = (projectId: string) => {
 		setError(null);
 
 		try {
-			const response = await fetch(`${API_URL}/projects/${projectId}/files`, {
-				credentials: "include",
-			});
+			const response = await fetch(`${API_URL}/projects/${projectId}/files`, {});
 
 			if (!response.ok) {
 				throw new Error(`Could not load files (${response.status})`);

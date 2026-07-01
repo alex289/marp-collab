@@ -241,7 +241,7 @@ type ProjectSettingsResponse = {
 };
 
 const projectSettingsFetcher = async (url: string): Promise<ProjectSettingsResponse> => {
-	const res = await fetch(url, { credentials: "include" });
+	const res = await fetch(url);
 	if (!res.ok) {
 		throw new Error(`Request failed: ${res.status} ${res.statusText}`);
 	}
@@ -605,7 +605,7 @@ export const FileSidebar = ({
 			`${API_URL}/projects/${projectId}/files/${encodeURIComponent(fileId)}`,
 			{
 				method: "PATCH",
-				credentials: "include",
+
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({ destination: destinationFolder }),
 			},

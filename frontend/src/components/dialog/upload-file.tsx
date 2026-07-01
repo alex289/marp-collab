@@ -49,7 +49,7 @@ export function UploadFileDialog({ projectId, open, onOpenChange, onUploaded }: 
 
 			const res = await fetch(`${API_URL}/projects/${projectId}/files/upload`, {
 				method: "POST",
-				credentials: "include",
+
 				body: formData,
 			});
 

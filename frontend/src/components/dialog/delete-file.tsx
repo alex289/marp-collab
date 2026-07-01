@@ -45,7 +45,7 @@ export function DeleteFileDialog({ projectId, file, open, onOpenChange, onDelete
 				file.type === "folder"
 					? `${API_URL}/projects/${projectId}/folders/${encodeURIComponent(file.id)}`
 					: `${API_URL}/projects/${projectId}/files/${encodeURIComponent(file.id)}`;
-			const res = await fetch(endpoint, { method: "DELETE", credentials: "include" });
+			const res = await fetch(endpoint, { method: "DELETE" });
 
 			if (!res.ok) {
 				const data = (await res.json()) as { error?: string };

@@ -44,7 +44,7 @@ export function CreateFileDialog({ projectId, open, onOpenChange, onCreated }: P
 		try {
 			const res = await fetch(`${API_URL}/projects/${projectId}/files`, {
 				method: "POST",
-				credentials: "include",
+
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({ name }),
 			});

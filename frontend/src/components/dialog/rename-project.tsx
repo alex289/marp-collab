@@ -48,7 +48,7 @@ export function RenameProjectDialog({ project }: { project: Project }) {
 		try {
 			const res = await fetch(`${API_URL}/projects/${project.id}`, {
 				method: "PATCH",
-				credentials: "include",
+
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({ name: trimmed }),
 			});

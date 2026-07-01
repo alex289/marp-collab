@@ -225,7 +225,7 @@ function RouteComponent() {
 					try {
 						const encodedId = file.id.split("/").map(encodeURIComponent).join("/");
 						const res = await fetch(`${API_URL}/projects/${id}/files/${encodedId}`, {
-							credentials: "include",
+							
 							signal: controller.signal,
 						});
 						if (!res.ok) {
