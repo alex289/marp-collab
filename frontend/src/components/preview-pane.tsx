@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
 	Card,
 	CardAction,
@@ -20,9 +20,33 @@ type PreviewPaneProps = {
 	selectedFileId: string | null;
 };
 
+// srcDoc never changes so the iframe never reloads.
+// Content is pushed in via postMessage to preserve scroll position.
+const staticSrcDoc = `<!doctype html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <style id="marp-styles"></style>
+    <script>
+      window.addEventListener('message', function(e) {
+        if (e.source !== window.parent) return;
+        if (!e.data || e.data.type !== 'marp-update') return;
+        document.getElementById('marp-styles').textContent = e.data.css;
+        document.body.innerHTML = e.data.html;
+        if (e.data.scrollToTop) window.scrollTo(0, 0);
+      });
+    </script>
+  </head>
+  <body></body>
+</html>`;
+
 export const PreviewPane = ({ markdown, label, projectId, selectedFileId }: PreviewPaneProps) => {
 	const { resolvedTheme } = useTheme();
 	const navigate = useNavigate();
+	const iframeRef = useRef<HTMLIFrameElement>(null);
+	const [iframeReady, setIframeReady] = useState(false);
+	const prevFileKeyRef = useRef<string | null>(null);
 
 	const handleStartPresentation = useCallback(async () => {
 		const secondaryScreen = await getSecondaryScreen();
@@ -42,6 +66,7 @@ export const PreviewPane = ({ markdown, label, projectId, selectedFileId }: Prev
 			search: { mode: "present", file: selectedFileId ?? undefined },
 		});
 	}, [navigate, projectId, selectedFileId]);
+
 	const rendered = useMemo(() => {
 		try {
 			return renderMarp(markdown, projectId, selectedFileId);
@@ -53,19 +78,28 @@ export const PreviewPane = ({ markdown, label, projectId, selectedFileId }: Prev
 		}
 	}, [markdown, projectId, selectedFileId]);
 
-	const srcDoc = useMemo(() => {
-		return `<!doctype html>
-<html>
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <style>
-      html,
-      body {
+	useEffect(() => {
+		if (!iframeReady || !iframeRef.current?.contentWindow) {
+			return;
+		}
+
+		const fileKey = `${projectId}/${selectedFileId}`;
+		const scrollToTop = prevFileKeyRef.current !== fileKey;
+		prevFileKeyRef.current = fileKey;
+
+		const bg = resolvedTheme === "dark" ? "oklch(0.205 0 0)" : "oklch(1 0 0)";
+		const border = resolvedTheme === "dark" ? "oklch(1 0 0 / 10%)" : "oklch(0.922 0 0)";
+
+		iframeRef.current.contentWindow.postMessage(
+			{
+				type: "marp-update",
+				scrollToTop,
+				css: `
+      html, body {
         margin: 0;
         min-height: 100%;
         box-sizing: border-box;
-        background: ${resolvedTheme === "dark" ? "oklch(0.205 0 0)" : "oklch(1 0 0)"};
+        background: ${bg};
       }
       ${rendered.css}
       div.marpit {
@@ -77,15 +111,14 @@ export const PreviewPane = ({ markdown, label, projectId, selectedFileId }: Prev
       div.marpit > svg[data-marpit-svg],
       body > section {
         flex: 0 0 auto;
-		border: 1px solid ${resolvedTheme === "dark" ? "oklch(1 0 0 / 10%)" : "oklch(0.922 0 0)"};
+        border: 1px solid ${border};
       }
-    </style>
-  </head>
-  <body>
-    ${rendered.html}
-  </body>
-</html>`;
-	}, [rendered.css, rendered.html, resolvedTheme]);
+    `,
+				html: rendered.html,
+			},
+			window.location.origin,
+		);
+	}, [iframeReady, rendered, resolvedTheme, projectId, selectedFileId]);
 
 	return (
 		<Card className="flex h-full min-h-0 flex-col overflow-hidden border-border/80 py-0">
@@ -107,10 +140,12 @@ export const PreviewPane = ({ markdown, label, projectId, selectedFileId }: Prev
 
 			<CardContent className="min-h-0 flex-1 overflow-hidden p-0">
 				<iframe
+					ref={iframeRef}
 					title="Marp preview"
-					srcDoc={srcDoc}
+					srcDoc={staticSrcDoc}
 					className="h-full w-full"
 					sandbox="allow-scripts allow-same-origin"
+					onLoad={() => setIframeReady(true)}
 				/>
 			</CardContent>
 		</Card>

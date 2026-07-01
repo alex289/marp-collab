@@ -93,7 +93,7 @@ export const collabServer = new Hocuspocus({
 		const doc = new Y.Doc();
 		const text = doc.getText("content");
 		const initialContent = await getDocumentContent(documentName);
-		text.insert(0, initialContent ?? "# Neue Datei\n");
+		text.insert(0, initialContent ?? "");
 		return doc;
 	},
 	async onStoreDocument({ documentName, document }: { documentName: string; document: Y.Doc }) {
