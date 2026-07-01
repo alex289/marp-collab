@@ -97,6 +97,22 @@ function prepareThemeCss(css: string, fallbackName: string): { css: string; name
 	return { css: `/* @theme ${fallbackName} */\n${css}`, name: fallbackName };
 }
 
+/**
+ * Rewrites relative url(...) references in a CSS string to absolute backend API URLs.
+ * Mirrors the image URL rewriting done for Markdown — background-image, @font-face src, etc.
+ */
+export function rewriteCssUrls(css: string, projectId: string, fileId: string): string {
+	const lastSlash = fileId.lastIndexOf("/");
+	const cssDir = lastSlash > -1 ? fileId.slice(0, lastSlash + 1) : "";
+	return css.replace(
+		/url\(\s*(['"]?)(?!https?:\/\/|data:|\/\/|#|\/)([^'"\s)]+)\1\s*\)/gi,
+		(_match, quote: string, src: string) => {
+			const resolved = resolvePosixPath(cssDir, src);
+			return `url(${quote}${API_URL}/projects/${projectId}/files/${resolved}${quote})`;
+		},
+	);
+}
+
 /** Returns every registered theme name (built-ins plus project CSS themes). */
 export const listThemeNames = (): string[] =>
 	Array.from(marp.themeSet.themes(), (theme) => theme.name);

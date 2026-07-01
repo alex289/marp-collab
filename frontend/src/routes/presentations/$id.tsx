@@ -18,7 +18,7 @@ import { findTextMatches, replaceTextRange, type TextSearchMatch } from "@/lib/t
 import { OutlinePanel } from "@/components/outline-panel";
 import { parseMarkdownOutline } from "@/lib/outline";
 import { isEditableDeckFile, isMarkdownDeckFile } from "@/lib/file-types";
-import { listThemeNames, setProjectThemes } from "@/lib/marp";
+import { listThemeNames, rewriteCssUrls, setProjectThemes } from "@/lib/marp";
 import { applyThemeToYText, getMarkdownTheme } from "@/lib/markdown-theme";
 import { API_URL } from "@/lib/config";
 import { MonitorPlayIcon, PauseIcon, PlayIcon, XIcon } from "lucide-react";
@@ -231,7 +231,7 @@ function RouteComponent() {
 						if (!res.ok) {
 							return null;
 						}
-						return { id: file.id, css: await res.text() };
+						return { id: file.id, css: rewriteCssUrls(await res.text(), id, file.id) };
 					} catch {
 						return null;
 					}
