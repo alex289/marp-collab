@@ -109,6 +109,10 @@ export const PreviewPane = ({
         min-height: 100%;
         box-sizing: border-box;
         background: ${bg};
+        overflow-x: hidden;
+      }
+      *, *::before, *::after {
+        box-sizing: inherit;
       }
       ${rendered.css}
       div.marpit {
@@ -116,11 +120,15 @@ export const PreviewPane = ({
         flex-direction: column;
         gap: 24px;
         align-items: center;
+        width: 100%;
       }
       div.marpit > svg[data-marpit-svg],
       body > section {
         flex: 0 0 auto;
         border: 1px solid ${border};
+        height: auto !important;
+        max-width: 100%;
+        width: 100% !important;
       }
     `,
 				html: rendered.html,

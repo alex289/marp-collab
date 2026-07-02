@@ -60,6 +60,21 @@ async function getPreviewSectionBackground(page: Page) {
 		.evaluate((section) => window.getComputedStyle(section).backgroundColor);
 }
 
+async function getPreviewSlideMetrics(page: Page) {
+	const frame = page.locator('iframe[title="Marp preview"]');
+	return await frame.evaluate((iframe: HTMLIFrameElement) => {
+		const doc = iframe.contentDocument;
+		const slide = doc?.querySelector('svg[data-marpit-svg], section');
+		const iframeRect = iframe.getBoundingClientRect();
+		const slideRect = slide?.getBoundingClientRect();
+
+		return {
+			iframeWidth: iframeRect.width,
+			slideWidth: slideRect?.width ?? 0,
+		};
+	});
+}
+
 test.describe("Dashboard", () => {
 	test("shows empty state on a fresh account", async ({ page }) => {
 		await page.goto("/");
@@ -258,6 +273,30 @@ test.describe("Editor: content editing", () => {
 		await expect(previewFrame.getByRole("heading", { name: "Hello World" })).toBeVisible({
 			timeout: 10_000,
 		});
+	});
+
+	test("fits the live preview slide inside a phone-width preview pane", async ({ page }) => {
+		await page.setViewportSize({ width: 390, height: 844 });
+		await page.goto("/");
+
+		await page.getByRole("button", { name: "Create Presentation" }).click();
+		await fillPresentationName(page, "Mobile Preview Fit Test");
+		await page.getByRole("button", { name: "Create" }).click();
+		await expect(page.getByRole("dialog")).not.toBeVisible();
+		await clickLastCard(page, "Mobile Preview Fit Test");
+		await page.waitForURL(/\/presentations\/.+/);
+
+		const previewFrame = page.frameLocator('iframe[title="Marp preview"]');
+		await expect(previewFrame.locator('svg[data-marpit-svg], section').first()).toBeVisible({
+			timeout: 10_000,
+		});
+
+		await expect
+			.poll(async () => {
+				const metrics = await getPreviewSlideMetrics(page);
+				return metrics.slideWidth > 0 && metrics.slideWidth <= metrics.iframeWidth;
+			})
+			.toBe(true);
 	});
 
 	test("keeps markdown image paths rooted to the markdown file while editing CSS in a folder", async ({
