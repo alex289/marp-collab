@@ -242,6 +242,70 @@ test.describe("Editor: content editing", () => {
 });
 
 test.describe("Presentation mode", () => {
+	test("applies a custom theme after opening before theme CSS finishes loading", async ({
+		page,
+	}) => {
+		await page.goto("/");
+
+		await page.getByRole("button", { name: "Create Presentation" }).click();
+		await fillPresentationName(page, "Delayed Theme Test");
+		await page.getByRole("button", { name: "Create" }).click();
+		await expect(page.getByRole("dialog")).not.toBeVisible();
+		await clickLastCard(page, "Delayed Theme Test");
+		await page.waitForURL(/\/presentations\/.+/);
+		await waitForSidebar(page);
+
+		await page.getByTitle("Upload file").click();
+		await page.locator('input[type="file"]').setInputFiles({
+			name: "race-theme.css",
+			mimeType: "text/css",
+			buffer: Buffer.from(
+				"/* @theme race-theme */\nsection { background: rgb(1, 2, 3); color: rgb(250, 251, 252); }",
+			),
+		});
+		await page.getByRole("button", { name: "Upload", exact: true }).click();
+		await expect(page.getByRole("button", { name: "race-theme.css" })).toBeVisible({
+			timeout: 5_000,
+		});
+
+		const editor = page.locator(".cm-content");
+		await expect(editor).toBeVisible({ timeout: 10_000 });
+		await editor.click();
+		await page.keyboard.press("Control+A");
+		await page.keyboard.type("---\nmarp: true\ntheme: race-theme\n---\n\n# Race Theme");
+		const previewFrame = page.frameLocator('iframe[title="Marp preview"]');
+		await expect(previewFrame.getByRole("heading", { name: "Race Theme" })).toBeVisible({
+			timeout: 10_000,
+		});
+
+		const presentationUrl = page.url();
+		let releaseCss!: () => void;
+		const cssBlocked = new Promise<void>((resolve) => {
+			releaseCss = resolve;
+		});
+		await page.route(/\/api\/v1\/projects\/[^/]+\/files\/race-theme\.css$/, async (route) => {
+			await cssBlocked;
+			await route.continue();
+		});
+
+		await page.goto(`${presentationUrl}?mode=present`);
+		const presentationFrame = page.frameLocator('iframe[title="Presentation"]');
+		await expect(presentationFrame.getByRole("heading", { name: "Marp Render Error" })).toBeVisible(
+			{ timeout: 10_000 },
+		);
+
+		releaseCss();
+
+		await expect
+			.poll(() =>
+				presentationFrame
+					.locator("section")
+					.first()
+					.evaluate((section) => window.getComputedStyle(section).backgroundColor),
+			)
+			.toBe("rgb(1, 2, 3)");
+	});
+
 	test("start and end a presentation", async ({ page }) => {
 		await page.goto("/");
 

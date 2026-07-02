@@ -18,6 +18,7 @@ type PreviewPaneProps = {
 	label: string | null;
 	projectId: string;
 	selectedFileId: string | null;
+	themeRevision: number;
 };
 
 // srcDoc never changes so the iframe never reloads.
@@ -41,7 +42,13 @@ const staticSrcDoc = `<!doctype html>
   <body></body>
 </html>`;
 
-export const PreviewPane = ({ markdown, label, projectId, selectedFileId }: PreviewPaneProps) => {
+export const PreviewPane = ({
+	markdown,
+	label,
+	projectId,
+	selectedFileId,
+	themeRevision,
+}: PreviewPaneProps) => {
 	const { resolvedTheme } = useTheme();
 	const navigate = useNavigate();
 	const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -68,6 +75,8 @@ export const PreviewPane = ({ markdown, label, projectId, selectedFileId }: Prev
 	}, [navigate, projectId, selectedFileId]);
 
 	const rendered = useMemo(() => {
+		// Project themes are registered on the shared Marp instance; this invalidates stale renders.
+		void themeRevision;
 		try {
 			return renderMarp(markdown, projectId, selectedFileId);
 		} catch (error) {
@@ -76,7 +85,7 @@ export const PreviewPane = ({ markdown, label, projectId, selectedFileId }: Prev
 				css: "",
 			};
 		}
-	}, [markdown, projectId, selectedFileId]);
+	}, [markdown, projectId, selectedFileId, themeRevision]);
 
 	useEffect(() => {
 		if (!iframeReady || !iframeRef.current?.contentWindow) {

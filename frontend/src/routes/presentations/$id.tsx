@@ -128,6 +128,7 @@ function RouteComponent() {
 	const [sidebarOpen, setSidebarOpen] = useState(true);
 	const [markdown, setMarkdown] = useState("");
 	const [themeNames, setThemeNames] = useState<string[]>(() => listThemeNames());
+	const [themeRevision, setThemeRevision] = useState(0);
 	const [slideIndex, setSlideIndex] = useState(0);
 	const [slideCount, setSlideCount] = useState(1);
 	const [startedAt, setStartedAt] = useState(() => Date.now());
@@ -214,6 +215,7 @@ function RouteComponent() {
 		const cssFiles = files.filter((file) => file.id.toLowerCase().endsWith(".css"));
 		if (cssFiles.length === 0) {
 			setThemeNames(setProjectThemes([]));
+			setThemeRevision((revision) => revision + 1);
 			return;
 		}
 
@@ -245,6 +247,7 @@ function RouteComponent() {
 					themes.filter((theme): theme is { id: string; css: string } => theme !== null),
 				),
 			);
+			setThemeRevision((revision) => revision + 1);
 		})();
 
 		return () => controller.abort();
@@ -625,6 +628,7 @@ function RouteComponent() {
 				slideIndex={slideIndex}
 				projectId={id}
 				selectedFileId={selectedFile?.id ?? null}
+				themeRevision={themeRevision}
 				onMetaChange={({ active, total }) => {
 					setSlideIndex(active);
 					setSlideCount(Math.max(total, 1));
@@ -804,6 +808,7 @@ function RouteComponent() {
 							label={selectedFile?.label ?? null}
 							projectId={id}
 							selectedFileId={selectedFile?.id ?? null}
+							themeRevision={themeRevision}
 						/>
 					</Suspense>
 				</main>
