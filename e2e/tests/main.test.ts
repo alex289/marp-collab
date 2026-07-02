@@ -64,7 +64,7 @@ async function getPreviewSlideMetrics(page: Page) {
 	const frame = page.locator('iframe[title="Marp preview"]');
 	return await frame.evaluate((iframe: HTMLIFrameElement) => {
 		const doc = iframe.contentDocument;
-		const slide = doc?.querySelector('svg[data-marpit-svg], section');
+		const slide = doc?.querySelector("svg[data-marpit-svg], section");
 		const iframeRect = iframe.getBoundingClientRect();
 		const slideRect = slide?.getBoundingClientRect();
 
@@ -287,7 +287,7 @@ test.describe("Editor: content editing", () => {
 		await page.waitForURL(/\/presentations\/.+/);
 
 		const previewFrame = page.frameLocator('iframe[title="Marp preview"]');
-		await expect(previewFrame.locator('svg[data-marpit-svg], section').first()).toBeVisible({
+		await expect(previewFrame.locator("svg[data-marpit-svg], section").first()).toBeVisible({
 			timeout: 10_000,
 		});
 
