@@ -20,6 +20,7 @@ import { parseMarkdownOutline } from "@/lib/outline";
 import { isEditableDeckFile, isMarkdownDeckFile } from "@/lib/file-types";
 import { listThemeNames, rewriteCssUrls, setProjectThemes } from "@/lib/marp";
 import { applyThemeToYText, getMarkdownTheme } from "@/lib/markdown-theme";
+import { upsertProjectTheme, type ProjectTheme } from "@/lib/project-themes";
 import { API_URL } from "@/lib/config";
 import { MonitorPlayIcon, PauseIcon, PlayIcon, XIcon } from "lucide-react";
 
@@ -128,6 +129,7 @@ function RouteComponent() {
 	const [previewFile, setPreviewFile] = useState<DeckFile | null>(null);
 	const [sidebarOpen, setSidebarOpen] = useState(true);
 	const [markdown, setMarkdown] = useState("");
+	const [projectThemes, setProjectThemesState] = useState<ProjectTheme[]>([]);
 	const [themeNames, setThemeNames] = useState<string[]>(() => listThemeNames());
 	const [themeRevision, setThemeRevision] = useState(0);
 	const [slideIndex, setSlideIndex] = useState(0);
@@ -142,8 +144,12 @@ function RouteComponent() {
 	const [searchError, setSearchError] = useState<string | null>(null);
 	const editorPaneRef = useRef<EditorPaneHandle | null>(null);
 	const viewerContainerRef = useRef<HTMLDivElement | null>(null);
+	const selectedCssFileIdRef = useRef<string | null>(null);
 	const suppressNextSlideAwarenessUpdateRef = useRef(false);
 	const lastAppliedPresentationUpdateRef = useRef(0);
+	selectedCssFileIdRef.current = selectedFile?.id.toLowerCase().endsWith(".css")
+		? selectedFile.id
+		: null;
 
 	const isPresentation = search.mode === "present" || search.mode === "viewer";
 	const isViewer = search.mode === "viewer";
@@ -230,8 +236,7 @@ function RouteComponent() {
 	useEffect(() => {
 		const cssFiles = files.filter((file) => file.id.toLowerCase().endsWith(".css"));
 		if (cssFiles.length === 0) {
-			setThemeNames(setProjectThemes([]));
-			setThemeRevision((revision) => revision + 1);
+			setProjectThemesState([]);
 			return;
 		}
 
@@ -258,16 +263,49 @@ function RouteComponent() {
 				return;
 			}
 
-			setThemeNames(
-				setProjectThemes(
-					themes.filter((theme): theme is { id: string; css: string } => theme !== null),
-				),
-			);
-			setThemeRevision((revision) => revision + 1);
+			setProjectThemesState((current) => {
+				const loadedThemes = themes.filter(
+					(theme): theme is { id: string; css: string } => theme !== null,
+				);
+				const activeCssFileId = selectedCssFileIdRef.current;
+				const activeTheme = activeCssFileId
+					? current.find((theme) => theme.id === activeCssFileId)
+					: undefined;
+
+				return activeTheme ? upsertProjectTheme(loadedThemes, activeTheme) : loadedThemes;
+			});
 		})();
 
 		return () => controller.abort();
 	}, [files, id]);
+
+	useEffect(() => {
+		setThemeNames(setProjectThemes(projectThemes));
+		setThemeRevision((revision) => revision + 1);
+	}, [projectThemes]);
+
+	useEffect(() => {
+		if (!selectedFile?.id.toLowerCase().endsWith(".css") || !collab.yText) {
+			return;
+		}
+
+		const syncTheme = () => {
+			// oxlint-disable-next-line no-base-to-string
+			const css = rewriteCssUrls(collab.yText?.toString() ?? "", id, selectedFile.id);
+			setProjectThemesState((current) =>
+				upsertProjectTheme(current, {
+					id: selectedFile.id,
+					css,
+				}),
+			);
+		};
+
+		collab.yText.observe(syncTheme);
+
+		return () => {
+			collab.yText?.unobserve(syncTheme);
+		};
+	}, [collab.yText, id, selectedFile?.id]);
 
 	const currentTheme = useMemo(() => getMarkdownTheme(markdown) ?? "default", [markdown]);
 

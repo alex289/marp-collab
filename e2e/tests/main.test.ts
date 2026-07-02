@@ -52,6 +52,14 @@ async function getPreviewImageReference(page: Page) {
 	});
 }
 
+async function getPreviewSectionBackground(page: Page) {
+	const previewFrame = page.frameLocator('iframe[title="Marp preview"]');
+	return await previewFrame
+		.locator("section")
+		.first()
+		.evaluate((section) => window.getComputedStyle(section).backgroundColor);
+}
+
 test.describe("Dashboard", () => {
 	test("shows empty state on a fresh account", async ({ page }) => {
 		await page.goto("/");
@@ -299,6 +307,54 @@ test.describe("Editor: content editing", () => {
 		await expect
 			.poll(() => getPreviewImageReference(page))
 			.not.toContain("/files/themes/photo.png");
+	});
+
+	test("applies CSS theme edits to the preview without reloading the page", async ({ page }) => {
+		await page.goto("/");
+
+		await page.getByRole("button", { name: "Create Presentation" }).click();
+		await fillPresentationName(page, "Live CSS Theme Test");
+		await page.getByRole("button", { name: "Create" }).click();
+		await expect(page.getByRole("dialog")).not.toBeVisible();
+		await clickLastCard(page, "Live CSS Theme Test");
+		await page.waitForURL(/\/presentations\/.+/);
+		await waitForSidebar(page);
+
+		await page.getByTitle("Upload file").click();
+		await page.locator('input[type="file"]').setInputFiles({
+			name: "live-theme.css",
+			mimeType: "text/css",
+			buffer: Buffer.from(
+				"/* @theme live-theme */\nsection { background: rgb(1, 2, 3); color: white; }",
+			),
+		});
+		await page.getByRole("button", { name: "Upload", exact: true }).click();
+		await expect(page.getByRole("dialog")).not.toBeVisible();
+		await expect(page.getByRole("button", { name: "live-theme.css" })).toBeVisible({
+			timeout: 5_000,
+		});
+
+		const editor = page.locator(".cm-content");
+		await expect(editor).toBeVisible({ timeout: 10_000 });
+		await editor.click();
+		await page.keyboard.press("Control+A");
+		await page.keyboard.type("---\nmarp: true\ntheme: live-theme\n---\n\n# Live Theme");
+
+		const previewFrame = page.frameLocator('iframe[title="Marp preview"]');
+		await expect(previewFrame.getByRole("heading", { name: "Live Theme" })).toBeVisible({
+			timeout: 10_000,
+		});
+		await expect.poll(() => getPreviewSectionBackground(page)).toBe("rgb(1, 2, 3)");
+
+		await page.getByRole("button", { name: "live-theme.css" }).click();
+		await expect(page.getByText("CSS")).toBeVisible();
+		await editor.click();
+		await page.keyboard.press("Control+A");
+		await page.keyboard.type(
+			"/* @theme live-theme */\nsection { background: rgb(10, 20, 30); color: white; }",
+		);
+
+		await expect.poll(() => getPreviewSectionBackground(page)).toBe("rgb(10, 20, 30)");
 	});
 });
 
