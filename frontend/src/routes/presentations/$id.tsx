@@ -125,6 +125,7 @@ function RouteComponent() {
 	const presenceUser = usePresenceUser(session?.user ?? null);
 	const { files, isLoading, error, reload } = useFiles(id);
 	const [selectedFile, setSelectedFile] = useState<DeckFile | null>(null);
+	const [previewFile, setPreviewFile] = useState<DeckFile | null>(null);
 	const [sidebarOpen, setSidebarOpen] = useState(true);
 	const [markdown, setMarkdown] = useState("");
 	const [themeNames, setThemeNames] = useState<string[]>(() => listThemeNames());
@@ -156,13 +157,13 @@ function RouteComponent() {
 		}
 
 		const requestedFile = search.file
-			? files.find((f) => f.id === search.file && f.type === "markdown")
+			? files.find((f) => f.id === search.file && isMarkdownDeckFile(f))
 			: null;
 
 		const preferredDefault = () =>
 			requestedFile ??
 			files.find((f) => f.id === "presentation.md") ??
-			files.find((f) => f.type === "markdown") ??
+			files.find((f) => isMarkdownDeckFile(f)) ??
 			files[0] ??
 			null;
 
@@ -176,6 +177,21 @@ function RouteComponent() {
 			setSelectedFile(preferredDefault());
 		}
 	}, [files, search.file, selectedFile]);
+
+	useEffect(() => {
+		if (isMarkdownDeckFile(selectedFile)) {
+			setPreviewFile(selectedFile);
+			return;
+		}
+
+		setPreviewFile((current) => {
+			if (current && files.some((file) => file.id === current.id && isMarkdownDeckFile(file))) {
+				return current;
+			}
+
+			return files.find((file) => isMarkdownDeckFile(file)) ?? null;
+		});
+	}, [files, selectedFile]);
 
 	const collab = useCollabDocument(
 		selectedFile?.type === "markdown" ? (selectedFile.documentName ?? null) : null,
@@ -805,10 +821,10 @@ function RouteComponent() {
 					<Suspense>
 						<PreviewPane
 							markdown={markdown}
-							label={selectedFile?.label ?? null}
+							label={previewFile?.label ?? null}
 							projectId={id}
-							selectedFileId={selectedFile?.id ?? null}
 							themeRevision={themeRevision}
+							selectedFileId={previewFile?.id ?? null}
 						/>
 					</Suspense>
 				</main>

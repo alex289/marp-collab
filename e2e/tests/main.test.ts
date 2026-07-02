@@ -40,6 +40,18 @@ async function clickSidebarDelete(
 	await menuItem.locator(`[title="${kind}"]`).click();
 }
 
+async function getPreviewImageReference(page: Page) {
+	const frame = page.locator('iframe[title="Marp preview"]');
+	return await frame.evaluate((iframe: HTMLIFrameElement) => {
+		const doc = iframe.contentDocument;
+		const image = doc?.querySelector("img, image");
+		if (image instanceof HTMLImageElement) {
+			return image.src;
+		}
+		return image?.getAttribute("href") ?? image?.getAttribute("xlink:href") ?? "";
+	});
+}
+
 test.describe("Dashboard", () => {
 	test("shows empty state on a fresh account", async ({ page }) => {
 		await page.goto("/");
@@ -238,6 +250,55 @@ test.describe("Editor: content editing", () => {
 		await expect(previewFrame.getByRole("heading", { name: "Hello World" })).toBeVisible({
 			timeout: 10_000,
 		});
+	});
+
+	test("keeps markdown image paths rooted to the markdown file while editing CSS in a folder", async ({
+		page,
+	}) => {
+		await page.goto("/");
+
+		await page.getByRole("button", { name: "Create Presentation" }).click();
+		await fillPresentationName(page, "CSS Folder Preview Test");
+		await page.getByRole("button", { name: "Create" }).click();
+		await expect(page.getByRole("dialog")).not.toBeVisible();
+		await clickLastCard(page, "CSS Folder Preview Test");
+		await page.waitForURL(/\/presentations\/.+/);
+		await waitForSidebar(page);
+
+		await page.getByTitle("Upload file").click();
+		await page.locator('input[type="file"]').setInputFiles({
+			name: "photo.png",
+			mimeType: "image/png",
+			buffer: Buffer.from(
+				"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
+				"base64",
+			),
+		});
+		await page.getByRole("button", { name: "Upload", exact: true }).click();
+		await expect(page.getByRole("dialog")).not.toBeVisible();
+		await expect(page.getByRole("button", { name: "photo.png" })).toBeVisible({ timeout: 5_000 });
+
+		const editor = page.locator(".cm-content");
+		await expect(editor).toBeVisible({ timeout: 10_000 });
+		await editor.click();
+		await page.keyboard.press("Control+A");
+		await page.keyboard.type("![photo](photo.png)");
+
+		await expect.poll(() => getPreviewImageReference(page)).toContain("/projects/");
+		await expect.poll(() => getPreviewImageReference(page)).toContain("/files/photo.png");
+
+		await page.getByRole("button", { name: "New file" }).click();
+		await fillNewFileName(page, "themes/theme.css");
+		await page.getByRole("button", { name: "Create" }).click();
+		await expect(page.getByRole("dialog")).not.toBeVisible();
+		await page.getByRole("button", { name: "themes" }).click();
+		await page.getByRole("button", { name: "theme.css" }).click();
+
+		await expect(page.getByText("Active file: presentation.md")).toBeVisible();
+		await expect.poll(() => getPreviewImageReference(page)).toContain("/files/photo.png");
+		await expect
+			.poll(() => getPreviewImageReference(page))
+			.not.toContain("/files/themes/photo.png");
 	});
 });
 
