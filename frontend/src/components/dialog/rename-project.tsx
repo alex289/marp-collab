@@ -73,22 +73,24 @@ export function RenameProjectDialog({ project }: { project: Project }) {
 
 	return (
 		<Dialog open={open} onOpenChange={handleOpenChange}>
-			<DialogTrigger asChild>
-				<Button
-					type="button"
-					size="icon-sm"
-					variant="ghost"
-					onClick={(e) => {
-						e.preventDefault();
-						e.stopPropagation();
-						setOpen(true);
-					}}
-					aria-label={`Rename ${project.name}`}
-					className="mr-1"
-				>
-					<PencilIcon />
-				</Button>
-			</DialogTrigger>
+			<DialogTrigger
+				render={
+					<Button
+						type="button"
+						size="icon-sm"
+						variant="ghost"
+						onClick={(e) => {
+							e.preventDefault();
+							e.stopPropagation();
+							setOpen(true);
+						}}
+						aria-label={`Rename ${project.name}`}
+						className="mr-1"
+					>
+						<PencilIcon />
+					</Button>
+				}
+			/>
 			<DialogContent className="sm:max-w-md" showCloseButton={false}>
 				<form
 					onSubmit={async (e) => {
@@ -117,20 +119,22 @@ export function RenameProjectDialog({ project }: { project: Project }) {
 					</FieldGroup>
 					{error && <ErrorAlert title="Failed to rename presentation" description={error} />}
 					<DialogFooter>
-						<DialogClose asChild>
-							<Button
-								variant="outline"
-								type="button"
-								disabled={isSubmitting}
-								onClick={(e) => {
-									e.preventDefault();
-									e.stopPropagation();
-									setOpen(false);
-								}}
-							>
-								Cancel
-							</Button>
-						</DialogClose>
+						<DialogClose
+							render={
+								<Button
+									variant="outline"
+									type="button"
+									disabled={isSubmitting}
+									onClick={(e) => {
+										e.preventDefault();
+										e.stopPropagation();
+										setOpen(false);
+									}}
+								>
+									Cancel
+								</Button>
+							}
+						/>
 						<Button type="submit" disabled={!canSubmit}>
 							{isSubmitting ? "Renaming..." : "Rename"}
 						</Button>

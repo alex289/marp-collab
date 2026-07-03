@@ -89,11 +89,13 @@ export function CreateFolderDialog({ projectId, open, onOpenChange, onCreated }:
 					</FieldGroup>
 					{error && <ErrorAlert title="Failed to create folder" description={error} />}
 					<DialogFooter>
-						<DialogClose asChild>
-							<Button variant="outline" type="button">
-								Cancel
-							</Button>
-						</DialogClose>
+						<DialogClose
+							render={
+								<Button variant="outline" type="button">
+									Cancel
+								</Button>
+							}
+						/>
 						<Button type="submit" disabled={isSubmitting}>
 							{isSubmitting ? "Creating..." : "Create"}
 						</Button>

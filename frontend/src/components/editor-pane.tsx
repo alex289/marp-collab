@@ -340,33 +340,37 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 						<ManageProjectCollaborator projectId={projectId} />
 						<TooltipProvider>
 							<Tooltip>
-								<TooltipTrigger asChild>
-									<Button
-										type="button"
-										variant={wrapEnabled ? "secondary" : "outline"}
-										size="icon-sm"
-										aria-label={wrapEnabled ? "Disable line wrapping" : "Enable line wrapping"}
-										onClick={() => setWrapEnabled((current) => !current)}
-									>
-										<WrapText />
-									</Button>
-								</TooltipTrigger>
+								<TooltipTrigger
+									render={
+										<Button
+											type="button"
+											variant={wrapEnabled ? "secondary" : "outline"}
+											size="icon-sm"
+											aria-label={wrapEnabled ? "Disable line wrapping" : "Enable line wrapping"}
+											onClick={() => setWrapEnabled((current) => !current)}
+										>
+											<WrapText />
+										</Button>
+									}
+								/>
 								<TooltipContent>
 									<span>{wrapEnabled ? "Disable line wrapping" : "Enable line wrapping"}</span>
 								</TooltipContent>
 							</Tooltip>
 							<Tooltip>
-								<TooltipTrigger asChild>
-									<Button
-										type="button"
-										variant={isFocused ? "secondary" : "outline"}
-										size="icon-sm"
-										aria-label={isFocused ? "Exit focus mode" : "Enter focus mode"}
-										onClick={() => setIsFocused((current) => !current)}
-									>
-										<Maximize2 />
-									</Button>
-								</TooltipTrigger>
+								<TooltipTrigger
+									render={
+										<Button
+											type="button"
+											variant={isFocused ? "secondary" : "outline"}
+											size="icon-sm"
+											aria-label={isFocused ? "Exit focus mode" : "Enter focus mode"}
+											onClick={() => setIsFocused((current) => !current)}
+										>
+											<Maximize2 />
+										</Button>
+									}
+								/>
 								<TooltipContent>
 									<span>{isFocused ? "Exit focus mode" : "Enter focus mode"}</span>
 								</TooltipContent>
@@ -401,19 +405,21 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 						{visibleParticipants.map((participant) => (
 							<TooltipProvider key={participant.id}>
 								<Tooltip>
-									<TooltipTrigger asChild>
-										<Avatar size="sm" className="ring-1 ring-card after:border-0">
-											{participant.image ? (
-												<AvatarImage src={participant.image} alt={participant.name} />
-											) : null}
-											<AvatarFallback
-												className="text-white"
-												style={{ backgroundColor: participant.color }}
-											>
-												{getInitials(participant.name)}
-											</AvatarFallback>
-										</Avatar>
-									</TooltipTrigger>
+									<TooltipTrigger
+										render={
+											<Avatar size="sm" className="ring-1 ring-card after:border-0">
+												{participant.image ? (
+													<AvatarImage src={participant.image} alt={participant.name} />
+												) : null}
+												<AvatarFallback
+													className="text-white"
+													style={{ backgroundColor: participant.color }}
+												>
+													{getInitials(participant.name)}
+												</AvatarFallback>
+											</Avatar>
+										}
+									/>
 									<TooltipContent>{participant.name}</TooltipContent>
 								</Tooltip>
 							</TooltipProvider>

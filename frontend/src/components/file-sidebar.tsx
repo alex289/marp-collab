@@ -201,21 +201,23 @@ const WorkspaceRailButton = ({
 
 	return (
 		<Tooltip>
-			<TooltipTrigger asChild>
-				<button
-					type="button"
-					onClick={onClick}
-					title={`${label} (${displayHotkey})`}
-					aria-label={`${label} (${displayHotkey})`}
-					className={cn(
-						"flex h-9 w-9 items-center justify-center rounded-md text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground [&>svg]:size-4",
-						active &&
-							"bg-sidebar-primary text-sidebar-primary-foreground hover:bg-sidebar-primary hover:text-sidebar-primary-foreground",
-					)}
-				>
-					{children}
-				</button>
-			</TooltipTrigger>
+			<TooltipTrigger
+				render={
+					<button
+						type="button"
+						onClick={onClick}
+						title={`${label} (${displayHotkey})`}
+						aria-label={`${label} (${displayHotkey})`}
+						className={cn(
+							"flex h-9 w-9 items-center justify-center rounded-md text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground [&>svg]:size-4",
+							active &&
+								"bg-sidebar-primary text-sidebar-primary-foreground hover:bg-sidebar-primary hover:text-sidebar-primary-foreground",
+						)}
+					>
+						{children}
+					</button>
+				}
+			/>
 			<TooltipContent>
 				<span>{label}</span>
 				<KbdGroup className="ml-2">
@@ -426,33 +428,35 @@ const NestedFileItem = ({
 				onOpenChange={(open) => setFolderOpen(node.path, open)}
 				className="group/collapsible [&[data-state=open]>[data-sidebar=menu-button]>svg:first-child]:rotate-90"
 			>
-				<CollapsibleTrigger asChild>
-					<SidebarMenuButton
-						isActive={isActiveBranch}
-						tooltip={node.path}
-						className={isDragOver ? "ring-2 ring-primary ring-inset" : undefined}
-						onDragOver={(e) => {
-							e.preventDefault();
-							e.stopPropagation();
-							e.dataTransfer.dropEffect = "move";
-							onDragOverPath(node.path);
-						}}
-						onDragLeave={(e) => {
-							if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-								onDragOverPath(null);
-							}
-						}}
-						onDrop={(e) => {
-							e.preventDefault();
-							e.stopPropagation();
-							onDropOnPath(node.path);
-						}}
-					>
-						<ChevronRight className="transition-transform" />
-						<Folder />
-						{node.name}
-					</SidebarMenuButton>
-				</CollapsibleTrigger>
+				<CollapsibleTrigger
+					render={
+						<SidebarMenuButton
+							isActive={isActiveBranch}
+							tooltip={node.path}
+							className={isDragOver ? "ring-2 ring-primary ring-inset" : undefined}
+							onDragOver={(e) => {
+								e.preventDefault();
+								e.stopPropagation();
+								e.dataTransfer.dropEffect = "move";
+								onDragOverPath(node.path);
+							}}
+							onDragLeave={(e) => {
+								if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+									onDragOverPath(null);
+								}
+							}}
+							onDrop={(e) => {
+								e.preventDefault();
+								e.stopPropagation();
+								onDropOnPath(node.path);
+							}}
+						>
+							<ChevronRight className="transition-transform" />
+							<Folder />
+							{node.name}
+						</SidebarMenuButton>
+					}
+				/>
 				{folderFile && (
 					<SidebarMenuAction
 						showOnHover
@@ -804,7 +808,11 @@ export const FileSidebar = ({
 					<Label htmlFor="theme-select" className="px-1 text-xs font-medium">
 						Slide theme
 					</Label>
-					<Select value={currentTheme} onValueChange={onThemeChange} disabled={themeSelectDisabled}>
+					<Select
+						value={currentTheme}
+						onValueChange={(value) => value && onThemeChange(value)}
+						disabled={themeSelectDisabled}
+					>
 						<SelectTrigger className="w-full" aria-label="Slide theme">
 							<SelectValue placeholder="Theme" />
 						</SelectTrigger>
