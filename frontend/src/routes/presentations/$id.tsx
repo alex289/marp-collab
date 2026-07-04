@@ -22,7 +22,14 @@ import { listThemeNames, rewriteCssUrls, setProjectThemes } from "@/lib/marp";
 import { applyThemeToYText, getMarkdownTheme } from "@/lib/markdown-theme";
 import { upsertProjectTheme, type ProjectTheme } from "@/lib/project-themes";
 import { API_URL } from "@/lib/config";
-import { MonitorPlayIcon, PauseIcon, PlayIcon, XIcon } from "lucide-react";
+import {
+	ChevronLeftIcon,
+	ChevronRightIcon,
+	MonitorPlayIcon,
+	PauseIcon,
+	PlayIcon,
+	XIcon,
+} from "lucide-react";
 
 const EditorPane = lazy(async () => {
 	const m = await import("@/components/editor-pane");
@@ -773,6 +780,7 @@ function RouteComponent() {
 						onClick={() => setSlideIndex((current) => Math.max(current - 1, 0))}
 						disabled={slideIndex <= 0}
 					>
+						<ChevronLeftIcon />
 						Previous
 					</Button>
 					<Button
@@ -783,6 +791,7 @@ function RouteComponent() {
 						disabled={slideIndex >= maxSlideIndex}
 					>
 						Next
+						<ChevronRightIcon />
 					</Button>
 				</div>
 			</div>

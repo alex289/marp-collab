@@ -13,7 +13,9 @@ export default function ErrorAlert({
 			<AlertTriangleIcon />
 			<AlertTitle>{title}</AlertTitle>
 			{description && (
-				<AlertDescription className="text-foreground text-wrap">{description}</AlertDescription>
+				<AlertDescription className="text-foreground text-wrap whitespace-pre-line">
+					{description}
+				</AlertDescription>
 			)}
 		</Alert>
 	);

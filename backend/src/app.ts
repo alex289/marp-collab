@@ -8,6 +8,7 @@ import { bodyLimit } from "hono/body-limit";
 import { compress } from "hono/compress";
 import { HTTPException } from "hono/http-exception";
 import { serveStatic } from "@hono/node-server/serve-static";
+import { extname } from "node:path";
 import { isDev } from "./helpers/isDev.ts";
 import type { HonoVariables } from "./types.ts";
 import { WebSocketServer } from "ws";
@@ -79,9 +80,15 @@ if (!isDev()) {
 		serveStatic({
 			root: "./frontend",
 			precompressed: true,
-			onFound: (path, c) => {
-				if (path !== "/" && path !== "/index.html") {
+			onFound: (_path, c) => {
+				const hasExtension = extname(c.req.path) !== "";
+				if (hasExtension) {
 					c.header("Cache-Control", `private, immutable, max-age=86400`);
+				} else {
+					// Extensionless requests resolve to index.html (SPA routes, "/").
+					// It must always be revalidated so it never points at stale
+					// (deleted) hashed asset filenames from a previous deploy.
+					c.header("Cache-Control", "no-cache");
 				}
 			},
 		}),

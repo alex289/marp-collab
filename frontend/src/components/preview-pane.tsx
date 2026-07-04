@@ -30,12 +30,55 @@ const staticSrcDoc = `<!doctype html>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <style id="marp-styles"></style>
     <script>
+      var zoom = 1;
+      var MIN_ZOOM = 0.5;
+      var MAX_ZOOM = 4;
+
+      function applyZoom() {
+        var el = document.querySelector('div.marpit');
+        if (el) el.style.transform = 'scale(' + zoom + ')';
+      }
+
+      function resetZoom() {
+        zoom = 1;
+        var el = document.querySelector('div.marpit');
+        if (el) el.style.transformOrigin = '';
+        applyZoom();
+        window.scrollTo(0, 0);
+      }
+
+      window.addEventListener('wheel', function (e) {
+        if (!e.ctrlKey) return;
+        e.preventDefault();
+
+        var el = document.querySelector('div.marpit');
+        if (el) {
+          var rect = el.getBoundingClientRect();
+          var originX = ((e.clientX - rect.left) / rect.width) * 100;
+          var originY = ((e.clientY - rect.top) / rect.height) * 100;
+          el.style.transformOrigin = originX + '% ' + originY + '%';
+        }
+
+        var delta = -e.deltaY * 0.005;
+        zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom * (1 + delta)));
+        applyZoom();
+      }, { passive: false });
+
+      window.addEventListener('dblclick', function (e) {
+        e.preventDefault();
+        resetZoom();
+      });
+
       window.addEventListener('message', function(e) {
         if (e.source !== window.parent) return;
         if (!e.data || e.data.type !== 'marp-update') return;
         document.getElementById('marp-styles').textContent = e.data.css;
         document.body.innerHTML = e.data.html;
-        if (e.data.scrollToTop) window.scrollTo(0, 0);
+        if (e.data.scrollToTop) {
+          window.scrollTo(0, 0);
+          zoom = 1;
+        }
+        applyZoom();
       });
     </script>
   </head>
@@ -109,7 +152,7 @@ export const PreviewPane = ({
         min-height: 100%;
         box-sizing: border-box;
         background: ${bg};
-        overflow-x: hidden;
+        overflow: auto;
       }
       *, *::before, *::after {
         box-sizing: inherit;
