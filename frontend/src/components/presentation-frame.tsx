@@ -53,7 +53,7 @@ export function PresentationFrame({
         margin: 0;
         width: 100%;
         height: 100%;
-        overflow: hidden;
+        overflow: auto;
         background: #000;
       }
       ${rendered.css}
@@ -87,10 +87,26 @@ export function PresentationFrame({
         }
 
         var active = 0;
+        var zoom = 1;
+        var MIN_ZOOM = 1;
+        var MAX_ZOOM = 4;
 
         function clamp(index) {
 					var max = Math.max(0, slides.length - 1);
           return Math.min(Math.max(index, 0), max);
+        }
+
+        function applyZoom() {
+          var slide = slides[active];
+          if (slide) slide.style.setProperty('transform', 'scale(' + zoom + ')', 'important');
+        }
+
+        function resetZoom() {
+          zoom = 1;
+          var slide = slides[active];
+          if (slide) slide.style.transformOrigin = '';
+          applyZoom();
+          window.scrollTo(0, 0);
         }
 
         function report() {
@@ -132,13 +148,17 @@ export function PresentationFrame({
         }
 
         function apply(index) {
-          active = clamp(index);
+          var next = clamp(index);
+          if (next !== active) zoom = 1;
+          active = next;
 					slides.forEach(function (slide, i) {
 						if (i === active) {
 							slide.style.setProperty('display', 'block', 'important');
 							fit(slide);
+							applyZoom();
 							slide.removeAttribute('aria-hidden');
 						} else {
+							slide.style.removeProperty('transform');
 							slide.style.setProperty('display', 'none', 'important');
 							slide.setAttribute('aria-hidden', 'true');
 						}
@@ -148,6 +168,29 @@ export function PresentationFrame({
 
         window.addEventListener('resize', function () {
           fit(slides[active]);
+          applyZoom();
+        });
+
+        window.addEventListener('wheel', function (e) {
+          if (!e.ctrlKey) return;
+          e.preventDefault();
+
+          var slide = slides[active];
+          if (slide) {
+            var rect = slide.getBoundingClientRect();
+            var originX = ((e.clientX - rect.left) / rect.width) * 100;
+            var originY = ((e.clientY - rect.top) / rect.height) * 100;
+            slide.style.transformOrigin = originX + '% ' + originY + '%';
+          }
+
+          var delta = -e.deltaY * 0.005;
+          zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom * (1 + delta)));
+          applyZoom();
+        }, { passive: false });
+
+        window.addEventListener('dblclick', function (e) {
+          e.preventDefault();
+          resetZoom();
         });
 
         window.addEventListener('message', function (event) {
