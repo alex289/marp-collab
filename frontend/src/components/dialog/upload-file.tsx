@@ -23,49 +23,64 @@ type Props = {
 export function UploadFileDialog({ projectId, open, onOpenChange, onUploaded }: Props) {
 	const [error, setError] = useState<string | null>(null);
 	const [isSubmitting, setIsSubmitting] = useState(false);
-	const [selectedFile, setSelectedFile] = useState<File | null>(null);
+	const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
 
 	function handleOpenChange(next: boolean) {
 		onOpenChange(next);
 		if (!next) {
 			setError(null);
 			setIsSubmitting(false);
-			setSelectedFile(null);
+			setSelectedFiles([]);
 		}
 	}
 
 	async function handleSubmit(e: React.FormEvent) {
 		e.preventDefault();
-		if (!selectedFile) {
+		if (selectedFiles.length === 0) {
 			return;
 		}
 
 		setIsSubmitting(true);
 		setError(null);
 
-		try {
-			const formData = new FormData();
-			formData.append("file", selectedFile);
+		let uploadedAny = false;
+		const failed: string[] = [];
 
-			const res = await fetch(`${API_URL}/projects/${projectId}/files/upload`, {
-				method: "POST",
+		for (const file of selectedFiles) {
+			try {
+				const formData = new FormData();
+				formData.append("file", file);
 
-				body: formData,
-			});
+				const res = await fetch(`${API_URL}/projects/${projectId}/files/upload`, {
+					method: "POST",
+					body: formData,
+				});
 
-			if (!res.ok) {
-				const data = (await res.json()) as { error?: string };
-				setError(data.error ?? "Failed to upload file");
-				return;
+				if (!res.ok) {
+					const data = (await res.json()) as { error?: string };
+					failed.push(`${file.name}: ${data.error ?? "Failed to upload file"}`);
+					continue;
+				}
+
+				uploadedAny = true;
+			} catch {
+				failed.push(`${file.name}: An unexpected error occurred`);
 			}
-
-			onUploaded();
-			handleOpenChange(false);
-		} catch {
-			setError("An unexpected error occurred. Please try again.");
-		} finally {
-			setIsSubmitting(false);
 		}
+
+		if (uploadedAny) {
+			onUploaded();
+		}
+
+		if (failed.length > 0) {
+			setError(failed.join("\n"));
+			setSelectedFiles([]);
+			setIsSubmitting(false);
+			return;
+		}
+
+		setIsSubmitting(false);
+		handleOpenChange(false);
 	}
 
 	return (
@@ -73,17 +88,24 @@ export function UploadFileDialog({ projectId, open, onOpenChange, onUploaded }: 
 			<DialogContent className="sm:max-w-md">
 				<form onSubmit={handleSubmit} className="flex flex-col gap-3">
 					<DialogHeader>
-						<DialogTitle>Upload File</DialogTitle>
+						<DialogTitle>Upload Files</DialogTitle>
 						<DialogDescription>
 							Markdown, images, videos, CSS, and font files are allowed.
 						</DialogDescription>
 					</DialogHeader>
 					<FileDropZone
 						accept="image/*,video/*,.css,.md,.markdown,.woff,.woff2,.ttf,.otf"
-						onChange={setSelectedFile}
+						multiple
+						onChange={setSelectedFiles}
 					/>
-					{selectedFile && (
-						<p className="truncate text-xs text-muted-foreground">{selectedFile.name}</p>
+					{selectedFiles.length > 0 && (
+						<ul className="max-h-32 list-disc overflow-y-auto pl-5 text-xs text-muted-foreground">
+							{selectedFiles.map((file) => (
+								<li key={file.name} className="truncate">
+									{file.name}
+								</li>
+							))}
+						</ul>
 					)}
 					{error && <ErrorAlert title="Failed to upload file" description={error} />}
 					<DialogFooter>
@@ -92,8 +114,12 @@ export function UploadFileDialog({ projectId, open, onOpenChange, onUploaded }: 
 								Cancel
 							</Button>
 						</DialogClose>
-						<Button type="submit" disabled={isSubmitting || !selectedFile}>
-							{isSubmitting ? "Uploading..." : "Upload"}
+						<Button type="submit" disabled={isSubmitting || selectedFiles.length === 0}>
+							{isSubmitting
+								? "Uploading..."
+								: selectedFiles.length > 1
+									? `Upload ${selectedFiles.length} files`
+									: "Upload"}
 						</Button>
 					</DialogFooter>
 				</form>

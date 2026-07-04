@@ -4,11 +4,12 @@ import { useRef, useState } from "react";
 
 type Props = {
 	accept?: string;
-	onChange: (file: File) => void;
+	multiple?: boolean;
+	onChange: (files: File[]) => void;
 	className?: string;
 };
 
-export function FileDropZone({ accept, onChange, className }: Props) {
+export function FileDropZone({ accept, multiple, onChange, className }: Props) {
 	const inputRef = useRef<HTMLInputElement>(null);
 	const [isDragging, setIsDragging] = useState(false);
 
@@ -26,16 +27,16 @@ export function FileDropZone({ accept, onChange, className }: Props) {
 	function handleDrop(e: React.DragEvent) {
 		e.preventDefault();
 		setIsDragging(false);
-		const file = e.dataTransfer.files[0];
-		if (file) {
-			onChange(file);
+		const files = Array.from(e.dataTransfer.files);
+		if (files.length > 0) {
+			onChange(multiple ? files : files.slice(0, 1));
 		}
 	}
 
 	function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
-		const file = e.target.files?.[0];
-		if (file) {
-			onChange(file);
+		const files = Array.from(e.target.files ?? []);
+		if (files.length > 0) {
+			onChange(files);
 		}
 	}
 
@@ -68,6 +69,7 @@ export function FileDropZone({ accept, onChange, className }: Props) {
 				ref={inputRef}
 				type="file"
 				accept={accept}
+				multiple={multiple}
 				className="hidden"
 				onChange={handleChange}
 			/>
