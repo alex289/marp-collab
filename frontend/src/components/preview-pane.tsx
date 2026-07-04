@@ -12,6 +12,10 @@ import { useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { useTheme } from "./theme-provider";
 import { getSecondaryScreen } from "@/lib/screen-management";
+import {
+	IFRAME_KEYDOWN_FORWARDING_SCRIPT,
+	useForwardedIframeKeydown,
+} from "@/lib/iframe-keydown-forwarding";
 
 type PreviewPaneProps = {
 	markdown: string;
@@ -38,6 +42,9 @@ const staticSrcDoc = `<!doctype html>
         if (e.data.scrollToTop) window.scrollTo(0, 0);
       });
     </script>
+    <script>
+      ${IFRAME_KEYDOWN_FORWARDING_SCRIPT}
+    </script>
   </head>
   <body></body>
 </html>`;
@@ -54,6 +61,8 @@ export const PreviewPane = ({
 	const iframeRef = useRef<HTMLIFrameElement>(null);
 	const [iframeReady, setIframeReady] = useState(false);
 	const prevFileKeyRef = useRef<string | null>(null);
+
+	useForwardedIframeKeydown(iframeRef);
 
 	const handleStartPresentation = useCallback(async () => {
 		const secondaryScreen = await getSecondaryScreen();

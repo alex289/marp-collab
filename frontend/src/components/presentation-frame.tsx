@@ -1,6 +1,10 @@
 import { renderMarp } from "@/lib/marp";
 import { useEffect, useMemo, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+	IFRAME_KEYDOWN_FORWARDING_SCRIPT,
+	useForwardedIframeKeydown,
+} from "@/lib/iframe-keydown-forwarding";
 
 type PresentationFrameProps = {
 	markdown: string;
@@ -24,6 +28,8 @@ export function PresentationFrame({
 	className,
 }: PresentationFrameProps) {
 	const iframeRef = useRef<HTMLIFrameElement | null>(null);
+
+	useForwardedIframeKeydown(iframeRef);
 
 	const rendered = useMemo(() => {
 		// Project themes are registered on the shared Marp instance; this invalidates stale renders.
@@ -160,6 +166,9 @@ export function PresentationFrame({
 
         apply(0);
       })();
+    </script>
+    <script>
+      ${IFRAME_KEYDOWN_FORWARDING_SCRIPT}
     </script>
   </body>
 </html>`;
