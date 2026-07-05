@@ -193,6 +193,28 @@ export function PresentationFrame({
           resetZoom();
         });
 
+        // Keydown/keyup inside the iframe don't bubble to the parent document, so the
+        // presentation hotkeys (slide navigation, escape, etc.) would stop working once
+        // the iframe has focus. Forward raw key events to the parent, which re-dispatches
+        // them on its own document.
+        function forwardKey(type) {
+          return function (e) {
+            window.parent.postMessage({
+              type: 'presentation-key',
+              eventType: type,
+              key: e.key,
+              code: e.code,
+              ctrlKey: e.ctrlKey,
+              shiftKey: e.shiftKey,
+              altKey: e.altKey,
+              metaKey: e.metaKey,
+            }, '*');
+          };
+        }
+
+        window.addEventListener('keydown', forwardKey('keydown'));
+        window.addEventListener('keyup', forwardKey('keyup'));
+
         window.addEventListener('message', function (event) {
           var data = event.data;
           if (!data || data.type !== 'presentation-set-slide') {
@@ -215,14 +237,32 @@ export function PresentationFrame({
 			}
 
 			const payload = event.data;
-			if (!payload || payload.type !== "presentation-meta") {
+			if (!payload) {
 				return;
 			}
 
-			onMetaChange?.({
-				active: Number(payload.active) || 0,
-				total: Number(payload.total) || 1,
-			});
+			if (payload.type === "presentation-meta") {
+				onMetaChange?.({
+					active: Number(payload.active) || 0,
+					total: Number(payload.total) || 1,
+				});
+				return;
+			}
+
+			if (payload.type === "presentation-key") {
+				document.dispatchEvent(
+					new KeyboardEvent(payload.eventType, {
+						key: payload.key,
+						code: payload.code,
+						ctrlKey: payload.ctrlKey,
+						shiftKey: payload.shiftKey,
+						altKey: payload.altKey,
+						metaKey: payload.metaKey,
+						bubbles: true,
+						cancelable: true,
+					}),
+				);
+			}
 		};
 
 		window.addEventListener("message", onMessage);
