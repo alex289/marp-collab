@@ -34,6 +34,7 @@ import { ManageProjectCollaborator } from "./dialog/manage-project-collaborator"
 import { toast } from "sonner";
 import { getInitials } from "@/lib/utils";
 import { useHotkey } from "@tanstack/react-hotkeys";
+import { countMarpSlides } from "@/lib/slide-count";
 
 type Participant = {
 	id: string;
@@ -80,9 +81,7 @@ function getEditorStats(view: EditorView): EditorStats {
 	const cursor = view.state.selection.main.head;
 	const cursorLine = doc.lineAt(cursor);
 	const words = text.trim().length === 0 ? 0 : text.trim().split(/\s+/).length;
-	const slides = text
-		.split(/\r\n|\n|\r/)
-		.filter((line) => line.trim() === "---" || line.trim().startsWith("# ")).length;
+	const slides = countMarpSlides(text);
 
 	return {
 		chars: text.length,
