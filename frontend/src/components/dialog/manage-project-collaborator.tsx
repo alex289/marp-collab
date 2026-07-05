@@ -38,6 +38,11 @@ export function ManageProjectCollaborator({ projectId }: { projectId: string }) 
 	const [isEmailValid, setIsEmailValid] = useState(false);
 
 	const collaboratorsKey = `${API_URL}/projects/${projectId}/collaborators`;
+	const { data: projectData } = useSWR<{ isOwner: boolean }>(
+		`${API_URL}/projects/${projectId}`,
+		fetcher,
+	);
+	const isOwner = projectData?.isOwner ?? false;
 
 	function handleOpenChange(next: boolean) {
 		setOpen(next);
@@ -204,11 +209,17 @@ export function ManageProjectCollaborator({ projectId }: { projectId: string }) 
 										setCollaboratorEmail(e.target.value);
 										setIsEmailValid(e.target.validity.valid);
 									}}
+									disabled={!isOwner}
 									required
 								/>
 							</TableCell>
 							<TableCell>
-								<Select defaultValue="read-only" value={accessLevel} onValueChange={setAccessLevel}>
+								<Select
+									defaultValue="read-only"
+									value={accessLevel}
+									onValueChange={setAccessLevel}
+									disabled={!isOwner}
+								>
 									<SelectTrigger id="access-level" className="w-full">
 										<SelectValue placeholder="Select access level" />
 									</SelectTrigger>
@@ -222,8 +233,10 @@ export function ManageProjectCollaborator({ projectId }: { projectId: string }) 
 								<Button
 									type="button"
 									variant="outline"
-									title="Add collaborator"
-									disabled={isSubmitting || !isEmailValid}
+									title={
+										isOwner ? "Add collaborator" : "Only the project owner can add collaborators"
+									}
+									disabled={!isOwner || isSubmitting || !isEmailValid}
 									onClick={handleAddCollaborator}
 								>
 									<PlusIcon />
@@ -234,6 +247,11 @@ export function ManageProjectCollaborator({ projectId }: { projectId: string }) 
 					</TableFooter>
 				</Table>
 				{error && <ErrorAlert title="Failed to create presentation" description={error} />}
+				{!isOwner && (
+					<p className="text-xs text-muted-foreground">
+						Only the project owner can invite or manage collaborators.
+					</p>
+				)}
 			</DialogContent>
 		</Dialog>
 	);

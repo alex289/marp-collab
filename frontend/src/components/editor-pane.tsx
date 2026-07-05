@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Check, Copy, FileText, Maximize2, Sparkles, Users, WrapText } from "lucide-react";
+import { Check, Copy, FileText, Maximize2, Users, WrapText } from "lucide-react";
 import { useTheme } from "./theme-provider";
 import { vsCodeLight } from "@fsegurai/codemirror-theme-vscode-light";
 import { vsCodeDark } from "@fsegurai/codemirror-theme-vscode-dark";
