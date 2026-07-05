@@ -376,7 +376,9 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 			</CardHeader>
 
 			<div className="flex shrink-0 items-center justify-between gap-3 border-b border-border bg-muted/35 px-4 py-2">
-				<div className="hidden 2xl:flex min-w-0 flex-wrap items-center gap-2">
+				<div
+					className={`${isFocused ? "flex" : "hidden 2xl:flex"} min-w-0 flex-wrap items-center gap-2`}
+				>
 					<Badge variant="outline">{stats.words.toLocaleString()} words</Badge>
 					<Badge variant="outline">{stats.chars.toLocaleString()} chars</Badge>
 					{fileKind === "Markdown" ? (
