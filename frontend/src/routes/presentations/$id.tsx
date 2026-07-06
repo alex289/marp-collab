@@ -23,6 +23,7 @@ import { listThemeNames, rewriteCssUrls, setProjectThemes } from "@/lib/marp";
 import { applyThemeToYText, getMarkdownTheme } from "@/lib/markdown-theme";
 import { upsertProjectTheme, type ProjectTheme } from "@/lib/project-themes";
 import { API_URL } from "@/lib/config";
+import { releaseWakeLock, requestWakeLock } from "@/lib/wake-lock";
 import {
 	ChevronLeftIcon,
 	ChevronRightIcon,
@@ -458,6 +459,18 @@ function RouteComponent() {
 			window.clearInterval(interval);
 		};
 	}, [isPresentation, isTimerPaused]);
+
+	useEffect(() => {
+		if (!isPresentation) {
+			return;
+		}
+
+		void requestWakeLock();
+
+		return () => {
+			void releaseWakeLock();
+		};
+	}, [isPresentation]);
 
 	useEffect(() => {
 		if (!isPresentation) {
