@@ -10,9 +10,12 @@ services:
       - URL=http://127.0.0.1:8090
       - PORT=8090
       - AUTH_SECRET=supersecretkey_minimum_32_characters
+      - AUTH_RATE_LIMIT_ENABLED=false
       - AUTH_PROVIDER_0_NAME=Mock
       - AUTH_PROVIDER_0_CLIENT_ID=123-456-789
       - AUTH_PROVIDER_0_CLIENT_SECRET=1234567890abcdef
-      - AUTH_PROVIDER_0_DISCOVERY_URL=http://host.docker.internal:8091/.well-known/openid-configuration
+      - AUTH_PROVIDER_0_AUTHORIZATION_URL=http://127.0.0.1:8091/authorize
+      - AUTH_PROVIDER_0_TOKEN_URL=http://host.docker.internal:8091/token
+      - AUTH_PROVIDER_0_USER_INFO_URL=http://host.docker.internal:8091/userinfo
     extra_hosts:
       - "host.docker.internal:host-gateway"

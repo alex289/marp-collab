@@ -18,7 +18,7 @@ export const auth = betterAuth({
 		enabled: false,
 	},
 	rateLimit: {
-		enabled: true,
+		enabled: process.env.AUTH_RATE_LIMIT_ENABLED !== "false",
 	},
 	advanced: {
 		database: {

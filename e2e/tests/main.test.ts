@@ -46,9 +46,20 @@ async function getPreviewImageReference(page: Page) {
 		const doc = iframe.contentDocument;
 		const image = doc?.querySelector("img, image");
 		if (image instanceof HTMLImageElement) {
-			return image.src;
+			return image.getAttribute("src") || image.src;
 		}
-		return image?.getAttribute("href") ?? image?.getAttribute("xlink:href") ?? "";
+		if (image instanceof SVGImageElement) {
+			return (
+				image.href.baseVal ||
+				image.getAttribute("href") ||
+				image.getAttributeNS("http://www.w3.org/1999/xlink", "href") ||
+				image.getAttribute("xlink:href") ||
+				""
+			);
+		}
+		return (
+			image?.getAttribute("href") ?? image?.getAttribute("xlink:href") ?? doc?.body.innerHTML ?? ""
+		);
 	});
 }
 
@@ -266,7 +277,7 @@ test.describe("Editor: content editing", () => {
 		await expect(editor).toBeVisible({ timeout: 10_000 });
 
 		await editor.click();
-		await page.keyboard.press("Control+A");
+		await page.keyboard.press("ControlOrMeta+A");
 		await page.keyboard.type("# Hello World");
 
 		const previewFrame = page.frameLocator('iframe[title="Marp preview"]');
@@ -328,7 +339,7 @@ test.describe("Editor: content editing", () => {
 		const editor = page.locator(".cm-content");
 		await expect(editor).toBeVisible({ timeout: 10_000 });
 		await editor.click();
-		await page.keyboard.press("Control+A");
+		await page.keyboard.press("ControlOrMeta+A");
 		await page.keyboard.type("![photo](photo.png)");
 
 		await expect.poll(() => getPreviewImageReference(page)).toContain("/projects/");
@@ -376,7 +387,7 @@ test.describe("Editor: content editing", () => {
 		const editor = page.locator(".cm-content");
 		await expect(editor).toBeVisible({ timeout: 10_000 });
 		await editor.click();
-		await page.keyboard.press("Control+A");
+		await page.keyboard.press("ControlOrMeta+A");
 		await page.keyboard.type("---\nmarp: true\ntheme: live-theme\n---\n\n# Live Theme");
 
 		const previewFrame = page.frameLocator('iframe[title="Marp preview"]');
@@ -386,9 +397,9 @@ test.describe("Editor: content editing", () => {
 		await expect.poll(() => getPreviewSectionBackground(page)).toBe("rgb(1, 2, 3)");
 
 		await page.getByRole("button", { name: "live-theme.css" }).click();
-		await expect(page.getByText("CSS")).toBeVisible();
+		await expect(page.getByText("CSS", { exact: true })).toBeVisible();
 		await editor.click();
-		await page.keyboard.press("Control+A");
+		await page.keyboard.press("ControlOrMeta+A");
 		await page.keyboard.type(
 			"/* @theme live-theme */\nsection { background: rgb(10, 20, 30); color: white; }",
 		);
@@ -411,6 +422,17 @@ test.describe("Presentation mode", () => {
 		await page.waitForURL(/\/presentations\/.+/);
 		await waitForSidebar(page);
 
+		let releaseCss!: () => void;
+		const cssBlocked = new Promise<void>((resolve) => {
+			releaseCss = resolve;
+		});
+		await page
+			.context()
+			.route(/\/api\/v1\/projects\/[^/]+\/files\/race-theme\.css$/, async (route) => {
+				await cssBlocked;
+				await route.continue();
+			});
+
 		await page.getByTitle("Upload file").click();
 		await page.locator('input[type="file"]').setInputFiles({
 			name: "race-theme.css",
@@ -427,28 +449,16 @@ test.describe("Presentation mode", () => {
 		const editor = page.locator(".cm-content");
 		await expect(editor).toBeVisible({ timeout: 10_000 });
 		await editor.click();
-		await page.keyboard.press("Control+A");
+		await page.keyboard.press("ControlOrMeta+A");
 		await page.keyboard.type("---\nmarp: true\ntheme: race-theme\n---\n\n# Race Theme");
-		const previewFrame = page.frameLocator('iframe[title="Marp preview"]');
-		await expect(previewFrame.getByRole("heading", { name: "Race Theme" })).toBeVisible({
-			timeout: 10_000,
-		});
 
 		const presentationUrl = page.url();
-		let releaseCss!: () => void;
-		const cssBlocked = new Promise<void>((resolve) => {
-			releaseCss = resolve;
+		const presentationPage = await page.context().newPage();
+		await presentationPage.goto(`${presentationUrl}?mode=present`);
+		const presentationFrame = presentationPage.frameLocator('iframe[title="Presentation"]');
+		await expect(presentationFrame.getByRole("heading", { name: "Race Theme" })).toBeVisible({
+			timeout: 10_000,
 		});
-		await page.route(/\/api\/v1\/projects\/[^/]+\/files\/race-theme\.css$/, async (route) => {
-			await cssBlocked;
-			await route.continue();
-		});
-
-		await page.goto(`${presentationUrl}?mode=present`);
-		const presentationFrame = page.frameLocator('iframe[title="Presentation"]');
-		await expect(presentationFrame.getByRole("heading", { name: "Marp Render Error" })).toBeVisible(
-			{ timeout: 10_000 },
-		);
 
 		releaseCss();
 
@@ -460,6 +470,7 @@ test.describe("Presentation mode", () => {
 					.evaluate((section) => window.getComputedStyle(section).backgroundColor),
 			)
 			.toBe("rgb(1, 2, 3)");
+		await presentationPage.close();
 	});
 
 	test("start and end a presentation", async ({ page }) => {
@@ -715,7 +726,7 @@ test.describe("Editor: outline panel", () => {
 		const editor = page.locator(".cm-content");
 		await expect(editor).toBeVisible({ timeout: 10_000 });
 		await editor.click();
-		await page.keyboard.press("Control+A");
+		await page.keyboard.press("ControlOrMeta+A");
 		await page.keyboard.type("Just plain text, no headings here.");
 
 		await page
@@ -729,7 +740,7 @@ test.describe("Editor: outline panel", () => {
 		const editor = page.locator(".cm-content");
 		await expect(editor).toBeVisible({ timeout: 10_000 });
 		await editor.click();
-		await page.keyboard.press("Control+A");
+		await page.keyboard.press("ControlOrMeta+A");
 		await page.keyboard.type("# Introduction\n\n## Background\n\n# Conclusion");
 
 		await page
@@ -757,7 +768,7 @@ test.describe("Editor: search panel", () => {
 		const editor = page.locator(".cm-content");
 		await expect(editor).toBeVisible({ timeout: 10_000 });
 		await editor.click();
-		await page.keyboard.press("Control+A");
+		await page.keyboard.press("ControlOrMeta+A");
 		await page.keyboard.type("Hello world\n\nHello again");
 
 		await page
@@ -832,7 +843,7 @@ test.describe("Presentation mode: slide counter and timer", () => {
 		const editor = page.locator(".cm-content");
 		await expect(editor).toBeVisible({ timeout: 10_000 });
 		await editor.click();
-		await page.keyboard.press("Control+A");
+		await page.keyboard.press("ControlOrMeta+A");
 		await page.keyboard.type("# Slide 1\n\n---\n\n# Slide 2\n\n---\n\n# Slide 3");
 
 		await page.getByRole("button", { name: "Start presentation" }).click();

@@ -14,6 +14,7 @@ function parseEnvName(envName: string) {
 }
 
 export function loadAuthConfig() {
+	publicProviderInfo.length = 0;
 	let parsedProviders = new Map<string, Partial<GenericOAuthConfig>>();
 
 	for (const key in process.env) {
@@ -44,6 +45,15 @@ export function loadAuthConfig() {
 				case "DISCOVERY_URL":
 					providerConfig.discoveryUrl = value;
 					break;
+				case "AUTHORIZATION_URL":
+					providerConfig.authorizationUrl = value;
+					break;
+				case "TOKEN_URL":
+					providerConfig.tokenUrl = value;
+					break;
+				case "USER_INFO_URL":
+					providerConfig.userInfoUrl = value;
+					break;
 				case "SCOPES":
 					providerConfig.scopes = value.split(",").map((s) => s.trim());
 					break;
@@ -72,9 +82,9 @@ export function loadAuthConfig() {
 			continue;
 		}
 
-		if (!config.discoveryUrl) {
+		if (!config.discoveryUrl && (!config.authorizationUrl || !config.tokenUrl)) {
 			logger.error(
-				`Missing DISCOVERY_URL environment variable for provider ${providerId}. Manual configuration of endpoints is not supported yet. Skipping this provider.`,
+				`Missing DISCOVERY_URL or AUTHORIZATION_URL/TOKEN_URL environment variables for provider ${providerId}. Skipping this provider.`,
 			);
 			continue;
 		}
