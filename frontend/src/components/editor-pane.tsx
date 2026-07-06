@@ -135,6 +135,68 @@ const editorTheme = EditorView.theme({
 	".cm-ySelectionInfo": {
 		fontFamily: "'Geist Variable', monospace",
 	},
+	".cm-panels": {
+		color: "var(--card-foreground)",
+		backgroundColor: "var(--card)",
+	},
+	".cm-panels-top": {
+		borderBottom: "1px solid var(--border)",
+	},
+	".cm-panels-bottom": {
+		borderTop: "1px solid var(--border)",
+	},
+	".cm-panel.cm-search": {
+		padding: "8px 10px",
+		fontFamily: "'Geist Variable', sans-serif",
+		fontSize: "12px",
+	},
+	".cm-panel.cm-search label": {
+		display: "inline-flex",
+		alignItems: "center",
+		gap: "4px",
+		color: "var(--muted-foreground)",
+	},
+	".cm-panel.cm-search input[type=checkbox]": {
+		accentColor: "var(--primary)",
+	},
+	".cm-panel.cm-search .cm-textfield": {
+		border: "1px solid var(--border)",
+		borderRadius: "var(--radius-sm)",
+		backgroundColor: "var(--background)",
+		color: "var(--foreground)",
+		padding: "3px 6px",
+		outline: "none",
+	},
+	".cm-panel.cm-search .cm-textfield:focus": {
+		borderColor: "var(--ring)",
+		boxShadow: "0 0 0 3px color-mix(in oklab, var(--ring) 30%, transparent)",
+	},
+	".cm-panel.cm-search .cm-button": {
+		border: "1px solid var(--border)",
+		borderRadius: "var(--radius-sm)",
+		backgroundColor: "var(--secondary)",
+		color: "var(--secondary-foreground)",
+		backgroundImage: "none",
+		padding: "3px 8px",
+		cursor: "pointer",
+	},
+	".cm-panel.cm-search .cm-button:hover": {
+		backgroundColor: "color-mix(in oklab, var(--secondary) 80%, var(--foreground) 10%)",
+	},
+	".cm-panel.cm-search [name=close]": {
+		color: "var(--muted-foreground)",
+		fontSize: "16px",
+		cursor: "pointer",
+	},
+	".cm-panel.cm-search [name=close]:hover": {
+		color: "var(--foreground)",
+	},
+	".cm-searchMatch": {
+		backgroundColor: "color-mix(in oklab, var(--primary) 24%, transparent)",
+	},
+	".cm-searchMatch-selected": {
+		backgroundColor: "color-mix(in oklab, var(--primary) 45%, transparent)",
+	},
 });
 
 export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function EditorPane(
