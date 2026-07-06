@@ -219,7 +219,7 @@ export function ManageProjectCollaborator({ projectId }: { projectId: string }) 
 								<Select
 									defaultValue="read-only"
 									value={accessLevel}
-									onValueChange={setAccessLevel}
+									onValueChange={(value) => setAccessLevel(value ?? "read-only")}
 									disabled={!isOwner}
 								>
 									<SelectTrigger id="access-level" className="w-full">
