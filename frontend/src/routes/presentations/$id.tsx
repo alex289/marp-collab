@@ -17,6 +17,7 @@ import { SearchPanel } from "@/components/search-panel";
 import { findTextMatches, replaceTextRange, type TextSearchMatch } from "@/lib/text-search";
 import { OutlinePanel } from "@/components/outline-panel";
 import { parseMarkdownOutline } from "@/lib/outline";
+import { countMarpSlides } from "@/lib/slide-count";
 import { isEditableDeckFile, isMarkdownDeckFile } from "@/lib/file-types";
 import { listThemeNames, rewriteCssUrls, setProjectThemes } from "@/lib/marp";
 import { applyThemeToYText, getMarkdownTheme } from "@/lib/markdown-theme";
@@ -140,7 +141,6 @@ function RouteComponent() {
 	const [themeNames, setThemeNames] = useState<string[]>(() => listThemeNames());
 	const [themeRevision, setThemeRevision] = useState(0);
 	const [slideIndex, setSlideIndex] = useState(0);
-	const [slideCount, setSlideCount] = useState(1);
 	const [startedAt, setStartedAt] = useState(() => Date.now());
 	const [now, setNow] = useState(() => Date.now());
 	const [isTimerPaused, setIsTimerPaused] = useState(false);
@@ -162,6 +162,7 @@ function RouteComponent() {
 	const isViewer = search.mode === "viewer";
 	const autoFullscreen = search.fullscreen === true;
 	const outlineItems = useMemo(() => parseMarkdownOutline(markdown), [markdown]);
+	const slideCount = useMemo(() => countMarpSlides(markdown), [markdown]);
 
 	useEffect(() => {
 		if (files.length === 0) {
@@ -690,9 +691,8 @@ function RouteComponent() {
 				projectId={id}
 				selectedFileId={selectedFile?.id ?? null}
 				themeRevision={themeRevision}
-				onMetaChange={({ active, total }) => {
+				onMetaChange={({ active }) => {
 					setSlideIndex(active);
-					setSlideCount(Math.max(total, 1));
 				}}
 				showSpeakerNotes={!isViewer}
 				className="h-full w-full"

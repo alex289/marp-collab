@@ -26,7 +26,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Check, Copy, FileText, Maximize2, Sparkles, Users, WrapText } from "lucide-react";
+import { Check, Copy, FileText, Maximize2, Users, WrapText } from "lucide-react";
 import { useTheme } from "./theme-provider";
 import { vsCodeLight } from "@fsegurai/codemirror-theme-vscode-light";
 import { vsCodeDark } from "@fsegurai/codemirror-theme-vscode-dark";
@@ -34,6 +34,7 @@ import { ManageProjectCollaborator } from "./dialog/manage-project-collaborator"
 import { toast } from "sonner";
 import { getInitials } from "@/lib/utils";
 import { useHotkey } from "@tanstack/react-hotkeys";
+import { countMarpSlides } from "@/lib/slide-count";
 
 type Participant = {
 	id: string;
@@ -80,9 +81,7 @@ function getEditorStats(view: EditorView): EditorStats {
 	const cursor = view.state.selection.main.head;
 	const cursorLine = doc.lineAt(cursor);
 	const words = text.trim().length === 0 ? 0 : text.trim().split(/\s+/).length;
-	const slides = text
-		.split(/\r\n|\n|\r/)
-		.filter((line) => line.trim() === "---" || line.trim().startsWith("# ")).length;
+	const slides = countMarpSlides(text);
 
 	return {
 		chars: text.length,
@@ -381,21 +380,15 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 			</CardHeader>
 
 			<div className="flex shrink-0 items-center justify-between gap-3 border-b border-border bg-muted/35 px-4 py-2">
-				{isFocused ? (
-					<div className="flex min-w-0 flex-wrap items-center gap-2">
-						<Badge variant="outline">{stats.lines.toLocaleString()} lines</Badge>
-						<Badge variant="outline">{stats.words.toLocaleString()} words</Badge>
-						<Badge variant="outline">{stats.chars.toLocaleString()} chars</Badge>
-						{fileKind === "Markdown" ? (
-							<Badge variant="outline">
-								<Sparkles />
-								{stats.slides.toLocaleString()} slides
-							</Badge>
-						) : null}
-					</div>
-				) : (
-					<div></div>
-				)}
+				<div
+					className={`${isFocused ? "flex" : "hidden 2xl:flex"} min-w-0 flex-wrap items-center gap-2`}
+				>
+					<Badge variant="outline">{stats.words.toLocaleString()} words</Badge>
+					<Badge variant="outline">{stats.chars.toLocaleString()} chars</Badge>
+					{fileKind === "Markdown" ? (
+						<Badge variant="outline">{stats.slides.toLocaleString()} slides</Badge>
+					) : null}
+				</div>
 				<div className="flex min-w-0 items-center gap-3">
 					<div className="hidden items-center gap-1 text-xs text-muted-foreground sm:flex">
 						<Users className="size-3" />

@@ -69,6 +69,28 @@ const staticSrcDoc = `<!doctype html>
         resetZoom();
       });
 
+      // Keydown/keyup inside the iframe don't bubble to the parent document, so
+      // page-level hotkeys (theme toggle, focus mode, etc.) would stop working once
+      // the iframe has focus. Forward raw key events to the parent, which re-dispatches
+      // them on its own document.
+      function forwardKey(type) {
+        return function (e) {
+          window.parent.postMessage({
+            type: 'presentation-key',
+            eventType: type,
+            key: e.key,
+            code: e.code,
+            ctrlKey: e.ctrlKey,
+            shiftKey: e.shiftKey,
+            altKey: e.altKey,
+            metaKey: e.metaKey,
+          }, '*');
+        };
+      }
+
+      window.addEventListener('keydown', forwardKey('keydown'));
+      window.addEventListener('keyup', forwardKey('keyup'));
+
       window.addEventListener('message', function(e) {
         if (e.source !== window.parent) return;
         if (!e.data || e.data.type !== 'marp-update') return;
@@ -129,6 +151,35 @@ export const PreviewPane = ({
 			};
 		}
 	}, [markdown, projectId, selectedFileId, themeRevision]);
+
+	useEffect(() => {
+		const onMessage = (event: MessageEvent) => {
+			if (event.source !== iframeRef.current?.contentWindow) {
+				return;
+			}
+
+			const payload = event.data;
+			if (!payload || payload.type !== "presentation-key") {
+				return;
+			}
+
+			document.dispatchEvent(
+				new KeyboardEvent(payload.eventType, {
+					key: payload.key,
+					code: payload.code,
+					ctrlKey: payload.ctrlKey,
+					shiftKey: payload.shiftKey,
+					altKey: payload.altKey,
+					metaKey: payload.metaKey,
+					bubbles: true,
+					cancelable: true,
+				}),
+			);
+		};
+
+		window.addEventListener("message", onMessage);
+		return () => window.removeEventListener("message", onMessage);
+	}, []);
 
 	useEffect(() => {
 		if (!iframeReady || !iframeRef.current?.contentWindow) {
