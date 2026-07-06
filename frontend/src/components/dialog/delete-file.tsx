@@ -78,11 +78,13 @@ export function DeleteFileDialog({ projectId, file, open, onOpenChange, onDelete
 				</DialogHeader>
 				{error && <ErrorAlert title="Failed to delete file" description={error} />}
 				<DialogFooter>
-					<DialogClose asChild>
-						<Button variant="outline" type="button" disabled={isSubmitting}>
-							Cancel
-						</Button>
-					</DialogClose>
+					<DialogClose
+						render={
+							<Button variant="outline" type="button" disabled={isSubmitting}>
+								Cancel
+							</Button>
+						}
+					/>
 					<Button variant="destructive" onClick={handleDelete} disabled={isSubmitting}>
 						{isSubmitting ? "Deleting..." : "Delete"}
 					</Button>

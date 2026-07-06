@@ -109,11 +109,13 @@ export function UploadFileDialog({ projectId, open, onOpenChange, onUploaded }: 
 					)}
 					{error && <ErrorAlert title="Failed to upload file" description={error} />}
 					<DialogFooter>
-						<DialogClose asChild>
-							<Button variant="outline" type="button">
-								Cancel
-							</Button>
-						</DialogClose>
+						<DialogClose
+							render={
+								<Button variant="outline" type="button">
+									Cancel
+								</Button>
+							}
+						/>
 						<Button type="submit" disabled={isSubmitting || selectedFiles.length === 0}>
 							{isSubmitting
 								? "Uploading..."

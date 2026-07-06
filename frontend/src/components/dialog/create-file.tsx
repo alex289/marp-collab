@@ -90,11 +90,13 @@ export function CreateFileDialog({ projectId, open, onOpenChange, onCreated }: P
 					</FieldGroup>
 					{error && <ErrorAlert title="Failed to create file" description={error} />}
 					<DialogFooter>
-						<DialogClose asChild>
-							<Button variant="outline" type="button">
-								Cancel
-							</Button>
-						</DialogClose>
+						<DialogClose
+							render={
+								<Button variant="outline" type="button">
+									Cancel
+								</Button>
+							}
+						/>
 						<Button type="submit" disabled={isSubmitting}>
 							{isSubmitting ? "Creating..." : "Create"}
 						</Button>

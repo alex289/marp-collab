@@ -64,11 +64,13 @@ export function CreatePresentationDialog() {
 
 	return (
 		<Dialog open={open} onOpenChange={handleOpenChange}>
-			<DialogTrigger asChild>
-				<Button variant="outline">
-					<PlusIcon /> Create Presentation
-				</Button>
-			</DialogTrigger>
+			<DialogTrigger
+				render={
+					<Button variant="outline">
+						<PlusIcon /> Create Presentation
+					</Button>
+				}
+			/>
 			<DialogContent className="sm:max-w-md">
 				<form onSubmit={handleSubmit} className="flex flex-col gap-3">
 					<DialogHeader>
@@ -90,11 +92,13 @@ export function CreatePresentationDialog() {
 					</FieldGroup>
 					{error && <ErrorAlert title="Failed to create presentation" description={error} />}
 					<DialogFooter>
-						<DialogClose asChild>
-							<Button variant="outline" type="button">
-								Cancel
-							</Button>
-						</DialogClose>
+						<DialogClose
+							render={
+								<Button variant="outline" type="button">
+									Cancel
+								</Button>
+							}
+						/>
 						<Button type="submit" disabled={isSubmitting}>
 							{isSubmitting ? "Creating..." : "Create"}
 						</Button>

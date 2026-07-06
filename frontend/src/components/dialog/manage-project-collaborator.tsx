@@ -135,17 +135,19 @@ export function ManageProjectCollaborator({ projectId }: { projectId: string }) 
 
 	return (
 		<Dialog open={open} onOpenChange={handleOpenChange}>
-			<DialogTrigger asChild>
-				<Button
-					type="button"
-					variant="outline"
-					size="icon-sm"
-					title="Share the document with others"
-					aria-label="Share document"
-				>
-					<Share />
-				</Button>
-			</DialogTrigger>
+			<DialogTrigger
+				render={
+					<Button
+						type="button"
+						variant="outline"
+						size="icon-sm"
+						title="Share the document with others"
+						aria-label="Share document"
+					>
+						<Share />
+					</Button>
+				}
+			/>
 			<DialogContent className="sm:max-w-xl">
 				<DialogHeader>
 					<DialogTitle>Manage Collaboration</DialogTitle>
@@ -217,7 +219,7 @@ export function ManageProjectCollaborator({ projectId }: { projectId: string }) 
 								<Select
 									defaultValue="read-only"
 									value={accessLevel}
-									onValueChange={setAccessLevel}
+									onValueChange={(value) => setAccessLevel(value ?? "read-only")}
 									disabled={!isOwner}
 								>
 									<SelectTrigger id="access-level" className="w-full">

@@ -1,5 +1,5 @@
 import type { Project } from "@/lib/types";
-import { useState, type ReactNode } from "react";
+import { useState, type ReactElement } from "react";
 import {
 	Dialog,
 	DialogClose,
@@ -18,7 +18,7 @@ import { mutate } from "swr";
 
 type DeleteProjectDialogProps = {
 	project: Project;
-	trigger?: ReactNode;
+	trigger?: ReactElement;
 	onDeleted?: () => void;
 };
 
@@ -63,24 +63,26 @@ export function DeleteProjectDialog({ project, trigger, onDeleted }: DeleteProje
 
 	return (
 		<Dialog open={open} onOpenChange={handleOpenChange}>
-			<DialogTrigger asChild>
-				{trigger ?? (
-					<Button
-						type="button"
-						size="icon-sm"
-						variant="ghost"
-						onClick={(e) => {
-							e.preventDefault();
-							e.stopPropagation();
-							setOpen(true);
-						}}
-						aria-label={`Delete ${project.name}`}
-						className="ml-1"
-					>
-						<Trash2Icon />
-					</Button>
-				)}
-			</DialogTrigger>
+			<DialogTrigger
+				render={
+					trigger ?? (
+						<Button
+							type="button"
+							size="icon-sm"
+							variant="ghost"
+							onClick={(e) => {
+								e.preventDefault();
+								e.stopPropagation();
+								setOpen(true);
+							}}
+							aria-label={`Delete ${project.name}`}
+							className="ml-1"
+						>
+							<Trash2Icon />
+						</Button>
+					)
+				}
+			/>
 			<DialogContent className="sm:max-w-md" showCloseButton={false}>
 				<DialogHeader>
 					<DialogTitle>Delete Presentation</DialogTitle>
@@ -92,11 +94,13 @@ export function DeleteProjectDialog({ project, trigger, onDeleted }: DeleteProje
 				</DialogHeader>
 				{error && <ErrorAlert title="Failed to delete presentation" description={error} />}
 				<DialogFooter>
-					<DialogClose asChild>
-						<Button variant="outline" type="button" disabled={isSubmitting}>
-							Cancel
-						</Button>
-					</DialogClose>
+					<DialogClose
+						render={
+							<Button variant="outline" type="button" disabled={isSubmitting}>
+								Cancel
+							</Button>
+						}
+					/>
 					<Button
 						variant="destructive"
 						disabled={isSubmitting}
