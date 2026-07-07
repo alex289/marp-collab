@@ -314,17 +314,24 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 		}
 
 		const update = () => {
-			const next = Array.from(awareness.getStates().values())
-				.map((state) => state.user as Partial<Participant> | undefined)
-				.filter((user): user is Partial<Participant> => Boolean(user))
-				.map((user) => ({
-					id: user.id ?? crypto.randomUUID(),
+			const byId = new Map<string, Participant>();
+
+			for (const state of awareness.getStates().values()) {
+				const user = state.user as Partial<Participant> | undefined;
+				if (!user) {
+					continue;
+				}
+
+				const id = user.id ?? crypto.randomUUID();
+				byId.set(id, {
+					id,
 					name: user.name ?? "Unknown",
 					color: user.color ?? "#0ea5e9",
 					image: user.image ?? null,
-				}));
+				});
+			}
 
-			setParticipants(next);
+			setParticipants(Array.from(byId.values()));
 		};
 
 		update();
