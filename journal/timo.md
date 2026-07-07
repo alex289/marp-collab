@@ -29,3 +29,9 @@ Erkenntnisse:
 - Das Vite-PWA Plugin (genauer gesagt Workbox) versucht standardmäßig alle Assets zu cachen. Diese führte in Produktion zu seltsamen Problemen mit dem Login, da zumindestens teilweise auch API Antworten gecached wurden. Workbox kann so konfiguriert werden, dass nur bestimmte Assets gecached werden. Der Ausschluss von allen API-Routen sollte das Problem lösen. Claude Code hat dieses Problem schnell erkannt und die Lösung vorgeschlagen.
 - Playwright generiert Markdown Berichte für fehlgeschlagene E2e-Tests, die sehr gut von KI-Tools analyisiert werden können um Probleme bei E2e tests zu beheben.
 - Das Caching von html-Dateien ist problematisch, da diese im Gegensatz zu statischen Assets keinen Hash im Dateinamen haben. Die einfachste Lösung ist, die html-Dateien nicht zu cachen.
+
+# KW 28
+
+Erkenntnisse:
+
+- Es gibt eine WakeLock API, die es Webseiten ermöglicht, den Bildschirm und das Gerät aktiv zu erhalten. Während einer Präsentation in FDB bemerkten wir, dass wir verhindern müssen, dass der Bildschirm während einer Präsentation in den Standby-Modus geht. Die API ist bereits in allen verbrauchten Browsern verfügbar. Implementierung mit Claude Code.
