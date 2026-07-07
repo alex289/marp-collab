@@ -17,7 +17,7 @@ Marp-Collab ist eine WebApp für Marp, die es ermöglicht, Präsentationen in Ec
 
 ## Getting Started
 
-## 1) Backend starten
+## 1. Backend starten
 
 ```bash
 pnpm install
@@ -26,7 +26,7 @@ cp .env.example .env
 pnpm dev
 ```
 
-## 2) Frontend starten
+## 2. Frontend starten
 
 ```bash
 cd frontend
