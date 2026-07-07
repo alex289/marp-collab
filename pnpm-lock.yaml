@@ -126,6 +126,9 @@ importers:
       '@marp-team/marp-core':
         specifier: ^4.3.0
         version: 4.3.0
+      '@marp-team/marpit-svg-polyfill':
+        specifier: ^2.1.0
+        version: 2.1.0(@marp-team/marpit@3.2.1)
       '@tailwindcss/vite':
         specifier: ^4.3.2
         version: 4.3.2(vite@8.1.2(@types/node@26.1.0)(jiti@2.7.0)(terser@5.48.0))
@@ -3122,10 +3125,6 @@ packages:
   js-tokens@4.0.0:
     resolution: {integrity: sha512-RdJUflcE3cUzKiMqQgsCu06FPu9UdIJO0beYbPhHN4k6apgJtifcoCtT9bcxOpYBtpD2kCM6Sbzg4CausW/PKQ==}
 
-  js-yaml@4.1.1:
-    resolution: {integrity: sha512-qQKT4zQxXl8lLwBtHMWwaTcGfFOZviOJet3Oy/xmGk2gZH677CJM9EvtfdSkgWcATZhj/55JZ0rmy3myCT5lsA==}
-    hasBin: true
-
   js-yaml@4.2.0:
     resolution: {integrity: sha512-ePWsvanv0DWuDRsW8dnt+R4jQ31SCRCQ7hhNcPXZPsoBZiemuZNYGf7adZdqX2D86j6rvKp3RpCxVTSb8WQlOw==}
     hasBin: true
@@ -5364,19 +5363,15 @@ snapshots:
       style-mod: 4.1.3
       w3c-keyname: 2.2.8
 
-  '@csstools/postcss-is-pseudo-class@5.0.3(postcss@8.5.15)':
+  '@csstools/postcss-is-pseudo-class@5.0.3(postcss@8.5.16)':
     dependencies:
-      '@csstools/selector-specificity': 5.0.0(postcss-selector-parser@7.1.1)
-      postcss: 8.5.15
+      '@csstools/selector-specificity': 5.0.0(postcss-selector-parser@7.1.4)
+      postcss: 8.5.16
       postcss-selector-parser: 7.1.4
 
   '@csstools/selector-resolve-nested@3.1.0(postcss-selector-parser@7.1.4)':
     dependencies:
       postcss-selector-parser: 7.1.4
-
-  '@csstools/selector-specificity@5.0.0(postcss-selector-parser@7.1.1)':
-    dependencies:
-      postcss-selector-parser: 7.1.1
 
   '@csstools/selector-specificity@5.0.0(postcss-selector-parser@7.1.4)':
     dependencies:
@@ -5562,14 +5557,14 @@ snapshots:
 
   '@marp-team/marpit@3.2.1':
     dependencies:
-      '@csstools/postcss-is-pseudo-class': 5.0.3(postcss@8.5.15)
+      '@csstools/postcss-is-pseudo-class': 5.0.3(postcss@8.5.16)
       cssesc: 3.0.0
-      js-yaml: 4.1.1
+      js-yaml: 4.2.0
       lodash.kebabcase: 4.1.1
       markdown-it: 14.1.1
       markdown-it-front-matter: 0.2.4
-      postcss: 8.5.15
-      postcss-nesting: 13.0.2(postcss@8.5.15)
+      postcss: 8.5.16
+      postcss-nesting: 13.0.2(postcss@8.5.16)
 
   '@modelcontextprotocol/sdk@1.29.0(zod@3.25.76)':
     dependencies:
@@ -7323,10 +7318,6 @@ snapshots:
 
   js-tokens@4.0.0: {}
 
-  js-yaml@4.1.1:
-    dependencies:
-      argparse: 2.0.1
-
   js-yaml@4.2.0:
     dependencies:
       argparse: 2.0.1
@@ -7753,11 +7744,11 @@ snapshots:
 
   possible-typed-array-names@1.1.0: {}
 
-  postcss-nesting@13.0.2(postcss@8.5.15):
+  postcss-nesting@13.0.2(postcss@8.5.16):
     dependencies:
       '@csstools/selector-resolve-nested': 3.1.0(postcss-selector-parser@7.1.4)
       '@csstools/selector-specificity': 5.0.0(postcss-selector-parser@7.1.4)
-      postcss: 8.5.15
+      postcss: 8.5.16
       postcss-selector-parser: 7.1.4
 
   postcss-selector-parser@7.1.1:

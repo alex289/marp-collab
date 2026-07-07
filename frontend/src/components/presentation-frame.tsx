@@ -1,6 +1,7 @@
 import { renderMarp } from "@/lib/marp";
 import { useEffect, useMemo, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import marpitSvgPolyfillScript from "@marp-team/marpit-svg-polyfill/lib/polyfill.browser.js?raw";
 
 type PresentationFrameProps = {
 	markdown: string;
@@ -73,6 +74,9 @@ export function PresentationFrame({
         max-width: 100%;
       }
     </style>
+    <script>
+      ${marpitSvgPolyfillScript}
+    </script>
   </head>
   <body>
     ${rendered.html}

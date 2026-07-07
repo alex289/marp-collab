@@ -22,6 +22,7 @@
 		"@fsegurai/codemirror-theme-vscode-light": "^6.2.6",
 		"@hocuspocus/provider": "^4.3.0",
 		"@marp-team/marp-core": "^4.3.0",
+		"@marp-team/marpit-svg-polyfill": "^2.1.0",
 		"@tailwindcss/vite": "^4.3.2",
 		"@tanstack/react-hotkeys": "^0.10.0",
 		"@tanstack/react-router": "^1.170.16",

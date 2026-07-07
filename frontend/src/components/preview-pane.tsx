@@ -12,6 +12,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { useTheme } from "./theme-provider";
 import { getSecondaryScreen } from "@/lib/screen-management";
+import marpitSvgPolyfillScript from "@marp-team/marpit-svg-polyfill/lib/polyfill.browser.js?raw";
 
 type PreviewPaneProps = {
 	markdown: string;
@@ -29,6 +30,9 @@ const staticSrcDoc = `<!doctype html>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <style id="marp-styles"></style>
+    <script>
+      ${marpitSvgPolyfillScript}
+    </script>
     <script>
       var zoom = 1;
       var MIN_ZOOM = 0.5;
