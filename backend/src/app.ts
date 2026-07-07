@@ -82,7 +82,11 @@ if (!isDev()) {
 			precompressed: true,
 			onFound: (_path, c) => {
 				const hasExtension = extname(c.req.path) !== "";
-				if (hasExtension) {
+
+				// Dot not cache non hashed service worker files
+				const isServiceWorkerFile = c.req.path === "/sw.js" || c.req.path === "/registerSW.js";
+
+				if (hasExtension && !isServiceWorkerFile) {
 					c.header("Cache-Control", `private, immutable, max-age=86400`);
 				} else {
 					// Extensionless requests resolve to index.html (SPA routes, "/").
