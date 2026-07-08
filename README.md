@@ -1,4 +1,4 @@
-# Marp Collaboration
+# Marp Collab
 
 ## Projektidee & Motivation
 
