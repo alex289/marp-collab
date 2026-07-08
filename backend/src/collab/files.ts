@@ -1,4 +1,4 @@
-import { glob, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { glob, mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { Readable } from "node:stream";
 import { ZipArchive } from "archiver";
@@ -239,6 +239,47 @@ export function resolveProjectFilePath(projectId: string, fileId: string): strin
 	return filePath;
 }
 
+function isValidProjectBasename(name: string): boolean {
+	const trimmed = name.trim();
+	return (
+		trimmed.length > 0 &&
+		trimmed.length <= 255 &&
+		trimmed === name &&
+		!trimmed.includes("/") &&
+		!trimmed.includes("\\") &&
+		!trimmed.includes("..") &&
+		/^[\w\-. ]+$/.test(trimmed)
+	);
+}
+
+function getParentFolder(fileId: string): string {
+	const normalized = fileId.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+	const lastSlash = normalized.lastIndexOf("/");
+	return lastSlash === -1 ? "" : normalized.slice(0, lastSlash);
+}
+
+function getRenamedSiblingId(fileId: string, name: string): string | null {
+	if (!isValidProjectBasename(name)) {
+		return null;
+	}
+
+	const parentFolder = getParentFolder(fileId);
+	return parentFolder ? `${parentFolder}/${name}` : name;
+}
+
+async function projectPathExists(path: string): Promise<boolean> {
+	try {
+		await stat(path);
+		return true;
+	} catch (error) {
+		if (isMissingFileError(error)) {
+			return false;
+		}
+
+		throw error;
+	}
+}
+
 export function isMarkdownFileId(fileId: string): boolean {
 	return MARKDOWN_EXTENSIONS.has(extname(fileId).toLowerCase());
 }
@@ -284,6 +325,106 @@ export async function moveProjectFile(
 	}
 
 	return newFileId;
+}
+
+export async function renameProjectFile(
+	projectId: string,
+	fileId: string,
+	name: string,
+): Promise<string | null> {
+	if (!getFileType(name)) {
+		return null;
+	}
+
+	const sourcePath = resolveProjectFilePath(projectId, fileId);
+	const newFileId = getRenamedSiblingId(fileId, name);
+	if (!sourcePath || !newFileId) {
+		return null;
+	}
+
+	const destPath = resolveProjectFilePath(projectId, newFileId);
+	if (!destPath) {
+		return null;
+	}
+
+	if (newFileId === fileId) {
+		return newFileId;
+	}
+
+	try {
+		const sourceStat = await stat(sourcePath);
+		if (!sourceStat.isFile()) {
+			return null;
+		}
+	} catch (error) {
+		if (isMissingFileError(error)) {
+			return null;
+		}
+
+		throw error;
+	}
+
+	const sourceYjsPath = `${sourcePath}.yjs`;
+	const destYjsPath = `${destPath}.yjs`;
+	const hasSourceYjs = await projectPathExists(sourceYjsPath);
+
+	if (await projectPathExists(destPath)) {
+		return null;
+	}
+
+	if (hasSourceYjs && (await projectPathExists(destYjsPath))) {
+		return null;
+	}
+
+	await rename(sourcePath, destPath);
+
+	if (hasSourceYjs) {
+		await rename(sourceYjsPath, destYjsPath);
+	}
+
+	return newFileId;
+}
+
+export async function renameProjectFolder(
+	projectId: string,
+	folderPath: string,
+	name: string,
+): Promise<string | null> {
+	const sourcePath = resolveProjectFilePath(projectId, folderPath);
+	const newFolderPath = getRenamedSiblingId(folderPath, name);
+	if (!sourcePath || !newFolderPath) {
+		return null;
+	}
+
+	const destPath = resolveProjectFilePath(projectId, newFolderPath);
+	if (!destPath) {
+		return null;
+	}
+
+	if (newFolderPath === folderPath) {
+		return newFolderPath;
+	}
+
+	try {
+		const sourceStat = await stat(sourcePath);
+		if (!sourceStat.isDirectory()) {
+			return null;
+		}
+	} catch (error) {
+		if (isMissingFileError(error)) {
+			return null;
+		}
+
+		throw error;
+	}
+
+	if (await projectPathExists(destPath)) {
+		return null;
+	}
+
+	await rename(sourcePath, destPath);
+
+	return newFolderPath;
 }
 
 export async function deleteProjectFolder(projectId: string, folderPath: string): Promise<boolean> {

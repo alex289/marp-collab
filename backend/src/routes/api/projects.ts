@@ -19,6 +19,8 @@ import {
 	getDeckFiles,
 	isMarkdownFileId,
 	moveProjectFile,
+	renameProjectFile,
+	renameProjectFolder,
 	resolveProjectFilePath,
 	saveDocumentContent,
 	saveProjectFile,
@@ -398,6 +400,21 @@ const createFolderSchema = z.object({
 		.refine((name) => !name.startsWith("/"), "Absolute paths not allowed"),
 });
 
+const renameEntrySchema = z.object({
+	name: z
+		.string()
+		.trim()
+		.min(1)
+		.max(255)
+		.regex(
+			/^[\w\-. ]+$/,
+			"Name must contain only letters, numbers, spaces, hyphens, underscores, or dots",
+		)
+		.refine((name) => !name.includes("/"), "Slashes are not allowed when renaming")
+		.refine((name) => !name.includes("\\"), "Backslashes are not allowed when renaming")
+		.refine((name) => !name.includes(".."), "Path traversal not allowed"),
+});
+
 app.post("/:projectId/folders", async (c) => {
 	const user = c.get("user");
 	if (!user) {
@@ -540,6 +557,37 @@ app.get("/:projectId/files/:fileId{.+}", async (c) => {
 	});
 });
 
+app.patch("/:projectId/files/:fileId{.+}/rename", async (c) => {
+	const user = c.get("user");
+	if (!user) {
+		return c.json({ error: "Unauthorized" }, 401);
+	}
+
+	const { projectId } = c.req.param();
+	const access = getUserProjectAccess(projectId, user.id);
+	if (!access) {
+		return c.json({ error: "Project not found or access denied" }, 403);
+	}
+	if (access.readOnly) {
+		return c.json({ error: "You do not have write access to this project" }, 403);
+	}
+
+	const fileId = decodeURIComponent(c.req.param("fileId"));
+	const body = await c.req.json();
+	const parseResult = renameEntrySchema.safeParse(body);
+	if (!parseResult.success) {
+		return c.json({ error: z.prettifyError(parseResult.error) }, 400);
+	}
+
+	const newFileId = await renameProjectFile(projectId, fileId, parseResult.data.name);
+	if (!newFileId) {
+		return c.json({ error: "File not found, invalid name, or destination already exists" }, 404);
+	}
+
+	broadcastFilesChanged(projectId);
+	return c.json({ newFileId });
+});
+
 const moveFileSchema = z.object({
 	destination: z
 		.string()
@@ -578,6 +626,37 @@ app.patch("/:projectId/files/:fileId{.+}", async (c) => {
 
 	broadcastFilesChanged(projectId);
 	return c.json({ newFileId });
+});
+
+app.patch("/:projectId/folders/:folderPath{.+}/rename", async (c) => {
+	const user = c.get("user");
+	if (!user) {
+		return c.json({ error: "Unauthorized" }, 401);
+	}
+
+	const { projectId } = c.req.param();
+	const access = getUserProjectAccess(projectId, user.id);
+	if (!access) {
+		return c.json({ error: "Project not found or access denied" }, 403);
+	}
+	if (access.readOnly) {
+		return c.json({ error: "You do not have write access to this project" }, 403);
+	}
+
+	const folderPath = decodeURIComponent(c.req.param("folderPath"));
+	const body = await c.req.json();
+	const parseResult = renameEntrySchema.safeParse(body);
+	if (!parseResult.success) {
+		return c.json({ error: z.prettifyError(parseResult.error) }, 400);
+	}
+
+	const newFolderPath = await renameProjectFolder(projectId, folderPath, parseResult.data.name);
+	if (!newFolderPath) {
+		return c.json({ error: "Folder not found, invalid name, or destination already exists" }, 404);
+	}
+
+	broadcastFilesChanged(projectId);
+	return c.json({ newFolderPath });
 });
 
 app.delete("/:projectId/folders/:folderPath{.+}", async (c) => {

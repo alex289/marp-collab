@@ -40,6 +40,18 @@ async function clickSidebarDelete(
 	await menuItem.locator(`[title="${kind}"]`).click();
 }
 
+async function clickSidebarRename(
+	page: Page,
+	itemName: string,
+	kind: "Rename file" | "Rename folder",
+) {
+	const menuItem = page.locator('[data-sidebar="menu-item"]').filter({
+		has: page.getByRole("button", { name: itemName }),
+	});
+	await menuItem.getByRole("button", { name: itemName }).hover();
+	await menuItem.locator(`[title="${kind}"]`).click();
+}
+
 async function getPreviewImageReference(page: Page) {
 	const frame = page.locator('iframe[title="Marp preview"]');
 	return await frame.evaluate((iframe: HTMLIFrameElement) => {
@@ -259,6 +271,46 @@ test.describe("Editor page — file management", () => {
 
 		await expect(page.getByRole("dialog")).not.toBeVisible();
 		await expect(page.getByText("keep-me.md")).toBeVisible();
+	});
+
+	test("rename a selected markdown file", async ({ page }) => {
+		await page.getByRole("button", { name: "New file" }).click();
+		await fillNewFileName(page, "rename-me.md");
+		await page.getByRole("button", { name: "Create" }).click();
+		await expect(page.getByRole("dialog")).not.toBeVisible();
+
+		await page.getByRole("button", { name: "rename-me.md" }).click();
+		await expect(page.getByText("Active file: rename-me.md")).toBeVisible();
+
+		await clickSidebarRename(page, "rename-me.md", "Rename file");
+		await expect(page.getByRole("heading", { name: "Rename File" })).toBeVisible();
+		await page.getByRole("textbox", { name: "Name" }).fill("renamed.md");
+		await page.getByRole("button", { name: "Rename" }).click();
+
+		await expect(page.getByRole("dialog")).not.toBeVisible();
+		await expect(page.getByRole("button", { name: "renamed.md" })).toBeVisible();
+		await expect(page.getByText("rename-me.md")).not.toBeVisible();
+		await expect(page.getByText("Active file: renamed.md")).toBeVisible();
+	});
+
+	test("rename a folder and keep nested files visible", async ({ page }) => {
+		await page.getByRole("button", { name: "New file" }).click();
+		await fillNewFileName(page, "old-folder/nested.md");
+		await page.getByRole("button", { name: "Create" }).click();
+		await expect(page.getByRole("dialog")).not.toBeVisible();
+
+		await page.getByRole("button", { name: "old-folder" }).click();
+		await expect(page.getByRole("button", { name: "nested.md" })).toBeVisible();
+
+		await clickSidebarRename(page, "old-folder", "Rename folder");
+		await expect(page.getByRole("heading", { name: "Rename Folder" })).toBeVisible();
+		await page.getByRole("textbox", { name: "Name" }).fill("new-folder");
+		await page.getByRole("button", { name: "Rename" }).click();
+
+		await expect(page.getByRole("dialog")).not.toBeVisible();
+		await expect(page.getByRole("button", { name: "new-folder" })).toBeVisible();
+		await expect(page.getByRole("button", { name: "nested.md" })).toBeVisible();
+		await expect(page.getByText("old-folder")).not.toBeVisible();
 	});
 });
 
