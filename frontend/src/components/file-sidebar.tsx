@@ -21,7 +21,7 @@ import {
 import { useHotkeys } from "@tanstack/react-hotkeys";
 import useSWR from "swr";
 import type { DeckFile, Project } from "@/lib/types";
-import { cn, getInitials } from "@/lib/utils";
+import { cn } from "@/lib/utils";
 import {
 	Sidebar,
 	SidebarContent,
@@ -55,7 +55,6 @@ import {
 import { ProjectNameSetting } from "@/components/project-name-setting";
 import { Label } from "./ui/label";
 import { Button } from "./ui/button";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 type NestedFileNode = {
 	name: string;
@@ -181,9 +180,9 @@ const SidebarHeaderAction = ({
 	</button>
 );
 
-const MAX_FILE_PRESENCE_AVATARS = 3;
+const MAX_FILE_PRESENCE_DOTS = 3;
 
-const FilePresenceAvatars = ({
+const FilePresenceDots = ({
 	participants,
 	fileName,
 }: {
@@ -194,7 +193,7 @@ const FilePresenceAvatars = ({
 		return null;
 	}
 
-	const visibleParticipants = participants.slice(0, MAX_FILE_PRESENCE_AVATARS);
+	const visibleParticipants = participants.slice(0, MAX_FILE_PRESENCE_DOTS);
 	const hiddenParticipants = Math.max(0, participants.length - visibleParticipants.length);
 	const participantNames = participants.map((participant) => participant.name).join(", ");
 	const label = `Users viewing ${fileName}: ${participantNames}`;
@@ -206,30 +205,24 @@ const FilePresenceAvatars = ({
 					<div
 						role="group"
 						aria-label={label}
-						className="absolute top-1.5 right-7 z-10 flex h-5 items-center -space-x-1 group-data-[collapsible=icon]:hidden"
+						className="absolute top-1/2 right-7 z-10 flex h-5 -translate-y-1/2 items-center gap-1 group-data-[collapsible=icon]:hidden mr-1"
 					>
 						{visibleParticipants.map((participant) => (
-							<Avatar key={participant.id} size="sm" className="size-5 ring-1 ring-sidebar">
-								{participant.image ? (
-									<AvatarImage src={participant.image} alt={participant.name} />
-								) : null}
-								<AvatarFallback
-									className="text-[9px] leading-none text-white"
-									style={{ backgroundColor: participant.color }}
-								>
-									{getInitials(participant.name)}
-								</AvatarFallback>
-							</Avatar>
+							<span
+								key={participant.id}
+								className="size-2.5 rounded-full ring-1 ring-sidebar"
+								style={{ backgroundColor: participant.color }}
+							/>
 						))}
 						{hiddenParticipants > 0 ? (
-							<div className="relative flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-[9px] text-muted-foreground ring-1 ring-sidebar">
+							<div className="relative flex size-4 shrink-0 items-center justify-center rounded-full bg-muted text-[9px] text-muted-foreground ring-1 ring-sidebar">
 								+{hiddenParticipants}
 							</div>
 						) : null}
 					</div>
 				}
 			/>
-			<TooltipContent side="right">{label}</TooltipContent>
+			<TooltipContent side="bottom">{label}</TooltipContent>
 		</Tooltip>
 	);
 };
@@ -343,14 +336,17 @@ const parseActiveFileId = (value: unknown): string | null => {
 		: null;
 };
 
-const getFilePresenceById = (awareness: Awareness): FilePresenceByFileId => {
+const getFilePresenceById = (
+	awareness: Awareness,
+	currentUserId: string | null,
+): FilePresenceByFileId => {
 	const participantsByFile = new Map<string, Map<string, FilePresenceParticipant>>();
 
 	for (const state of awareness.getStates().values()) {
 		const stateFields = state as { user?: unknown; activeFile?: unknown };
 		const participant = parsePresenceParticipant(stateFields.user);
 		const fileId = parseActiveFileId(stateFields.activeFile);
-		if (!participant || !fileId) {
+		if (!participant || !fileId || participant.id === currentUserId) {
 			continue;
 		}
 
@@ -532,7 +528,7 @@ const NestedFileItem = ({
 					<File />
 					<span className="min-w-0 flex-1 truncate">{node.name}</span>
 				</SidebarMenuButton>
-				<FilePresenceAvatars participants={filePresence} fileName={file.id} />
+				<FilePresenceDots participants={filePresence} fileName={file.id} />
 				<SidebarMenuAction
 					showOnHover
 					onClick={() => onDeleteFile(file)}
@@ -659,6 +655,7 @@ type FileSidebarProps = {
 	themeSelectDisabled: boolean;
 	onProjectDeleted?: () => void;
 	presenceAwareness?: Awareness | null;
+	currentUserId?: string | null;
 };
 
 export const FileSidebar = ({
@@ -679,6 +676,7 @@ export const FileSidebar = ({
 	themeSelectDisabled,
 	onProjectDeleted,
 	presenceAwareness = null,
+	currentUserId = null,
 }: FileSidebarProps) => {
 	const nestedFileTree = useMemo(() => buildNestedFileTree(files), [files]);
 	const [filePresenceById, setFilePresenceById] = useState<FilePresenceByFileId>({});
@@ -701,7 +699,7 @@ export const FileSidebar = ({
 			return;
 		}
 
-		const update = () => setFilePresenceById(getFilePresenceById(presenceAwareness));
+		const update = () => setFilePresenceById(getFilePresenceById(presenceAwareness, currentUserId));
 
 		update();
 		presenceAwareness.on("change", update);
@@ -709,7 +707,7 @@ export const FileSidebar = ({
 		return () => {
 			presenceAwareness.off("change", update);
 		};
-	}, [presenceAwareness]);
+	}, [currentUserId, presenceAwareness]);
 
 	useEffect(() => {
 		if (!selectedFileId) {

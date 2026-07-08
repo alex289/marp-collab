@@ -829,7 +829,10 @@ test.describe("Editor: collaboration", () => {
 		await expect(addButton).toBeEnabled();
 	});
 
-	test("shows active file presence in the sidebar", async ({ page, browser }) => {
+	test("does not show the current user's own file presence in the sidebar", async ({
+		page,
+		browser,
+	}) => {
 		await page.getByRole("button", { name: "New file" }).click();
 		await fillNewFileName(page, MARKDOWN_FILE_NAME);
 		await page.getByRole("button", { name: "Create" }).click();
@@ -849,9 +852,9 @@ test.describe("Editor: collaboration", () => {
 			const fileRow = page.locator('[data-sidebar="menu-item"]').filter({
 				has: page.getByRole("button", { name: MARKDOWN_FILE_NAME }),
 			});
-			await expect(
-				fileRow.getByLabel(`Users viewing ${MARKDOWN_FILE_NAME}: Test User`),
-			).toBeVisible({ timeout: 10_000 });
+			await expect(fileRow.getByLabel(`Users viewing ${MARKDOWN_FILE_NAME}: Test User`)).toBeHidden(
+				{ timeout: 10_000 },
+			);
 		} finally {
 			await collaboratorContext.close();
 		}

@@ -851,6 +851,7 @@ function RouteComponent() {
 							void navigate({ to: "/", replace: true });
 						}}
 						presenceAwareness={projectPresenceAwareness}
+						currentUserId={presenceUser.userId}
 						searchPanel={
 							<SearchPanel
 								matches={searchMatches}
