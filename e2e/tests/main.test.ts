@@ -709,6 +709,23 @@ test.describe("Editor: export", () => {
 		]);
 		expect(download.suggestedFilename()).toMatch(/\.zip$/);
 	});
+
+	test("export selected deck as PDF triggers a download", async ({ page }) => {
+		await page.goto("/");
+		await page.getByRole("button", { name: "Create Presentation" }).click();
+		await fillPresentationName(page, "PDF Export Test");
+		await page.getByRole("button", { name: "Create" }).click();
+		await expect(page.getByRole("dialog")).not.toBeVisible();
+		await clickLastCard(page, "PDF Export Test");
+		await page.waitForURL(/\/presentations\/.+/);
+		await waitForSidebar(page);
+
+		const [download] = await Promise.all([
+			page.waitForEvent("download"),
+			page.getByTitle("Download selected deck as PDF").click(),
+		]);
+		expect(download.suggestedFilename()).toMatch(/\.pdf$/);
+	});
 });
 
 test.describe("Editor: outline panel", () => {

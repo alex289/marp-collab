@@ -10,6 +10,7 @@ import {
 	FolderPlus,
 	Upload,
 	Download,
+	FileDown,
 	Image,
 	Trash2,
 	Type,
@@ -163,17 +164,20 @@ const getParentFolder = (fileId: string): string => {
 const SidebarHeaderAction = ({
 	onClick,
 	title,
+	disabled = false,
 	children,
 }: {
 	onClick: () => void;
 	title: string;
+	disabled?: boolean;
 	children: React.ReactNode;
 }) => (
 	<button
 		type="button"
 		onClick={onClick}
 		title={title}
-		className="flex h-5 w-5 items-center justify-center rounded-md text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground [&>svg]:size-4"
+		disabled={disabled}
+		className="flex h-5 w-5 items-center justify-center rounded-md text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground disabled:pointer-events-none disabled:opacity-50 [&>svg]:size-4"
 	>
 		{children}
 	</button>
@@ -559,6 +563,11 @@ export const FileSidebar = ({
 	});
 	const dragStateRef = useRef(dragState);
 	dragStateRef.current = dragState;
+	const selectedFile = useMemo(
+		() => files.find((file) => file.id === selectedFileId) ?? null,
+		[files, selectedFileId],
+	);
+	const canExportSelectedDeckPdf = selectedFile?.type === "markdown";
 
 	useEffect(() => {
 		if (!selectedFileId) {
@@ -651,6 +660,19 @@ export const FileSidebar = ({
 	const handleExportProject = () => {
 		const link = document.createElement("a");
 		link.href = `${API_URL}/projects/${projectId}/export.zip`;
+		link.download = "";
+		document.body.append(link);
+		link.click();
+		link.remove();
+	};
+
+	const handleExportSelectedDeckPdf = () => {
+		if (!selectedFileId || !canExportSelectedDeckPdf) {
+			return;
+		}
+
+		const link = document.createElement("a");
+		link.href = `${API_URL}/projects/${projectId}/export.pdf?file=${encodeURIComponent(selectedFileId)}`;
 		link.download = "";
 		document.body.append(link);
 		link.click();
@@ -780,6 +802,17 @@ export const FileSidebar = ({
 					</SidebarHeaderAction>
 					<SidebarHeaderAction onClick={() => setUploadFileOpen(true)} title="Upload file">
 						<Upload />
+					</SidebarHeaderAction>
+					<SidebarHeaderAction
+						onClick={handleExportSelectedDeckPdf}
+						title={
+							canExportSelectedDeckPdf
+								? "Download selected deck as PDF"
+								: "Select a Markdown deck to download PDF"
+						}
+						disabled={!canExportSelectedDeckPdf}
+					>
+						<FileDown />
 					</SidebarHeaderAction>
 					<SidebarHeaderAction onClick={handleExportProject} title="Export project as ZIP">
 						<Download />

@@ -63,6 +63,19 @@ export function toDocumentName(projectId: string, fileId: string): string {
 	return `project/${projectId}/${fileId}`;
 }
 
+export function resolveProjectDirPath(projectId: string): string | null {
+	if (!isValidProjectId(projectId)) {
+		return null;
+	}
+
+	const projectDir = resolve(presentationsDir, projectId);
+	if (!projectDir.startsWith(presentationsDir + sep)) {
+		return null;
+	}
+
+	return projectDir;
+}
+
 export async function getDeckFiles(projectId: string): Promise<DeckFile[]> {
 	await ensurePresentationsDir(projectId);
 

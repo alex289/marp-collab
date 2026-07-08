@@ -18,9 +18,16 @@ RUN cd backend && node --run build && cd ../frontend && node --run build
 
 FROM node:26-trixie-slim
 
+USER root
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends chromium ca-certificates fonts-liberation \
+    && rm -rf /var/lib/apt/lists/*
+
 USER node
 WORKDIR /app
 ENV NODE_ENV=production
+ENV CHROME_PATH=/usr/bin/chromium
+ENV MARP_CHROME_PATH=/usr/bin/chromium
 
 COPY --from=builder --chown=node:node /app/dist/ ./
 

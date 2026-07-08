@@ -13,6 +13,7 @@
 	"dependencies": {
 		"@hocuspocus/server": "^4.3.0",
 		"@hono/node-server": "^2.0.6",
+		"@marp-team/marp-cli": "4.3.0",
 		"archiver": "^8.0.0",
 		"better-auth": "^1.6.23",
 		"better-sqlite3": "^12.11.1",
