@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import {
 	Card,
 	CardAction,
@@ -7,12 +8,14 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card";
+import { createMarpRenderErrorFallback } from "@/lib/marp-render-error";
 import { renderMarp } from "@/lib/marp";
 import { useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { useTheme } from "./theme-provider";
 import { getSecondaryScreen } from "@/lib/screen-management";
 import marpitSvgPolyfillScript from "@marp-team/marpit-svg-polyfill/lib/polyfill.browser.js?raw";
+import { AlertTriangleIcon } from "lucide-react";
 
 type PreviewPaneProps = {
 	markdown: string;
@@ -147,12 +150,12 @@ export const PreviewPane = ({
 		// Project themes are registered on the shared Marp instance; this invalidates stale renders.
 		void themeRevision;
 		try {
-			return renderMarp(markdown, projectId, selectedFileId);
-		} catch (error) {
 			return {
-				html: `<section><h1>Marp Render Fehler</h1><p>${error instanceof Error ? error.message : "Unbekannter Fehler"}</p></section>`,
-				css: "",
+				...renderMarp(markdown, projectId, selectedFileId),
+				errorMessage: null,
 			};
+		} catch (error) {
+			return createMarpRenderErrorFallback(error);
 		}
 	}, [markdown, projectId, selectedFileId, themeRevision]);
 
@@ -251,6 +254,15 @@ export const PreviewPane = ({
 					)}
 				</CardAction>
 				<CardDescription>{label ? `Active file: ${label}` : "No file selected"}</CardDescription>
+				{rendered.errorMessage && (
+					<Alert className="col-span-full mt-2 border-red-200 bg-red-50 text-red-900 dark:border-red-900 dark:bg-red-950 dark:text-red-50">
+						<AlertTriangleIcon />
+						<AlertTitle>Marp konnte nicht gerendert werden</AlertTitle>
+						<AlertDescription className="text-foreground text-wrap whitespace-pre-line break-words">
+							{rendered.errorMessage}
+						</AlertDescription>
+					</Alert>
+				)}
 			</CardHeader>
 
 			<CardContent className="min-h-0 flex-1 overflow-hidden p-0">

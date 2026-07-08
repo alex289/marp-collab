@@ -1,4 +1,5 @@
 import { renderMarp } from "@/lib/marp";
+import { createMarpRenderErrorFallback } from "@/lib/marp-render-error";
 import { useEffect, useMemo, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import marpitSvgPolyfillScript from "@marp-team/marpit-svg-polyfill/lib/polyfill.browser.js?raw";
@@ -30,13 +31,12 @@ export function PresentationFrame({
 		// Project themes are registered on the shared Marp instance; this invalidates stale renders.
 		void themeRevision;
 		try {
-			return renderMarp(markdown, projectId, selectedFileId);
-		} catch (error) {
 			return {
-				html: `<section><h1>Marp Render Error</h1><p>${error instanceof Error ? error.message : "Unknown error"}</p></section>`,
-				css: "",
-				comments: [[]],
+				...renderMarp(markdown, projectId, selectedFileId),
+				errorMessage: null,
 			};
+		} catch (error) {
+			return createMarpRenderErrorFallback(error);
 		}
 	}, [markdown, projectId, selectedFileId, themeRevision]);
 
