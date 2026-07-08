@@ -1,5 +1,6 @@
 // oxlint-disable no-warning-comments
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { Awareness } from "y-protocols/awareness.js";
 import {
 	RefreshCw,
 	File,
@@ -20,7 +21,7 @@ import {
 import { useHotkeys } from "@tanstack/react-hotkeys";
 import useSWR from "swr";
 import type { DeckFile, Project } from "@/lib/types";
-import { cn } from "@/lib/utils";
+import { cn, getInitials } from "@/lib/utils";
 import {
 	Sidebar,
 	SidebarContent,
@@ -54,6 +55,7 @@ import {
 import { ProjectNameSetting } from "@/components/project-name-setting";
 import { Label } from "./ui/label";
 import { Button } from "./ui/button";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 type NestedFileNode = {
 	name: string;
@@ -179,6 +181,59 @@ const SidebarHeaderAction = ({
 	</button>
 );
 
+const MAX_FILE_PRESENCE_AVATARS = 3;
+
+const FilePresenceAvatars = ({
+	participants,
+	fileName,
+}: {
+	participants: FilePresenceParticipant[];
+	fileName: string;
+}) => {
+	if (participants.length === 0) {
+		return null;
+	}
+
+	const visibleParticipants = participants.slice(0, MAX_FILE_PRESENCE_AVATARS);
+	const hiddenParticipants = Math.max(0, participants.length - visibleParticipants.length);
+	const participantNames = participants.map((participant) => participant.name).join(", ");
+	const label = `Users viewing ${fileName}: ${participantNames}`;
+
+	return (
+		<Tooltip>
+			<TooltipTrigger
+				render={
+					<div
+						role="group"
+						aria-label={label}
+						className="absolute top-1.5 right-7 z-10 flex h-5 items-center -space-x-1 group-data-[collapsible=icon]:hidden"
+					>
+						{visibleParticipants.map((participant) => (
+							<Avatar key={participant.id} size="sm" className="size-5 ring-1 ring-sidebar">
+								{participant.image ? (
+									<AvatarImage src={participant.image} alt={participant.name} />
+								) : null}
+								<AvatarFallback
+									className="text-[9px] leading-none text-white"
+									style={{ backgroundColor: participant.color }}
+								>
+									{getInitials(participant.name)}
+								</AvatarFallback>
+							</Avatar>
+						))}
+						{hiddenParticipants > 0 ? (
+							<div className="relative flex size-5 shrink-0 items-center justify-center rounded-full bg-muted text-[9px] text-muted-foreground ring-1 ring-sidebar">
+								+{hiddenParticipants}
+							</div>
+						) : null}
+					</div>
+				}
+			/>
+			<TooltipContent side="right">{label}</TooltipContent>
+		</Tooltip>
+	);
+};
+
 const WorkspaceRailButton = ({
 	active,
 	label,
@@ -235,6 +290,15 @@ type DragState = {
 	dragOverPath: string | null;
 };
 
+type FilePresenceParticipant = {
+	id: string;
+	name: string;
+	color: string;
+	image: string | null;
+};
+
+type FilePresenceByFileId = Record<string, FilePresenceParticipant[]>;
+
 type WorkspacePanel = "files" | "search" | "outline" | "settings";
 
 type ProjectSettingsResponse = {
@@ -248,6 +312,66 @@ const projectSettingsFetcher = async (url: string): Promise<ProjectSettingsRespo
 		throw new Error(`Request failed: ${res.status} ${res.statusText}`);
 	}
 	return res.json() as Promise<ProjectSettingsResponse>;
+};
+
+const parsePresenceParticipant = (value: unknown): FilePresenceParticipant | null => {
+	if (!value || typeof value !== "object") {
+		return null;
+	}
+
+	const user = value as Partial<FilePresenceParticipant>;
+	if (typeof user.id !== "string" || user.id.length === 0) {
+		return null;
+	}
+
+	return {
+		id: user.id,
+		name: typeof user.name === "string" && user.name.length > 0 ? user.name : "Unknown",
+		color: typeof user.color === "string" && user.color.length > 0 ? user.color : "#0ea5e9",
+		image: typeof user.image === "string" && user.image.length > 0 ? user.image : null,
+	};
+};
+
+const parseActiveFileId = (value: unknown): string | null => {
+	if (!value || typeof value !== "object") {
+		return null;
+	}
+
+	const activeFile = value as { fileId?: unknown };
+	return typeof activeFile.fileId === "string" && activeFile.fileId.length > 0
+		? activeFile.fileId
+		: null;
+};
+
+const getFilePresenceById = (awareness: Awareness): FilePresenceByFileId => {
+	const participantsByFile = new Map<string, Map<string, FilePresenceParticipant>>();
+
+	for (const state of awareness.getStates().values()) {
+		const stateFields = state as { user?: unknown; activeFile?: unknown };
+		const participant = parsePresenceParticipant(stateFields.user);
+		const fileId = parseActiveFileId(stateFields.activeFile);
+		if (!participant || !fileId) {
+			continue;
+		}
+
+		let fileParticipants = participantsByFile.get(fileId);
+		if (!fileParticipants) {
+			fileParticipants = new Map();
+			participantsByFile.set(fileId, fileParticipants);
+		}
+		fileParticipants.set(participant.id, participant);
+	}
+
+	const presenceByFileId: FilePresenceByFileId = {};
+	for (const [fileId, participants] of participantsByFile.entries()) {
+		presenceByFileId[fileId] = Array.from(participants.values()).sort((left, right) =>
+			left.name === right.name
+				? left.id.localeCompare(right.id)
+				: left.name.localeCompare(right.name),
+		);
+	}
+
+	return presenceByFileId;
 };
 
 const WORKSPACE_PANEL_HOTKEYS = {
@@ -327,6 +451,7 @@ const MobileWorkspaceRail = ({ activePanel, setActivePanel }: MobileWorkspaceRai
 type NestedFileItemProps = {
 	node: NestedFileNode;
 	selectedFileId: string | null;
+	filePresenceById: FilePresenceByFileId;
 	onSelectFile: (file: DeckFile) => void;
 	onDeleteFile: (file: DeckFile) => void;
 	openFolders: Record<string, boolean>;
@@ -341,6 +466,7 @@ type NestedFileItemProps = {
 const NestedFileItem = ({
 	node,
 	selectedFileId,
+	filePresenceById,
 	onSelectFile,
 	onDeleteFile,
 	openFolders,
@@ -360,6 +486,7 @@ const NestedFileItem = ({
 
 		const file = node.file;
 		const isDragging = dragState.draggingFileId === file.id;
+		const filePresence = filePresenceById[file.id] ?? [];
 
 		const dragProps = {
 			draggable: true,
@@ -376,7 +503,7 @@ const NestedFileItem = ({
 				<SidebarMenuItem className={isDragging ? "opacity-40" : undefined}>
 					<SidebarMenuButton tooltip={file.id} {...dragProps}>
 						{isFontFile ? <Type /> : <Image />}
-						{node.name}
+						<span className="min-w-0 flex-1 truncate">{node.name}</span>
 					</SidebarMenuButton>
 					<SidebarMenuAction
 						showOnHover
@@ -394,14 +521,18 @@ const NestedFileItem = ({
 			<SidebarMenuItem className={isDragging ? "opacity-40" : undefined}>
 				<SidebarMenuButton
 					isActive={selectedFileId === file.id}
-					className="data-[active=true]:bg-primary data-[active=true]:text-primary-foreground hover:bg-accent hover:text-accent-foreground"
+					className={cn(
+						"data-[active=true]:bg-primary data-[active=true]:text-primary-foreground hover:bg-accent hover:text-accent-foreground",
+						filePresence.length > 0 && "pr-16",
+					)}
 					onClick={() => onSelectFile(file)}
 					tooltip={file.id}
 					{...dragProps}
 				>
 					<File />
-					{node.name}
+					<span className="min-w-0 flex-1 truncate">{node.name}</span>
 				</SidebarMenuButton>
+				<FilePresenceAvatars participants={filePresence} fileName={file.id} />
 				<SidebarMenuAction
 					showOnHover
 					onClick={() => onDeleteFile(file)}
@@ -491,6 +622,7 @@ const NestedFileItem = ({
 								key={child.path}
 								node={child}
 								selectedFileId={selectedFileId}
+								filePresenceById={filePresenceById}
 								onSelectFile={onSelectFile}
 								onDeleteFile={onDeleteFile}
 								openFolders={openFolders}
@@ -526,6 +658,7 @@ type FileSidebarProps = {
 	onThemeChange: (theme: string) => void;
 	themeSelectDisabled: boolean;
 	onProjectDeleted?: () => void;
+	presenceAwareness?: Awareness | null;
 };
 
 export const FileSidebar = ({
@@ -545,8 +678,10 @@ export const FileSidebar = ({
 	onThemeChange,
 	themeSelectDisabled,
 	onProjectDeleted,
+	presenceAwareness = null,
 }: FileSidebarProps) => {
 	const nestedFileTree = useMemo(() => buildNestedFileTree(files), [files]);
+	const [filePresenceById, setFilePresenceById] = useState<FilePresenceByFileId>({});
 	const [activePanel, setActivePanel] = useState<WorkspacePanel>("files");
 	const [openFolders, setOpenFolders] = useState<Record<string, boolean>>({});
 	const [createFileOpen, setCreateFileOpen] = useState(false);
@@ -559,6 +694,22 @@ export const FileSidebar = ({
 	});
 	const dragStateRef = useRef(dragState);
 	dragStateRef.current = dragState;
+
+	useEffect(() => {
+		if (!presenceAwareness) {
+			setFilePresenceById({});
+			return;
+		}
+
+		const update = () => setFilePresenceById(getFilePresenceById(presenceAwareness));
+
+		update();
+		presenceAwareness.on("change", update);
+
+		return () => {
+			presenceAwareness.off("change", update);
+		};
+	}, [presenceAwareness]);
 
 	useEffect(() => {
 		if (!selectedFileId) {
@@ -749,6 +900,7 @@ export const FileSidebar = ({
 						key={node.path}
 						node={node}
 						selectedFileId={selectedFileId}
+						filePresenceById={filePresenceById}
 						onSelectFile={onSelectFile}
 						onDeleteFile={setFileToDelete}
 						openFolders={openFolders}
