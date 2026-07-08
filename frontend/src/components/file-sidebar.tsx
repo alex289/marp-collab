@@ -426,7 +426,7 @@ const NestedFileItem = ({
 			<Collapsible
 				open={isOpen}
 				onOpenChange={(open) => setFolderOpen(node.path, open)}
-				className="group/collapsible [&[data-state=open]>[data-sidebar=menu-button]>svg:first-child]:rotate-90"
+				className="group/collapsible [&[data-open]>[data-sidebar=menu-button]>svg:first-child]:rotate-90"
 			>
 				<CollapsibleTrigger
 					render={
