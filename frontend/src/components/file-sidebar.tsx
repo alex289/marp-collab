@@ -44,6 +44,7 @@ import { UploadFileDialog } from "@/components/dialog/upload-file";
 import { DeleteFileDialog } from "@/components/dialog/delete-file";
 import { DeleteProjectDialog } from "@/components/dialog/delete-project";
 import { API_URL } from "@/lib/config";
+import { isImageDeckFile } from "@/lib/file-types";
 import {
 	Select,
 	SelectContent,
@@ -54,6 +55,7 @@ import {
 import { ProjectNameSetting } from "@/components/project-name-setting";
 import { Label } from "./ui/label";
 import { Button } from "./ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 type NestedFileNode = {
 	name: string;
@@ -159,6 +161,9 @@ const getParentFolder = (fileId: string): string => {
 	const lastSlash = normalized.lastIndexOf("/");
 	return lastSlash === -1 ? "" : normalized.slice(0, lastSlash);
 };
+
+const toProjectFileUrl = (projectId: string, fileId: string): string =>
+	`${API_URL}/projects/${projectId}/files/${fileId.split("/").map(encodeURIComponent).join("/")}`;
 
 const SidebarHeaderAction = ({
 	onClick,
@@ -328,6 +333,7 @@ type NestedFileItemProps = {
 	node: NestedFileNode;
 	selectedFileId: string | null;
 	onSelectFile: (file: DeckFile) => void;
+	onPreviewImage: (file: DeckFile) => void;
 	onDeleteFile: (file: DeckFile) => void;
 	openFolders: Record<string, boolean>;
 	setFolderOpen: (path: string, open: boolean) => void;
@@ -342,6 +348,7 @@ const NestedFileItem = ({
 	node,
 	selectedFileId,
 	onSelectFile,
+	onPreviewImage,
 	onDeleteFile,
 	openFolders,
 	setFolderOpen,
@@ -372,9 +379,15 @@ const NestedFileItem = ({
 
 		if (file.type === "asset") {
 			const isFontFile = /\.(woff2?|ttf|otf)$/i.test(node.name);
+			const isImageFile = isImageDeckFile(file);
 			return (
 				<SidebarMenuItem className={isDragging ? "opacity-40" : undefined}>
-					<SidebarMenuButton tooltip={file.id} {...dragProps}>
+					<SidebarMenuButton
+						className={cn(isImageFile && "hover:bg-accent hover:text-accent-foreground")}
+						onClick={isImageFile ? () => onPreviewImage(file) : undefined}
+						tooltip={file.id}
+						{...dragProps}
+					>
 						{isFontFile ? <Type /> : <Image />}
 						{node.name}
 					</SidebarMenuButton>
@@ -492,6 +505,7 @@ const NestedFileItem = ({
 								node={child}
 								selectedFileId={selectedFileId}
 								onSelectFile={onSelectFile}
+								onPreviewImage={onPreviewImage}
 								onDeleteFile={onDeleteFile}
 								openFolders={openFolders}
 								setFolderOpen={setFolderOpen}
@@ -506,6 +520,46 @@ const NestedFileItem = ({
 				</CollapsibleContent>
 			</Collapsible>
 		</SidebarMenuItem>
+	);
+};
+
+type ImagePreviewDialogProps = {
+	projectId: string;
+	file: DeckFile | null;
+	onOpenChange: (open: boolean) => void;
+};
+
+const ImagePreviewDialog = ({ projectId, file, onOpenChange }: ImagePreviewDialogProps) => {
+	const [loadError, setLoadError] = useState(false);
+
+	useEffect(() => {
+		setLoadError(false);
+	}, [file?.id]);
+
+	return (
+		<Dialog open={file !== null} onOpenChange={onOpenChange}>
+			<DialogContent className="sm:max-w-3xl">
+				<DialogHeader>
+					<DialogTitle className="truncate pr-8">{file?.id ?? "Image"}</DialogTitle>
+				</DialogHeader>
+				{file ? (
+					<div className="flex max-h-[75svh] min-h-48 items-center justify-center overflow-auto rounded-md bg-muted/40">
+						{loadError ? (
+							<p className="px-4 text-center text-xs text-muted-foreground">
+								Image could not be loaded.
+							</p>
+						) : (
+							<img
+								src={toProjectFileUrl(projectId, file.id)}
+								alt={file.id}
+								className="max-h-[75svh] max-w-full object-contain"
+								onError={() => setLoadError(true)}
+							/>
+						)}
+					</div>
+				) : null}
+			</DialogContent>
+		</Dialog>
 	);
 };
 
@@ -553,6 +607,7 @@ export const FileSidebar = ({
 	const [createFolderOpen, setCreateFolderOpen] = useState(false);
 	const [uploadFileOpen, setUploadFileOpen] = useState(false);
 	const [fileToDelete, setFileToDelete] = useState<DeckFile | null>(null);
+	const [previewImageFile, setPreviewImageFile] = useState<DeckFile | null>(null);
 	const [dragState, setDragState] = useState<DragState>({
 		draggingFileId: null,
 		dragOverPath: null,
@@ -750,6 +805,7 @@ export const FileSidebar = ({
 						node={node}
 						selectedFileId={selectedFileId}
 						onSelectFile={onSelectFile}
+						onPreviewImage={setPreviewImageFile}
 						onDeleteFile={setFileToDelete}
 						openFolders={openFolders}
 						setFolderOpen={setFolderOpen}
@@ -895,6 +951,15 @@ export const FileSidebar = ({
 					}
 				}}
 				onDeleted={onRetry}
+			/>
+			<ImagePreviewDialog
+				projectId={projectId}
+				file={previewImageFile}
+				onOpenChange={(open) => {
+					if (!open) {
+						setPreviewImageFile(null);
+					}
+				}}
 			/>
 			<SidebarProvider
 				open={sidebarOpen}
