@@ -112,10 +112,6 @@ function getGraphemes(text: string): Grapheme[] {
 	});
 }
 
-function isSameLine(first: DOMRect, second: DOMRect): boolean {
-	return Math.abs(first.top - second.top) < 0.5 && Math.abs(first.height - second.height) < 0.5;
-}
-
 function selectTextFont(text: string, fonts: EmbeddedTextFont[]): EmbeddedTextFont {
 	const font = fonts.find(({ source }) =>
 		Array.from(text).every((character) => source.hasGlyphForCodePoint(character.codePointAt(0)!)),
@@ -149,18 +145,8 @@ function getTextFragments(slide: SVGSVGElement, fonts: EmbeddedTextFont[]): Text
 			const font = selectTextFont(grapheme.text, fonts);
 			const positionedRect = rect ?? (/^\s+$/u.test(grapheme.text) ? previous?.rect : undefined);
 
-			if (positionedRect && font) {
-				const lastFragment = fragments.at(-1);
-				if (
-					lastFragment &&
-					lastFragment.font === font &&
-					isSameLine(lastFragment.rect, positionedRect)
-				) {
-					lastFragment.text += grapheme.text;
-				} else {
-					fragments.push({ text: grapheme.text, rect: positionedRect, font });
-				}
-
+			if (positionedRect) {
+				fragments.push({ text: grapheme.text, rect: positionedRect, font });
 				previous = { rect: positionedRect, font };
 			}
 		}
