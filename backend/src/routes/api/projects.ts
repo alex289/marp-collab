@@ -398,6 +398,16 @@ const createFolderSchema = z.object({
 		.refine((name) => !name.startsWith("/"), "Absolute paths not allowed"),
 });
 
+const uploadDestinationSchema = z
+	.string()
+	.max(255)
+	.regex(
+		/^[\w\-. /]*$/,
+		"Upload destination must contain only letters, numbers, spaces, hyphens, underscores, dots, or slashes",
+	)
+	.refine((destination) => !destination.split("/").includes(".."), "Path traversal not allowed")
+	.refine((destination) => !destination.startsWith("/"), "Absolute paths not allowed");
+
 app.post("/:projectId/folders", async (c) => {
 	const user = c.get("user");
 	if (!user) {
@@ -470,15 +480,32 @@ app.post("/:projectId/files/upload", async (c) => {
 		return c.json({ error: "Invalid file name" }, 400);
 	}
 
+	const destination =
+		typeof body["destination"] === "string"
+			? body["destination"]
+					.trim()
+					.replace(/\\/g, "/")
+					.replace(/^\/+|\/+$/g, "")
+			: "";
+	const destinationParseResult = uploadDestinationSchema.safeParse(destination);
+	if (!destinationParseResult.success) {
+		return c.json({ error: "Invalid upload destination" }, 400);
+	}
+
+	const fileId = destination ? `${destination}/${sanitized}` : sanitized;
+	if (!resolveProjectFilePath(projectId, fileId)) {
+		return c.json({ error: "Invalid upload destination" }, 400);
+	}
+
 	if (isEditable) {
 		const content = await uploadedFile.text();
-		const documentName = toDocumentName(projectId, sanitized);
+		const documentName = toDocumentName(projectId, fileId);
 		await saveDocumentContent(documentName, content);
 		broadcastFilesChanged(projectId);
 		return c.json({
 			file: {
-				id: sanitized,
-				label: sanitized,
+				id: fileId,
+				label: fileId,
 				type: "markdown",
 				documentName,
 			},
@@ -486,14 +513,14 @@ app.post("/:projectId/files/upload", async (c) => {
 	}
 
 	const data = new Uint8Array(await uploadedFile.arrayBuffer());
-	await saveProjectFile(projectId, sanitized, data);
+	await saveProjectFile(projectId, fileId, data);
 	broadcastFilesChanged(projectId);
 
 	return c.json({
 		file: {
-			id: sanitized,
-			label: sanitized,
-			type: getFileType(sanitized) ?? "asset",
+			id: fileId,
+			label: fileId,
+			type: getFileType(fileId) ?? "asset",
 		},
 	});
 });
