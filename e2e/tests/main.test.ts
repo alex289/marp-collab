@@ -272,7 +272,6 @@ test.describe("Editor page — file management", () => {
 		await expect(page.getByRole("dialog")).not.toBeVisible();
 		await expect(page.getByText("keep-me.md")).toBeVisible();
 	});
-
 	test("rename a selected markdown file", async ({ page }) => {
 		await page.getByRole("button", { name: "New file" }).click();
 		await fillNewFileName(page, "rename-me.md");
@@ -311,6 +310,31 @@ test.describe("Editor page — file management", () => {
 		await expect(page.getByRole("button", { name: "new-folder" })).toBeVisible();
 		await expect(page.getByRole("button", { name: "nested.md" })).toBeVisible();
 		await expect(page.getByText("old-folder")).not.toBeVisible();
+	});
+
+	test("previews an uploaded image from the sidebar", async ({ page }) => {
+		await page.getByTitle("Upload file").click();
+		await page.locator('input[type="file"]').setInputFiles({
+			name: "preview.png",
+			mimeType: "image/png",
+			buffer: Buffer.from(
+				"iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=",
+				"base64",
+			),
+		});
+		await page.getByRole("button", { name: "Upload", exact: true }).click();
+		await expect(page.getByRole("dialog")).not.toBeVisible();
+		await expect(page.getByRole("button", { name: "preview.png" })).toBeVisible({
+			timeout: 5_000,
+		});
+
+		await page.getByRole("button", { name: "preview.png" }).click();
+
+		await expect(page.getByRole("heading", { name: "preview.png" })).toBeVisible();
+		const image = page.getByRole("img", { name: "preview.png" });
+		await expect(image).toBeVisible();
+		await expect(image).toHaveAttribute("src", /\/projects\/.+\/files\/preview\.png$/);
+		await expect(page.getByText("Active file: presentation.md")).toBeVisible();
 	});
 });
 
