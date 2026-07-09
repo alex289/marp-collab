@@ -1,7 +1,9 @@
 import fontkit from "@pdf-lib/fontkit";
 import geistFontUrl from "@fontsource-variable/geist/files/geist-latin-wght-normal.woff2?url";
+import notoEmojiFontUrl from "@fontsource/noto-emoji/files/noto-emoji-emoji-400-normal.woff2?url";
+import unifontUrl from "@fontsource/unifont/files/unifont-latin-400-normal.woff2?url";
 import { toPng } from "html-to-image";
-import { PDFDocument, setTextRenderingMode, TextRenderingMode } from "pdf-lib";
+import { type PDFFont, PDFDocument, setTextRenderingMode, TextRenderingMode } from "pdf-lib";
 
 const PDF_POINTS_PER_CSS_PIXEL = 72 / 96;
 
@@ -76,29 +78,90 @@ div.marpit > svg[data-marpit-svg] {
 	return container;
 }
 
+type EmbeddedTextFont = {
+	source: {
+		hasGlyphForCodePoint(codePoint: number): boolean;
+	};
+	font: PDFFont;
+};
+
 type TextFragment = {
 	text: string;
 	rect: DOMRect;
+	font: EmbeddedTextFont;
 };
 
-function getTextFragments(slide: SVGSVGElement): TextFragment[] {
+type Grapheme = {
+	text: string;
+	start: number;
+	end: number;
+};
+
+function getGraphemes(text: string): Grapheme[] {
+	if (typeof Intl.Segmenter === "function") {
+		return Array.from(new Intl.Segmenter(undefined, { granularity: "grapheme" }).segment(text)).map(
+			({ segment, index }) => ({ text: segment, start: index, end: index + segment.length }),
+		);
+	}
+
+	let offset = 0;
+	return Array.from(text, (segment) => {
+		const grapheme = { text: segment, start: offset, end: offset + segment.length };
+		offset += segment.length;
+		return grapheme;
+	});
+}
+
+function isSameLine(first: DOMRect, second: DOMRect): boolean {
+	return Math.abs(first.top - second.top) < 0.5 && Math.abs(first.height - second.height) < 0.5;
+}
+
+function selectTextFont(text: string, fonts: EmbeddedTextFont[]): EmbeddedTextFont {
+	const font = fonts.find(({ source }) =>
+		Array.from(text).every((character) => source.hasGlyphForCodePoint(character.codePointAt(0)!)),
+	);
+	if (font) {
+		return font;
+	}
+
+	const codePoints = Array.from(
+		text,
+		(character) => `U+${character.codePointAt(0)!.toString(16).toUpperCase()}`,
+	);
+	throw new Error(`No embedded PDF font supports ${codePoints.join(", ")}.`);
+}
+
+function getTextFragments(slide: SVGSVGElement, fonts: EmbeddedTextFont[]): TextFragment[] {
 	const walker = document.createTreeWalker(slide, NodeFilter.SHOW_TEXT);
 	const fragments: TextFragment[] = [];
+	let previous: { rect: DOMRect; font: EmbeddedTextFont } | undefined;
 	let node = walker.nextNode();
 
 	while (node) {
 		const text = node.nodeValue ?? "";
-		if (text.trim().length > 0) {
+		for (const grapheme of getGraphemes(text)) {
 			const range = document.createRange();
-			range.selectNodeContents(node);
+			range.setStart(node, grapheme.start);
+			range.setEnd(node, grapheme.end);
 			const rect = Array.from(range.getClientRects()).find(
 				(candidate) => candidate.width > 0 && candidate.height > 0,
 			);
+			const font = selectTextFont(grapheme.text, fonts);
+			const positionedRect = rect ?? (/^\s+$/u.test(grapheme.text) ? previous?.rect : undefined);
 
-			if (rect) {
-				// A wrapped text node can have several rectangles. Keeping the first
-				// nonzero rectangle preserves the text once instead of duplicating it.
-				fragments.push({ text, rect });
+			if (positionedRect && font) {
+				const lastFragment = fragments.at(-1);
+				if (
+					lastFragment &&
+					lastFragment.font === font &&
+					isSameLine(lastFragment.rect, positionedRect)
+				) {
+					lastFragment.text += grapheme.text;
+				} else {
+					fragments.push({ text: grapheme.text, rect: positionedRect, font });
+				}
+
+				previous = { rect: positionedRect, font };
 			}
 		}
 
@@ -106,6 +169,19 @@ function getTextFragments(slide: SVGSVGElement): TextFragment[] {
 	}
 
 	return fragments;
+}
+
+async function loadTextFonts(pdf: PDFDocument): Promise<EmbeddedTextFont[]> {
+	return Promise.all(
+		[geistFontUrl, unifontUrl, notoEmojiFontUrl].map(async (url) => {
+			const response = await fetch(url);
+			const bytes = new Uint8Array(await response.arrayBuffer());
+			return {
+				source: fontkit.create(bytes),
+				font: await pdf.embedFont(bytes),
+			};
+		}),
+	);
 }
 
 export async function exportMarpPdf({ html, css, filename }: ExportMarpPdfOptions): Promise<void> {
@@ -122,8 +198,7 @@ export async function exportMarpPdf({ html, css, filename }: ExportMarpPdfOption
 
 		const pdf = await PDFDocument.create();
 		pdf.registerFontkit(fontkit);
-		const fontResponse = await fetch(geistFontUrl);
-		const font = await pdf.embedFont(await fontResponse.arrayBuffer());
+		const textFonts = await loadTextFonts(pdf);
 
 		for (const slide of slides) {
 			const slideRect = slide.getBoundingClientRect();
@@ -148,14 +223,14 @@ export async function exportMarpPdf({ html, css, filename }: ExportMarpPdfOption
 
 			const xScale = pageWidth / slideRect.width;
 			const yScale = pageHeight / slideRect.height;
-			for (const fragment of getTextFragments(slide)) {
+			for (const fragment of getTextFragments(slide, textFonts)) {
 				const x = (fragment.rect.left - slideRect.left) * xScale;
 				const y = pageHeight - (fragment.rect.bottom - slideRect.top) * yScale;
 				const size = fragment.rect.height * yScale;
 
 				page.pushOperators(setTextRenderingMode(TextRenderingMode.Invisible));
 				try {
-					page.drawText(fragment.text, { font, size, x, y });
+					page.drawText(fragment.text, { font: fragment.font.font, size, x, y });
 				} finally {
 					page.pushOperators(setTextRenderingMode(TextRenderingMode.Fill));
 				}
