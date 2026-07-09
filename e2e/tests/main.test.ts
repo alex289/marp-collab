@@ -790,12 +790,18 @@ test.describe("Editor: export", () => {
 		await page.getByRole("button", { name: "Create" }).click();
 		await clickLastCard(page, "Export PDF Test");
 		await waitForSidebar(page);
+		await page.getByRole("button", { name: "New file" }).click();
+		await fillNewFileName(page, "export-me.md");
+		await page.getByRole("button", { name: "Create" }).click();
+		await expect(page.getByRole("dialog")).not.toBeVisible();
+		await page.getByRole("button", { name: "export-me.md" }).click();
+		await expect(page.getByText("Active file: export-me.md")).toBeVisible();
 
 		const [download] = await Promise.all([
 			page.waitForEvent("download"),
 			page.getByTitle("Export current presentation as PDF").click(),
 		]);
-		expect(download.suggestedFilename()).toMatch(/\.pdf$/i);
+		expect(download.suggestedFilename()).toBe("export-me.pdf");
 		const stream = await download.createReadStream();
 		expect(stream).not.toBeNull();
 		const chunks: Buffer[] = [];
