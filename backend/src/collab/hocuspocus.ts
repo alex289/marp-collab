@@ -19,6 +19,7 @@ type CollabContext = {
 };
 
 const fallbackColors = ["#f97316", "#16a34a", "#0ea5e9", "#e11d48", "#7c3aed", "#db2777"];
+const PROJECT_PRESENCE_DOCUMENT_ID = "__presence";
 
 const hashString = (value: string): number => {
 	let hash = 0;
@@ -28,6 +29,25 @@ const hashString = (value: string): number => {
 	}
 	return Math.abs(hash);
 };
+
+function parseProjectDocumentName(
+	documentName: string,
+): { projectId: string; fileId: string } | null {
+	const parts = documentName.split("/");
+	if (parts[0] !== "project" || !parts[1]) {
+		return null;
+	}
+
+	return {
+		projectId: parts[1],
+		fileId: parts.slice(2).join("/"),
+	};
+}
+
+function isProjectPresenceDocument(documentName: string): boolean {
+	const parsed = parseProjectDocumentName(documentName);
+	return parsed?.fileId === PROJECT_PRESENCE_DOCUMENT_ID;
+}
 
 export const collabServer = new Hocuspocus({
 	timeout: 30_000,
@@ -45,13 +65,12 @@ export const collabServer = new Hocuspocus({
 			throw new Error("Unauthorized");
 		}
 
-		const parts = documentName.split("/");
-		if (parts[0] !== "project" || !parts[1]) {
+		const parsed = parseProjectDocumentName(documentName);
+		if (!parsed) {
 			throw new Error("Invalid document name");
 		}
-		const projectId = parts[1];
-		const fileId = parts.slice(2).join("/");
-		if (!isEditableExtension(fileId)) {
+		const { projectId, fileId } = parsed;
+		if (fileId !== PROJECT_PRESENCE_DOCUMENT_ID && !isEditableExtension(fileId)) {
 			throw new Error("Only text files can be opened in the editor");
 		}
 
@@ -83,6 +102,10 @@ export const collabServer = new Hocuspocus({
 		unregisterProjectConnection(socketId, documentName);
 	},
 	async onLoadDocument({ documentName }: { documentName: string }) {
+		if (isProjectPresenceDocument(documentName)) {
+			return new Y.Doc();
+		}
+
 		const binary = await getDocumentBinary(documentName);
 		if (binary) {
 			const doc = new Y.Doc();
@@ -97,6 +120,10 @@ export const collabServer = new Hocuspocus({
 		return doc;
 	},
 	async onStoreDocument({ documentName, document }: { documentName: string; document: Y.Doc }) {
+		if (isProjectPresenceDocument(documentName)) {
+			return;
+		}
+
 		const binary = Y.encodeStateAsUpdate(document);
 		await Promise.all([
 			saveDocumentBinary(documentName, binary),

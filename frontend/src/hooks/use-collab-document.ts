@@ -22,6 +22,7 @@ const defaultState: CollabState = {
 };
 
 const palette = ["#f97316", "#16a34a", "#0ea5e9", "#e11d48", "#0891b2", "#ca8a04"];
+const PROJECT_PRESENCE_DOCUMENT_ID = "__presence";
 
 const hashString = (value: string): number => {
 	let hash = 0;
@@ -111,4 +112,77 @@ export const useCollabDocument = (
 	}, [documentName, user, sessionUser]);
 
 	return state;
+};
+
+export const useProjectPresence = (
+	projectId: string | null,
+	sessionUser: SessionUser | null,
+	user: PresenceUser,
+	activeFileId: string | null,
+): Awareness | null => {
+	const [awareness, setAwareness] = useState<Awareness | null>(null);
+	const providerRef = useRef<HocuspocusProvider | null>(null);
+
+	useEffect(() => {
+		if (!projectId || !sessionUser) {
+			setAwareness(null);
+			return;
+		}
+
+		const yDoc = new Y.Doc();
+		const provider = new HocuspocusProvider({
+			url: `${API_URL}/collab`,
+			name: `project/${projectId}/${PROJECT_PRESENCE_DOCUMENT_ID}`,
+			document: yDoc,
+		});
+
+		providerRef.current = provider;
+		setAwareness(provider.awareness);
+
+		return () => {
+			providerRef.current = null;
+			provider.destroy();
+			yDoc.destroy();
+			setAwareness(null);
+		};
+	}, [projectId, sessionUser]);
+
+	useEffect(() => {
+		const provider = providerRef.current;
+		if (!provider) {
+			return;
+		}
+
+		provider.setAwarenessField("user", {
+			id: user.userId,
+			name: user.userName,
+			color: user.color,
+			image: user.image,
+		});
+	}, [awareness, user]);
+
+	useEffect(() => {
+		const provider = providerRef.current;
+		if (!provider) {
+			return;
+		}
+
+		provider.setAwarenessField(
+			"activeFile",
+			activeFileId
+				? {
+						fileId: activeFileId,
+						updatedAt: Date.now(),
+					}
+				: null,
+		);
+
+		return () => {
+			if (providerRef.current === provider) {
+				provider.setAwarenessField("activeFile", null);
+			}
+		};
+	}, [activeFileId, awareness]);
+
+	return awareness;
 };
