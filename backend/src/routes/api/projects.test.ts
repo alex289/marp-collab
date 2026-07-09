@@ -29,6 +29,7 @@ describe("projects API", () => {
 			["api-owner", "owner@example.com"],
 			["api-readonly", "readonly@example.com"],
 			["api-outsider", "outsider@example.com"],
+			["user-1", "test@example.com"],
 		]) {
 			db.prepare(
 				"insert into user (id, name, email, emailVerified, createdAt, updatedAt) values (?, ?, ?, ?, ?, ?)",
@@ -40,12 +41,16 @@ describe("projects API", () => {
 		db.prepare(
 			"insert into project_collaborator (projectId, userId, readOnly, createdAt) values (?, ?, ?, ?)",
 		).run("api-proj", "api-readonly", 1, now);
+		db.prepare(
+			"insert into project (id, name, createdAt, updatedAt, ownerId) values (?, ?, ?, ?, ?)",
+		).run("upload-proj", "Upload Project", now, now, "user-1");
 
 		await files.saveDocumentContent(
 			files.toDocumentName("api-proj", "presentation.md"),
 			"---\nmarp: true\n---\n\n# Route Export",
 		);
 		await files.saveProjectFile("api-proj", "logo.png", new Uint8Array([1, 2, 3]));
+		await files.createProjectDir("upload-proj", "assets");
 	});
 
 	after(async () => {
@@ -159,5 +164,52 @@ describe("projects API", () => {
 		equal(res.headers.get("cache-control"), "no-store");
 		equal(body, "%PDF-1.4\n");
 		equal(cleanupCalled, true);
+	});
+
+	test("uploads a file into a destination folder", async () => {
+		const app = createTestApp("user-1", () => Promise.reject(new Error("should not export")));
+		const formData = new FormData();
+		formData.append("destination", "assets");
+		formData.append(
+			"file",
+			new File(["section { color: red; }"], "Theme File.css", { type: "text/css" }),
+		);
+
+		const response = await app.request("/projects/upload-proj/files/upload", {
+			method: "POST",
+			body: formData,
+		});
+
+		equal(response.status, 200);
+		const body = (await response.json()) as {
+			file: { id: string; label: string; type: string; documentName?: string };
+		};
+		equal(body.file.id, "assets/theme-file.css");
+		equal(body.file.label, "assets/theme-file.css");
+		equal(body.file.type, "markdown");
+		equal(body.file.documentName, "project/upload-proj/assets/theme-file.css");
+		equal(
+			await files.getDocumentContent("project/upload-proj/assets/theme-file.css"),
+			"section { color: red; }",
+		);
+
+		const deckFiles = await files.getDeckFiles("upload-proj");
+		ok(deckFiles.some((file) => file.id === "assets/theme-file.css"));
+	});
+
+	test("rejects an upload destination with unsupported characters", async () => {
+		const app = createTestApp("user-1", () => Promise.reject(new Error("should not export")));
+		const formData = new FormData();
+		formData.append("destination", "bad:*");
+		formData.append("file", new File(["# Bad"], "bad.md", { type: "text/markdown" }));
+
+		const response = await app.request("/projects/upload-proj/files/upload", {
+			method: "POST",
+			body: formData,
+		});
+
+		equal(response.status, 400);
+		const body = (await response.json()) as { error?: string };
+		equal(body.error, "Invalid upload destination");
 	});
 });

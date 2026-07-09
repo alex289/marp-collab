@@ -10,7 +10,7 @@ import {
 	DialogTitle,
 } from "@/components/ui/dialog";
 import { FileDropZone } from "@/components/ui/file-drop-zone";
-import { API_URL } from "@/lib/config";
+import { uploadProjectFiles } from "@/lib/upload-files";
 import { useState } from "react";
 
 type Props = {
@@ -43,37 +43,17 @@ export function UploadFileDialog({ projectId, open, onOpenChange, onUploaded }: 
 		setIsSubmitting(true);
 		setError(null);
 
-		let uploadedAny = false;
-		const failed: string[] = [];
-
-		for (const file of selectedFiles) {
-			try {
-				const formData = new FormData();
-				formData.append("file", file);
-
-				const res = await fetch(`${API_URL}/projects/${projectId}/files/upload`, {
-					method: "POST",
-					body: formData,
-				});
-
-				if (!res.ok) {
-					const data = (await res.json()) as { error?: string };
-					failed.push(`${file.name}: ${data.error ?? "Failed to upload file"}`);
-					continue;
-				}
-
-				uploadedAny = true;
-			} catch {
-				failed.push(`${file.name}: An unexpected error occurred`);
-			}
-		}
+		const { uploadedAny, failures } = await uploadProjectFiles({
+			projectId,
+			files: selectedFiles,
+		});
 
 		if (uploadedAny) {
 			onUploaded();
 		}
 
-		if (failed.length > 0) {
-			setError(failed.join("\n"));
+		if (failures.length > 0) {
+			setError(failures.join("\n"));
 			setSelectedFiles([]);
 			setIsSubmitting(false);
 			return;

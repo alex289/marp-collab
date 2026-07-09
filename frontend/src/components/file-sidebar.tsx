@@ -57,6 +57,7 @@ import {
 import { ProjectNameSetting } from "@/components/project-name-setting";
 import { Label } from "./ui/label";
 import { Button } from "./ui/button";
+import { uploadProjectFiles } from "@/lib/upload-files";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 type NestedFileNode = {
@@ -463,10 +464,14 @@ type NestedFileItemProps = {
 	openFolders: Record<string, boolean>;
 	setFolderOpen: (path: string, open: boolean) => void;
 	dragState: DragState;
+	dropUploadDragOverPath: string | null;
 	onDragStart: (fileId: string) => void;
 	onDragEnd: () => void;
 	onDragOverPath: (path: string | null) => void;
 	onDropOnPath: (destinationFolder: string) => void;
+	onExternalFileDragOverPath: (event: React.DragEvent, path: string) => boolean;
+	onExternalFileDragLeave: (event: React.DragEvent) => void;
+	onExternalFileDropOnPath: (event: React.DragEvent, destinationFolder: string) => boolean;
 };
 
 const NestedFileItem = ({
@@ -479,10 +484,14 @@ const NestedFileItem = ({
 	openFolders,
 	setFolderOpen,
 	dragState,
+	dropUploadDragOverPath,
 	onDragStart,
 	onDragEnd,
 	onDragOverPath,
 	onDropOnPath,
+	onExternalFileDragOverPath,
+	onExternalFileDragLeave,
+	onExternalFileDropOnPath,
 }: NestedFileItemProps) => {
 	const isFolder = node.children.length > 0 || node.file?.type === "folder";
 
@@ -563,7 +572,9 @@ const NestedFileItem = ({
 	);
 	const isOpen = openFolders[node.path] ?? false;
 	const folderFile = node.file?.type === "folder" ? node.file : null;
-	const isDragOver = dragState.dragOverPath === node.path && dragState.draggingFileId !== null;
+	const isDragOver =
+		(dragState.dragOverPath === node.path && dragState.draggingFileId !== null) ||
+		dropUploadDragOverPath === node.path;
 
 	return (
 		<SidebarMenuItem>
@@ -579,6 +590,12 @@ const NestedFileItem = ({
 							tooltip={node.path}
 							className={isDragOver ? "ring-2 ring-primary ring-inset" : undefined}
 							onDragOver={(e) => {
+								if (onExternalFileDragOverPath(e, node.path)) {
+									return;
+								}
+								if (!dragState.draggingFileId) {
+									return;
+								}
 								e.preventDefault();
 								e.stopPropagation();
 								e.dataTransfer.dropEffect = "move";
@@ -586,10 +603,14 @@ const NestedFileItem = ({
 							}}
 							onDragLeave={(e) => {
 								if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+									onExternalFileDragLeave(e);
 									onDragOverPath(null);
 								}
 							}}
 							onDrop={(e) => {
+								if (onExternalFileDropOnPath(e, node.path)) {
+									return;
+								}
 								e.preventDefault();
 								e.stopPropagation();
 								onDropOnPath(node.path);
@@ -613,6 +634,12 @@ const NestedFileItem = ({
 				)}
 				<CollapsibleContent
 					onDragOver={(e) => {
+						if (onExternalFileDragOverPath(e, node.path)) {
+							return;
+						}
+						if (!dragState.draggingFileId) {
+							return;
+						}
 						e.preventDefault();
 						e.stopPropagation();
 						e.dataTransfer.dropEffect = "move";
@@ -620,10 +647,14 @@ const NestedFileItem = ({
 					}}
 					onDragLeave={(e) => {
 						if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+							onExternalFileDragLeave(e);
 							onDragOverPath(null);
 						}
 					}}
 					onDrop={(e) => {
+						if (onExternalFileDropOnPath(e, node.path)) {
+							return;
+						}
 						e.preventDefault();
 						e.stopPropagation();
 						onDropOnPath(node.path);
@@ -642,10 +673,14 @@ const NestedFileItem = ({
 								openFolders={openFolders}
 								setFolderOpen={setFolderOpen}
 								dragState={dragState}
+								dropUploadDragOverPath={dropUploadDragOverPath}
 								onDragStart={onDragStart}
 								onDragEnd={onDragEnd}
 								onDragOverPath={onDragOverPath}
 								onDropOnPath={onDropOnPath}
+								onExternalFileDragOverPath={onExternalFileDragOverPath}
+								onExternalFileDragLeave={onExternalFileDragLeave}
+								onExternalFileDropOnPath={onExternalFileDropOnPath}
 							/>
 						))}
 					</SidebarMenuSub>
@@ -749,6 +784,9 @@ export const FileSidebar = ({
 		draggingFileId: null,
 		dragOverPath: null,
 	});
+	const [dropUploadDragOverPath, setDropUploadDragOverPath] = useState<string | null>(null);
+	const [isUploadingDrop, setIsUploadingDrop] = useState(false);
+	const [dropUploadError, setDropUploadError] = useState<string | null>(null);
 	const dragStateRef = useRef(dragState);
 	dragStateRef.current = dragState;
 	const selectedFile = useMemo(
@@ -861,6 +899,64 @@ export const FileSidebar = ({
 		onRetry();
 	};
 
+	const isExternalFileDrag = (event: React.DragEvent) =>
+		Array.from(event.dataTransfer.types).includes("Files");
+
+	const handleDroppedFiles = async (droppedFiles: File[], destinationFolder: string) => {
+		setDropUploadDragOverPath(null);
+		setDropUploadError(null);
+		setIsUploadingDrop(true);
+
+		const { uploadedAny, failures } = await uploadProjectFiles({
+			projectId,
+			files: droppedFiles,
+			destination: destinationFolder || undefined,
+		});
+
+		if (uploadedAny) {
+			onRetry();
+		}
+
+		if (failures.length > 0) {
+			setDropUploadError(failures.join("\n"));
+		}
+
+		setIsUploadingDrop(false);
+	};
+
+	const handleExternalFileDragOverPath = (event: React.DragEvent, path: string): boolean => {
+		if (dragStateRef.current.draggingFileId || !isExternalFileDrag(event)) {
+			return false;
+		}
+
+		event.preventDefault();
+		event.stopPropagation();
+		event.dataTransfer.dropEffect = "copy";
+		setDropUploadDragOverPath(path);
+		return true;
+	};
+
+	const handleExternalFileDragLeave = (event: React.DragEvent) => {
+		if (isExternalFileDrag(event)) {
+			setDropUploadDragOverPath(null);
+		}
+	};
+
+	const handleExternalFileDropOnPath = (
+		event: React.DragEvent,
+		destinationFolder: string,
+	): boolean => {
+		const droppedFiles = Array.from(event.dataTransfer.files);
+		if (dragStateRef.current.draggingFileId || droppedFiles.length === 0) {
+			return false;
+		}
+
+		event.preventDefault();
+		event.stopPropagation();
+		void handleDroppedFiles(droppedFiles, destinationFolder);
+		return true;
+	};
+
 	const handleExportProject = () => {
 		const link = document.createElement("a");
 		link.href = `${API_URL}/projects/${projectId}/export.zip`;
@@ -914,7 +1010,9 @@ export const FileSidebar = ({
 		},
 	]);
 
-	const isRootDragOver = dragState.dragOverPath === "" && dragState.draggingFileId !== null;
+	const isRootDragOver =
+		(dragState.dragOverPath === "" && dragState.draggingFileId !== null) ||
+		dropUploadDragOverPath === "";
 	const emptyPanel = (
 		<SidebarGroup>
 			<SidebarGroupLabel className="pl-0 pb-2">Not available yet</SidebarGroupLabel>
@@ -927,6 +1025,9 @@ export const FileSidebar = ({
 		<div
 			className={isRootDragOver ? "rounded-md ring-2 ring-primary ring-inset" : undefined}
 			onDragOver={(e) => {
+				if (handleExternalFileDragOverPath(e, "")) {
+					return;
+				}
 				if (dragState.draggingFileId) {
 					e.preventDefault();
 					e.dataTransfer.dropEffect = "move";
@@ -935,15 +1036,36 @@ export const FileSidebar = ({
 			}}
 			onDragLeave={(e) => {
 				if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+					handleExternalFileDragLeave(e);
 					handleDragOverPath(null);
 				}
 			}}
 			onDrop={(e) => {
+				if (handleExternalFileDropOnPath(e, "")) {
+					return;
+				}
 				e.preventDefault();
 				void handleDropOnPath("");
 			}}
 		>
+			{dropUploadError && (
+				<p
+					role="alert"
+					className="mx-2 mb-2 whitespace-pre-line rounded-md bg-destructive/10 px-2 py-1 text-xs text-destructive"
+				>
+					{dropUploadError}
+				</p>
+			)}
 			<SidebarMenu>
+				{isUploadingDrop ? (
+					<SidebarMenuItem>
+						<SidebarMenuButton disabled>
+							<Upload className="animate-pulse" />
+							Uploading files...
+						</SidebarMenuButton>
+					</SidebarMenuItem>
+				) : null}
+
 				{isLoading ? (
 					<SidebarMenuButton disabled>
 						<RefreshCw className="animate-spin" />
@@ -982,10 +1104,14 @@ export const FileSidebar = ({
 						openFolders={openFolders}
 						setFolderOpen={setFolderOpen}
 						dragState={dragState}
+						dropUploadDragOverPath={dropUploadDragOverPath}
 						onDragStart={handleDragStart}
 						onDragEnd={handleDragEnd}
 						onDragOverPath={handleDragOverPath}
 						onDropOnPath={handleDropOnPath}
+						onExternalFileDragOverPath={handleExternalFileDragOverPath}
+						onExternalFileDragLeave={handleExternalFileDragLeave}
+						onExternalFileDropOnPath={handleExternalFileDropOnPath}
 					/>
 				))}
 			</SidebarMenu>
