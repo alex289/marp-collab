@@ -845,6 +845,37 @@ test.describe("Editor: collaboration", () => {
 		await page.getByPlaceholder("Collaborator's email").fill("valid@example.com");
 		await expect(addButton).toBeEnabled();
 	});
+
+	test("does not show the current user's own file presence in the sidebar", async ({
+		page,
+		browser,
+	}) => {
+		await page.getByRole("button", { name: "New file" }).click();
+		await fillNewFileName(page, MARKDOWN_FILE_NAME);
+		await page.getByRole("button", { name: "Create" }).click();
+		await expect(page.getByRole("dialog")).not.toBeVisible();
+		await expect(page.getByRole("button", { name: MARKDOWN_FILE_NAME })).toBeVisible();
+
+		const collaboratorContext = await browser.newContext({
+			storageState: "playwright/.auth/user.json",
+		});
+		const collaboratorPage = await collaboratorContext.newPage();
+		try {
+			await collaboratorPage.goto(page.url());
+			await waitForSidebar(collaboratorPage);
+			await collaboratorPage.getByRole("button", { name: MARKDOWN_FILE_NAME }).click();
+			await expect(collaboratorPage.getByText(`Active file: ${MARKDOWN_FILE_NAME}`)).toBeVisible();
+
+			const fileRow = page.locator('[data-sidebar="menu-item"]').filter({
+				has: page.getByRole("button", { name: MARKDOWN_FILE_NAME }),
+			});
+			await expect(fileRow.getByLabel(`Users viewing ${MARKDOWN_FILE_NAME}: Test User`)).toBeHidden(
+				{ timeout: 10_000 },
+			);
+		} finally {
+			await collaboratorContext.close();
+		}
+	});
 });
 
 test.describe("Presentation mode: slide counter and timer", () => {
