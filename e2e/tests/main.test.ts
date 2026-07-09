@@ -782,6 +782,26 @@ test.describe("Editor: export", () => {
 		]);
 		expect(download.suggestedFilename()).toMatch(/\.zip$/);
 	});
+
+	test("export active deck as PDF triggers a PDF download", async ({ page }) => {
+		await page.goto("/");
+		await page.getByRole("button", { name: "Create Presentation" }).click();
+		await fillPresentationName(page, "Export PDF Test");
+		await page.getByRole("button", { name: "Create" }).click();
+		await clickLastCard(page, "Export PDF Test");
+		await waitForSidebar(page);
+
+		const [download] = await Promise.all([
+			page.waitForEvent("download"),
+			page.getByTitle("Export current presentation as PDF").click(),
+		]);
+		expect(download.suggestedFilename()).toMatch(/\.pdf$/i);
+		const stream = await download.createReadStream();
+		expect(stream).not.toBeNull();
+		const chunks: Buffer[] = [];
+		for await (const chunk of stream!) chunks.push(chunk);
+		expect(Buffer.concat(chunks).subarray(0, 5).toString()).toBe("%PDF-");
+	});
 });
 
 test.describe("Editor: outline panel", () => {
