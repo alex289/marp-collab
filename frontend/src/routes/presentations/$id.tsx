@@ -3,7 +3,11 @@ import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod/v4-mini";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FileSidebar } from "@/components/file-sidebar";
-import { useCollabDocument, usePresenceUser } from "@/hooks/use-collab-document";
+import {
+	useCollabDocument,
+	usePresenceUser,
+	useProjectPresence,
+} from "@/hooks/use-collab-document";
 import { useFiles } from "@/hooks/use-files";
 import type { DeckFile } from "@/lib/types";
 import Navbar from "@/components/navbar";
@@ -217,6 +221,12 @@ function RouteComponent() {
 				void reload();
 			}
 		},
+	);
+	const projectPresenceAwareness = useProjectPresence(
+		id,
+		session?.user ?? null,
+		presenceUser,
+		selectedFile?.id ?? null,
 	);
 
 	useEffect(() => {
@@ -840,6 +850,8 @@ function RouteComponent() {
 						onProjectDeleted={() => {
 							void navigate({ to: "/", replace: true });
 						}}
+						presenceAwareness={projectPresenceAwareness}
+						currentUserId={presenceUser.userId}
 						searchPanel={
 							<SearchPanel
 								matches={searchMatches}
