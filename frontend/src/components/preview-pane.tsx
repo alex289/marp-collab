@@ -7,6 +7,8 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card";
+import ErrorAlert from "@/components/alerts/error-alert";
+import { exportMarpPdf } from "@/lib/pdf-export";
 import { renderMarp } from "@/lib/marp";
 import { useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
@@ -122,6 +124,8 @@ export const PreviewPane = ({
 	const navigate = useNavigate();
 	const iframeRef = useRef<HTMLIFrameElement>(null);
 	const [iframeReady, setIframeReady] = useState(false);
+	const [isExportingPdf, setIsExportingPdf] = useState(false);
+	const [pdfExportError, setPdfExportError] = useState<string | null>(null);
 	const prevFileKeyRef = useRef<string | null>(null);
 
 	const handleStartPresentation = useCallback(async () => {
@@ -155,6 +159,23 @@ export const PreviewPane = ({
 			};
 		}
 	}, [markdown, projectId, selectedFileId, themeRevision]);
+
+	const handleExportPdf = useCallback(async () => {
+		if (!label) {
+			return;
+		}
+
+		setIsExportingPdf(true);
+		setPdfExportError(null);
+
+		try {
+			await exportMarpPdf({ html: rendered.html, css: rendered.css, filename: label });
+		} catch (error) {
+			setPdfExportError(error instanceof Error ? error.message : "PDF export failed.");
+		} finally {
+			setIsExportingPdf(false);
+		}
+	}, [label, rendered]);
 
 	useEffect(() => {
 		const onMessage = (event: MessageEvent) => {
@@ -240,6 +261,15 @@ export const PreviewPane = ({
 			<CardHeader className="shrink-0 border border-border px-4 py-3">
 				<CardTitle>Live Preview</CardTitle>
 				<CardAction className="flex items-center gap-2">
+					<Button
+						variant="outline"
+						size="sm"
+						title="Export current presentation as PDF"
+						disabled={!label || isExportingPdf}
+						onClick={() => void handleExportPdf()}
+					>
+						{isExportingPdf ? "Exporting PDF..." : "Export PDF"}
+					</Button>
 					{label ? (
 						<Button variant="outline" size="sm" onClick={() => void handleStartPresentation()}>
 							Start presentation
@@ -254,6 +284,7 @@ export const PreviewPane = ({
 			</CardHeader>
 
 			<CardContent className="min-h-0 flex-1 overflow-hidden p-0">
+				{pdfExportError && <ErrorAlert title="PDF export failed" description={pdfExportError} />}
 				<iframe
 					ref={iframeRef}
 					title="Marp preview"

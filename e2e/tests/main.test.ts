@@ -805,7 +805,9 @@ test.describe("Editor: export", () => {
 		const stream = await download.createReadStream();
 		expect(stream).not.toBeNull();
 		const chunks: Buffer[] = [];
-		for await (const chunk of stream!) chunks.push(chunk);
+		for await (const chunk of stream!) {
+			chunks.push(chunk);
+		}
 		expect(Buffer.concat(chunks).subarray(0, 5).toString()).toBe("%PDF-");
 	});
 });

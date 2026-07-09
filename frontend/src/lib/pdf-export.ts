@@ -157,7 +157,7 @@ function getTextFragments(slide: SVGSVGElement, fonts: EmbeddedTextFont[]): Text
 	return fragments;
 }
 
-async function loadTextFonts(pdf: PDFDocument): Promise<EmbeddedTextFont[]> {
+function loadTextFonts(pdf: PDFDocument): Promise<EmbeddedTextFont[]> {
 	return Promise.all(
 		[geistFontUrl, unifontUrl, notoEmojiFontUrl].map(async (url) => {
 			const response = await fetch(url);
