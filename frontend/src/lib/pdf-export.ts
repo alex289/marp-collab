@@ -78,6 +78,25 @@ div.marpit > svg[data-marpit-svg] {
 	return container;
 }
 
+function setIntrinsicSlideSize(slide: SVGSVGElement): void {
+	const dimensions = slide
+		.getAttribute("viewBox")
+		?.trim()
+		.split(/[\s,]+/u)
+		.map(Number);
+	const width = dimensions?.[2] ?? Number.NaN;
+	const height = dimensions?.[3] ?? Number.NaN;
+
+	if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+		throw new Error("Marp slide has no usable dimensions for PDF export.");
+	}
+
+	// Marp's responsive `100vw`/`100vh` sizing collapses in a max-content
+	// off-screen container. The viewBox is the slide's authored dimensions.
+	slide.style.setProperty("width", `${width}px`, "important");
+	slide.style.setProperty("height", `${height}px`, "important");
+}
+
 type EmbeddedTextFont = {
 	source: {
 		hasGlyphForCodePoint(codePoint: number): boolean;
@@ -174,13 +193,17 @@ export async function exportMarpPdf({ html, css, filename }: ExportMarpPdfOption
 	const container = createExportContainer({ html, css, filename });
 
 	try {
-		await document.fonts.ready;
-		await Promise.all(Array.from(container.querySelectorAll("img"), (image) => image.decode()));
-
 		const slides = Array.from(container.querySelectorAll<SVGSVGElement>("svg[data-marpit-svg]"));
 		if (slides.length === 0) {
 			throw new Error("No Marp slides available for PDF export.");
 		}
+
+		for (const slide of slides) {
+			setIntrinsicSlideSize(slide);
+		}
+
+		await document.fonts.ready;
+		await Promise.all(Array.from(container.querySelectorAll("img"), (image) => image.decode()));
 
 		const pdf = await PDFDocument.create();
 		pdf.registerFontkit(fontkit);
