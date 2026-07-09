@@ -26,6 +26,34 @@ async function fillNewFileName(page: Page, fileName: string) {
 	await page.getByRole("textbox", { name: "File name" }).fill(fileName);
 }
 
+async function dropFileOnSidebarButton(
+	page: Page,
+	buttonName: string,
+	file: { name: string; mimeType: string; content: string },
+) {
+	await page.getByRole("button", { name: buttonName }).evaluate((element, droppedFile) => {
+		const dataTransfer = new DataTransfer();
+		dataTransfer.items.add(
+			new File([droppedFile.content], droppedFile.name, { type: droppedFile.mimeType }),
+		);
+
+		element.dispatchEvent(
+			new DragEvent("dragover", {
+				bubbles: true,
+				cancelable: true,
+				dataTransfer,
+			}),
+		);
+		element.dispatchEvent(
+			new DragEvent("drop", {
+				bubbles: true,
+				cancelable: true,
+				dataTransfer,
+			}),
+		);
+	}, file);
+}
+
 async function clickSidebarDelete(
 	page: Page,
 	itemName: string,
@@ -677,6 +705,26 @@ test.describe("Editor: file upload", () => {
 		await page.getByRole("button", { name: "Upload", exact: true }).click();
 		await expect(page.getByRole("dialog")).not.toBeVisible();
 		await expect(page.getByRole("button", { name: "theme.css" })).toBeVisible({ timeout: 5_000 });
+	});
+
+	test("drop a file on a sidebar folder and it appears inside the folder", async ({ page }) => {
+		await page.getByRole("button", { name: "New folder" }).click();
+		await page.getByLabel("Folder name").fill("drop-assets");
+		await page.getByRole("button", { name: "Create" }).click();
+		await expect(page.getByRole("dialog")).not.toBeVisible();
+		await expect(page.getByRole("button", { name: "drop-assets" })).toBeVisible();
+
+		await dropFileOnSidebarButton(page, "drop-assets", {
+			name: "folder-theme.css",
+			mimeType: "text/css",
+			content: "section { color: blue; }",
+		});
+
+		await expect(page.getByRole("button", { name: "folder-theme.css" })).not.toBeVisible();
+		await page.getByRole("button", { name: "drop-assets" }).click();
+		await expect(page.getByRole("button", { name: "folder-theme.css" })).toBeVisible({
+			timeout: 5_000,
+		});
 	});
 
 	test("cancel upload closes the dialog without adding a file", async ({ page }) => {
