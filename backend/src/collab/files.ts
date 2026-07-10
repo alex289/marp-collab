@@ -1,8 +1,10 @@
 import { glob, mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import type { Stats } from "node:fs";
 import { dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { Readable } from "node:stream";
 import { ZipArchive } from "archiver";
 import { getFileType, MARKDOWN_EXTENSIONS } from "../helpers/file-allowlist.ts";
+import { fileExists } from "../helpers/file-exists.ts";
 
 export type DeckFile = {
 	id: string;
@@ -267,17 +269,36 @@ function getRenamedSiblingId(fileId: string, name: string): string | null {
 	return parentFolder ? `${parentFolder}/${name}` : name;
 }
 
-async function projectPathExists(path: string): Promise<boolean> {
+async function getFileStatsSafe(path: string): Promise<Stats | undefined> {
 	try {
-		await stat(path);
-		return true;
-	} catch (error) {
-		if (isMissingFileError(error)) {
-			return false;
-		}
-
-		throw error;
+		return await stat(path);
+	} catch {
+		return undefined;
 	}
+}
+
+async function isRenamePossible(
+	sourcePath: string,
+	destPath: string,
+	expectedType: "file" | "dir",
+): Promise<boolean> {
+	const [sourceStat, destStat] = await Promise.all([
+		getFileStatsSafe(sourcePath),
+		getFileStatsSafe(destPath),
+	]);
+	if (!sourceStat) {
+		return false;
+	}
+	if (expectedType === "file" && !sourceStat.isFile()) {
+		return false;
+	}
+	if (expectedType === "dir" && !sourceStat.isDirectory()) {
+		return false;
+	}
+
+	return (
+		destStat === undefined || (destStat.dev === sourceStat.dev && destStat.ino === sourceStat.ino)
+	);
 }
 
 export function isMarkdownFileId(fileId: string): boolean {
@@ -351,28 +372,19 @@ export async function renameProjectFile(
 		return newFileId;
 	}
 
-	try {
-		const sourceStat = await stat(sourcePath);
-		if (!sourceStat.isFile()) {
-			return null;
-		}
-	} catch (error) {
-		if (isMissingFileError(error)) {
-			return null;
-		}
-
-		throw error;
+	if (!(await isRenamePossible(sourcePath, destPath, "file"))) {
+		return null;
 	}
 
 	const sourceYjsPath = `${sourcePath}.yjs`;
 	const destYjsPath = `${destPath}.yjs`;
-	const hasSourceYjs = await projectPathExists(sourceYjsPath);
-
-	if (await projectPathExists(destPath)) {
+	const hasSourceYjs = await fileExists(sourceYjsPath);
+	if (hasSourceYjs) {
 		return null;
 	}
 
-	if (hasSourceYjs && (await projectPathExists(destYjsPath))) {
+	const canRenameYjs = await isRenamePossible(sourceYjsPath, destYjsPath, "file");
+	if (hasSourceYjs && !canRenameYjs) {
 		return null;
 	}
 
@@ -405,20 +417,8 @@ export async function renameProjectFolder(
 		return newFolderPath;
 	}
 
-	try {
-		const sourceStat = await stat(sourcePath);
-		if (!sourceStat.isDirectory()) {
-			return null;
-		}
-	} catch (error) {
-		if (isMissingFileError(error)) {
-			return null;
-		}
-
-		throw error;
-	}
-
-	if (await projectPathExists(destPath)) {
+	const canRename = await isRenamePossible(sourcePath, destPath, "dir");
+	if (!canRename) {
 		return null;
 	}
 
