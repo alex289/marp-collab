@@ -566,14 +566,10 @@ test.describe("Presentation mode", () => {
 
 		releaseCss();
 
-		await expect
-			.poll(() =>
-				presentationFrame
-					.locator("section")
-					.first()
-					.evaluate((section) => window.getComputedStyle(section).backgroundColor),
-			)
-			.toBe("rgb(1, 2, 3)");
+		await expect(presentationFrame.locator("section").first()).toHaveCSS(
+			"background-color",
+			"rgb(1, 2, 3)",
+		);
 		await presentationPage.close();
 	});
 

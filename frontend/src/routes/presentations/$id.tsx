@@ -192,10 +192,10 @@ function RouteComponent() {
 		}
 
 		const stillAvailable = files.some((file) => file.id === selectedFile.id);
-		if (!stillAvailable) {
+		if (!stillAvailable && !isLoading) {
 			setSelectedFile(preferredDefault());
 		}
-	}, [files, search.file, selectedFile]);
+	}, [files, isLoading, search.file, selectedFile]);
 
 	useEffect(() => {
 		if (isMarkdownDeckFile(selectedFile)) {

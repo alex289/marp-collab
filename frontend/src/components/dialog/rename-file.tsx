@@ -66,7 +66,7 @@ export function RenameFileDialog({ projectId, file, open, onOpenChange, onRename
 			const endpoint =
 				file.type === "folder"
 					? `${API_URL}/projects/${projectId}/folders/${encodeURIComponent(file.id)}/rename`
-					: `${API_URL}/projects/${projectId}/files/${encodeURIComponent(file.id)}/rename`;
+					: `${API_URL}/projects/${projectId}/files/rename/${encodeURIComponent(file.id)}`;
 			const res = await fetch(endpoint, {
 				method: "PATCH",
 				headers: { "Content-Type": "application/json" },

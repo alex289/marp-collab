@@ -583,7 +583,7 @@ app.get("/:projectId/files/:fileId{.+}", async (c) => {
 	});
 });
 
-app.patch("/:projectId/files/:fileId{.+}/rename", async (c) => {
+app.patch("/:projectId/files/rename/:fileId{.+}", async (c) => {
 	const user = c.get("user");
 	if (!user) {
 		return c.json({ error: "Unauthorized" }, 401);
