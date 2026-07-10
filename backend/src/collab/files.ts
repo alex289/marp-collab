@@ -357,6 +357,10 @@ export async function renameProjectFile(
 		return null;
 	}
 
+	if (extname(name).toLowerCase() !== extname(fileId).toLowerCase()) {
+		return null;
+	}
+
 	const sourcePath = resolveProjectFilePath(projectId, fileId);
 	const newFileId = getRenamedSiblingId(fileId, name);
 	if (!sourcePath || !newFileId) {
@@ -379,9 +383,6 @@ export async function renameProjectFile(
 	const sourceYjsPath = `${sourcePath}.yjs`;
 	const destYjsPath = `${destPath}.yjs`;
 	const hasSourceYjs = await fileExists(sourceYjsPath);
-	if (hasSourceYjs) {
-		return null;
-	}
 
 	const canRenameYjs = await isRenamePossible(sourceYjsPath, destYjsPath, "file");
 	if (hasSourceYjs && !canRenameYjs) {
