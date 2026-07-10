@@ -39,7 +39,7 @@ export default defineConfig({
 	webServer: {
 		command: "docker compose -f docker-compose.e2e.yml up --force-recreate --build",
 		url: "http://127.0.0.1:8090/api/v1/health",
-		timeout: 3 * 60 * 1000, // 3 minutes
+		timeout: 5 * 60 * 1000, // 5 minutes
 		reuseExistingServer: false,
 		stdout: "pipe",
 		stderr: "pipe",

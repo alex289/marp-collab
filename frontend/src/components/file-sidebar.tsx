@@ -17,6 +17,7 @@ import {
 	Search,
 	ListTree,
 	Settings,
+	Pencil,
 } from "lucide-react";
 import { useHotkeys } from "@tanstack/react-hotkeys";
 import useSWR from "swr";
@@ -43,6 +44,7 @@ import { CreateFileDialog } from "@/components/dialog/create-file";
 import { CreateFolderDialog } from "@/components/dialog/create-folder";
 import { UploadFileDialog } from "@/components/dialog/upload-file";
 import { DeleteFileDialog } from "@/components/dialog/delete-file";
+import { RenameFileDialog, type RenameResult } from "@/components/dialog/rename-file";
 import { DeleteProjectDialog } from "@/components/dialog/delete-project";
 import { API_URL } from "@/lib/config";
 import { isImageDeckFile } from "@/lib/file-types";
@@ -211,7 +213,7 @@ const FilePresenceDots = ({
 					<div
 						role="group"
 						aria-label={label}
-						className="absolute top-1/2 right-7 z-10 flex h-5 -translate-y-1/2 items-center gap-1 group-data-[collapsible=icon]:hidden mr-1"
+						className="absolute top-1/2 right-14 z-10 flex h-5 -translate-y-1/2 items-center gap-1 group-data-[collapsible=icon]:hidden mr-1"
 					>
 						{visibleParticipants.map((participant) => (
 							<span
@@ -457,6 +459,7 @@ type NestedFileItemProps = {
 	onSelectFile: (file: DeckFile) => void;
 	onPreviewImage: (file: DeckFile) => void;
 	onDeleteFile: (file: DeckFile) => void;
+	onRenameFile: (file: DeckFile) => void;
 	openFolders: Record<string, boolean>;
 	setFolderOpen: (path: string, open: boolean) => void;
 	dragState: DragState;
@@ -477,6 +480,7 @@ const NestedFileItem = ({
 	onSelectFile,
 	onPreviewImage,
 	onDeleteFile,
+	onRenameFile,
 	openFolders,
 	setFolderOpen,
 	dragState,
@@ -515,7 +519,7 @@ const NestedFileItem = ({
 			return (
 				<SidebarMenuItem className={isDragging ? "opacity-40" : undefined}>
 					<SidebarMenuButton
-						className={cn(isImageFile && "hover:bg-accent hover:text-accent-foreground")}
+						className={cn("pr-14", isImageFile && "hover:bg-accent hover:text-accent-foreground")}
 						onClick={isImageFile ? () => onPreviewImage(file) : undefined}
 						tooltip={file.id}
 						{...dragProps}
@@ -523,6 +527,14 @@ const NestedFileItem = ({
 						{isFontFile ? <Type /> : <Image />}
 						<span className="min-w-0 flex-1 truncate">{node.name}</span>
 					</SidebarMenuButton>
+					<SidebarMenuAction
+						showOnHover
+						onClick={() => onRenameFile(file)}
+						title="Rename file"
+						className="right-7 text-muted-foreground"
+					>
+						<Pencil />
+					</SidebarMenuAction>
 					<SidebarMenuAction
 						showOnHover
 						onClick={() => onDeleteFile(file)}
@@ -540,8 +552,8 @@ const NestedFileItem = ({
 				<SidebarMenuButton
 					isActive={selectedFileId === file.id}
 					className={cn(
-						"data-[active=true]:bg-primary data-[active=true]:text-primary-foreground hover:bg-accent hover:text-accent-foreground",
-						filePresence.length > 0 && "pr-16",
+						"pr-14 data-[active=true]:bg-primary data-[active=true]:text-primary-foreground hover:bg-accent hover:text-accent-foreground",
+						filePresence.length > 0 && "pr-24",
 					)}
 					onClick={() => onSelectFile(file)}
 					tooltip={file.id}
@@ -551,6 +563,14 @@ const NestedFileItem = ({
 					<span className="min-w-0 flex-1 truncate">{node.name}</span>
 				</SidebarMenuButton>
 				<FilePresenceDots participants={filePresence} fileName={file.id} />
+				<SidebarMenuAction
+					showOnHover
+					onClick={() => onRenameFile(file)}
+					title="Rename file"
+					className="right-7 text-muted-foreground"
+				>
+					<Pencil />
+				</SidebarMenuAction>
 				<SidebarMenuAction
 					showOnHover
 					onClick={() => onDeleteFile(file)}
@@ -584,7 +604,7 @@ const NestedFileItem = ({
 						<SidebarMenuButton
 							isActive={isActiveBranch}
 							tooltip={node.path}
-							className={isDragOver ? "ring-2 ring-primary ring-inset" : undefined}
+							className={cn("pr-14", isDragOver && "ring-2 ring-primary ring-inset")}
 							onDragOver={(e) => {
 								if (onExternalFileDragOverPath(e, node.path)) {
 									return;
@@ -619,14 +639,24 @@ const NestedFileItem = ({
 					}
 				/>
 				{folderFile && (
-					<SidebarMenuAction
-						showOnHover
-						onClick={() => onDeleteFile(folderFile)}
-						title="Delete folder"
-						className="text-muted-foreground hover:text-destructive"
-					>
-						<Trash2 />
-					</SidebarMenuAction>
+					<>
+						<SidebarMenuAction
+							showOnHover
+							onClick={() => onRenameFile(folderFile)}
+							title="Rename folder"
+							className="right-7 text-muted-foreground"
+						>
+							<Pencil />
+						</SidebarMenuAction>
+						<SidebarMenuAction
+							showOnHover
+							onClick={() => onDeleteFile(folderFile)}
+							title="Delete folder"
+							className="text-muted-foreground hover:text-destructive"
+						>
+							<Trash2 />
+						</SidebarMenuAction>
+					</>
 				)}
 				<CollapsibleContent
 					onDragOver={(e) => {
@@ -666,6 +696,7 @@ const NestedFileItem = ({
 								onSelectFile={onSelectFile}
 								onPreviewImage={onPreviewImage}
 								onDeleteFile={onDeleteFile}
+								onRenameFile={onRenameFile}
 								openFolders={openFolders}
 								setFolderOpen={setFolderOpen}
 								dragState={dragState}
@@ -775,6 +806,7 @@ export const FileSidebar = ({
 	const [createFolderOpen, setCreateFolderOpen] = useState(false);
 	const [uploadFileOpen, setUploadFileOpen] = useState(false);
 	const [fileToDelete, setFileToDelete] = useState<DeckFile | null>(null);
+	const [fileToRename, setFileToRename] = useState<DeckFile | null>(null);
 	const [previewImageFile, setPreviewImageFile] = useState<DeckFile | null>(null);
 	const [dragState, setDragState] = useState<DragState>({
 		draggingFileId: null,
@@ -890,6 +922,64 @@ export const FileSidebar = ({
 		onRetry();
 	};
 
+	const handleRenameComplete = (result: RenameResult) => {
+		if (result.type === "file") {
+			if (selectedFileId === result.oldFileId) {
+				const renamedFile = files.find((file) => file.id === result.oldFileId);
+				if (renamedFile) {
+					onSelectFile({
+						...renamedFile,
+						id: result.newFileId,
+						label: result.newFileId,
+						documentName:
+							renamedFile.type === "markdown"
+								? `project/${projectId}/${result.newFileId}`
+								: renamedFile.documentName,
+					});
+				}
+			}
+			onRetry();
+			return;
+		}
+
+		if (
+			selectedFileId === result.oldFolderPath ||
+			selectedFileId?.startsWith(`${result.oldFolderPath}/`)
+		) {
+			const suffix = selectedFileId.slice(result.oldFolderPath.length);
+			const newSelectedFileId = `${result.newFolderPath}${suffix}`;
+			const selectedFile = files.find((file) => file.id === selectedFileId);
+			if (selectedFile) {
+				onSelectFile({
+					...selectedFile,
+					id: newSelectedFileId,
+					label: newSelectedFileId,
+					documentName:
+						selectedFile.type === "markdown"
+							? `project/${projectId}/${newSelectedFileId}`
+							: selectedFile.documentName,
+				});
+			}
+		}
+
+		setOpenFolders((previous) => {
+			const next: Record<string, boolean> = {};
+			let changed = false;
+
+			for (const [path, open] of Object.entries(previous)) {
+				if (path === result.oldFolderPath || path.startsWith(`${result.oldFolderPath}/`)) {
+					next[`${result.newFolderPath}${path.slice(result.oldFolderPath.length)}`] = open;
+					changed = true;
+				} else {
+					next[path] = open;
+				}
+			}
+
+			return changed ? next : previous;
+		});
+		onRetry();
+	};
+
 	const isExternalFileDrag = (event: React.DragEvent) =>
 		Array.from(event.dataTransfer.types).includes("Files");
 
@@ -947,7 +1037,6 @@ export const FileSidebar = ({
 		void handleDroppedFiles(droppedFiles, destinationFolder);
 		return true;
 	};
-
 	const handleExportProject = () => {
 		const link = document.createElement("a");
 		link.href = `${API_URL}/projects/${projectId}/export.zip`;
@@ -1079,6 +1168,7 @@ export const FileSidebar = ({
 						onSelectFile={onSelectFile}
 						onPreviewImage={setPreviewImageFile}
 						onDeleteFile={setFileToDelete}
+						onRenameFile={setFileToRename}
 						openFolders={openFolders}
 						setFolderOpen={setFolderOpen}
 						dragState={dragState}
@@ -1227,6 +1317,17 @@ export const FileSidebar = ({
 					}
 				}}
 				onDeleted={onRetry}
+			/>
+			<RenameFileDialog
+				projectId={projectId}
+				file={fileToRename}
+				open={fileToRename !== null}
+				onOpenChange={(open) => {
+					if (!open) {
+						setFileToRename(null);
+					}
+				}}
+				onRenamed={handleRenameComplete}
 			/>
 			<ImagePreviewDialog
 				projectId={projectId}

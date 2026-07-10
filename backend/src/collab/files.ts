@@ -1,8 +1,10 @@
-import { glob, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { glob, mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import type { Stats } from "node:fs";
 import { dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { Readable } from "node:stream";
 import { ZipArchive } from "archiver";
 import { getFileType, MARKDOWN_EXTENSIONS } from "../helpers/file-allowlist.ts";
+import { fileExists } from "../helpers/file-exists.ts";
 
 export type DeckFile = {
 	id: string;
@@ -239,6 +241,66 @@ export function resolveProjectFilePath(projectId: string, fileId: string): strin
 	return filePath;
 }
 
+function isValidProjectBasename(name: string): boolean {
+	const trimmed = name.trim();
+	return (
+		trimmed.length > 0 &&
+		trimmed.length <= 255 &&
+		trimmed === name &&
+		!trimmed.includes("/") &&
+		!trimmed.includes("\\") &&
+		!trimmed.includes("..") &&
+		/^[\w\-. ]+$/.test(trimmed)
+	);
+}
+
+function getParentFolder(fileId: string): string {
+	const normalized = fileId.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+	const lastSlash = normalized.lastIndexOf("/");
+	return lastSlash === -1 ? "" : normalized.slice(0, lastSlash);
+}
+
+function getRenamedSiblingId(fileId: string, name: string): string | null {
+	if (!isValidProjectBasename(name)) {
+		return null;
+	}
+
+	const parentFolder = getParentFolder(fileId);
+	return parentFolder ? `${parentFolder}/${name}` : name;
+}
+
+async function getFileStatsSafe(path: string): Promise<Stats | undefined> {
+	try {
+		return await stat(path);
+	} catch {
+		return undefined;
+	}
+}
+
+async function isRenamePossible(
+	sourcePath: string,
+	destPath: string,
+	expectedType: "file" | "dir",
+): Promise<boolean> {
+	const [sourceStat, destStat] = await Promise.all([
+		getFileStatsSafe(sourcePath),
+		getFileStatsSafe(destPath),
+	]);
+	if (!sourceStat) {
+		return false;
+	}
+	if (expectedType === "file" && !sourceStat.isFile()) {
+		return false;
+	}
+	if (expectedType === "dir" && !sourceStat.isDirectory()) {
+		return false;
+	}
+
+	return (
+		destStat === undefined || (destStat.dev === sourceStat.dev && destStat.ino === sourceStat.ino)
+	);
+}
+
 export function isMarkdownFileId(fileId: string): boolean {
 	return MARKDOWN_EXTENSIONS.has(extname(fileId).toLowerCase());
 }
@@ -284,6 +346,86 @@ export async function moveProjectFile(
 	}
 
 	return newFileId;
+}
+
+export async function renameProjectFile(
+	projectId: string,
+	fileId: string,
+	name: string,
+): Promise<string | null> {
+	if (!getFileType(name)) {
+		return null;
+	}
+
+	if (extname(name).toLowerCase() !== extname(fileId).toLowerCase()) {
+		return null;
+	}
+
+	const sourcePath = resolveProjectFilePath(projectId, fileId);
+	const newFileId = getRenamedSiblingId(fileId, name);
+	if (!sourcePath || !newFileId) {
+		return null;
+	}
+
+	const destPath = resolveProjectFilePath(projectId, newFileId);
+	if (!destPath) {
+		return null;
+	}
+
+	if (newFileId === fileId) {
+		return newFileId;
+	}
+
+	if (!(await isRenamePossible(sourcePath, destPath, "file"))) {
+		return null;
+	}
+
+	const sourceYjsPath = `${sourcePath}.yjs`;
+	const destYjsPath = `${destPath}.yjs`;
+	const hasSourceYjs = await fileExists(sourceYjsPath);
+
+	const canRenameYjs = await isRenamePossible(sourceYjsPath, destYjsPath, "file");
+	if (hasSourceYjs && !canRenameYjs) {
+		return null;
+	}
+
+	await rename(sourcePath, destPath);
+
+	if (hasSourceYjs) {
+		await rename(sourceYjsPath, destYjsPath);
+	}
+
+	return newFileId;
+}
+
+export async function renameProjectFolder(
+	projectId: string,
+	folderPath: string,
+	name: string,
+): Promise<string | null> {
+	const sourcePath = resolveProjectFilePath(projectId, folderPath);
+	const newFolderPath = getRenamedSiblingId(folderPath, name);
+	if (!sourcePath || !newFolderPath) {
+		return null;
+	}
+
+	const destPath = resolveProjectFilePath(projectId, newFolderPath);
+	if (!destPath) {
+		return null;
+	}
+
+	if (newFolderPath === folderPath) {
+		return newFolderPath;
+	}
+
+	const canRename = await isRenamePossible(sourcePath, destPath, "dir");
+	if (!canRename) {
+		return null;
+	}
+
+	await rename(sourcePath, destPath);
+
+	return newFolderPath;
 }
 
 export async function deleteProjectFolder(projectId: string, folderPath: string): Promise<boolean> {
