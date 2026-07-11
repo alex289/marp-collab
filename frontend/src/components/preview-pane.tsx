@@ -8,6 +8,7 @@ import {
 	CardTitle,
 } from "@/components/ui/card";
 import { renderMarp } from "@/lib/marp";
+import { API_URL } from "@/lib/config";
 import { useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { useTheme } from "./theme-provider";
@@ -143,6 +144,18 @@ export const PreviewPane = ({
 		});
 	}, [navigate, projectId, selectedFileId]);
 
+	const handleExportPdf = useCallback(() => {
+		if (!selectedFileId) {
+			return;
+		}
+		const link = document.createElement("a");
+		link.href = `${API_URL}/projects/${projectId}/export/pdf/${encodeURIComponent(selectedFileId)}`;
+		link.download = "";
+		document.body.append(link);
+		link.click();
+		link.remove();
+	}, [projectId, selectedFileId]);
+
 	const rendered = useMemo(() => {
 		// Project themes are registered on the shared Marp instance; this invalidates stale renders.
 		void themeRevision;
@@ -241,9 +254,14 @@ export const PreviewPane = ({
 				<CardTitle>Live Preview</CardTitle>
 				<CardAction className="flex items-center gap-2">
 					{label ? (
-						<Button variant="outline" size="sm" onClick={() => void handleStartPresentation()}>
-							Start presentation
-						</Button>
+						<>
+							<Button variant="outline" size="sm" onClick={handleExportPdf}>
+								Export to PDF
+							</Button>
+							<Button variant="outline" size="sm" onClick={() => void handleStartPresentation()}>
+								Start presentation
+							</Button>
+						</>
 					) : (
 						<Button variant="outline" size="sm" disabled>
 							Start presentation

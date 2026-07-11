@@ -26,6 +26,9 @@ importers:
       '@hono/node-server':
         specifier: ^2.0.6
         version: 2.0.6(hono@4.12.27)
+      '@marp-team/marp-core':
+        specifier: ^4.3.0
+        version: 4.3.0
       archiver:
         specifier: ^8.0.0
         version: 8.0.0
@@ -3590,10 +3593,6 @@ packages:
     peerDependencies:
       postcss: ^8.4
 
-  postcss-selector-parser@7.1.1:
-    resolution: {integrity: sha512-orRsuYpJVw8LdAwqqLykBj9ecS5/cRHlI5+nvTo8LcCKmzDmqVORXtOIYEEQuL9D4BxtA1lm5isAqzQZCoQ6Eg==}
-    engines: {node: '>=4'}
-
   postcss-selector-parser@7.1.4:
     resolution: {integrity: sha512-HeP7D2wyhkR+XaK6v4W8oRF62Dsz4flyuczALJp61GckGm42u1saSSJ/0auvcBqxs3jMRFEcPK34At/0JBKdOg==}
     engines: {node: '>=4'}
@@ -5548,7 +5547,7 @@ snapshots:
       highlight.js: 11.11.1
       katex: 0.16.47
       mathjax-full: 3.2.2
-      postcss-selector-parser: 7.1.1
+      postcss-selector-parser: 7.1.4
       xss: 1.0.15
 
   '@marp-team/marpit-svg-polyfill@2.1.0(@marp-team/marpit@3.2.1)':
@@ -7750,11 +7749,6 @@ snapshots:
       '@csstools/selector-specificity': 5.0.0(postcss-selector-parser@7.1.4)
       postcss: 8.5.16
       postcss-selector-parser: 7.1.4
-
-  postcss-selector-parser@7.1.1:
-    dependencies:
-      cssesc: 3.0.0
-      util-deprecate: 1.0.2
 
   postcss-selector-parser@7.1.4:
     dependencies:

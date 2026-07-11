@@ -17,27 +17,39 @@ function resolvePosixPath(dir: string, src: string): string {
 	return stack.join("/");
 }
 
-const marp = new Marp({ html: true });
+function rewriteImageSrc(src: string): string {
+	if (!currentProjectId || /^(https?:\/\/|data:|\/\/)/.test(src) || src.startsWith("/")) {
+		return src;
+	}
+	const resolved = resolvePosixPath(currentMarkdownDir, src);
+	return `${API_URL}/projects/${currentProjectId}/files/${resolved}`;
+}
+
+const marp = new Marp({
+	html: {
+		...Marp.html, // Use Marps built-in HTML allowlist
+		img: {
+			...(Marp.html.img as Record<string, boolean>),
+			src: (value: string) => rewriteImageSrc(value), // Rewrite <img src> to load from backend API
+		},
+	},
+});
 
 marp.use((md) => {
-	// Plugin to rewrite image URLs to point to the backend API
+	// Plugin to rewrite markdown ![]() image URLs to point to the backend API
 	md.inline.ruler2.after(
 		"marpit_background_image",
 		"rewrite_image_urls",
 		({ tokens }: { tokens: any[] }) => {
-			if (!currentProjectId) {
-				return;
-			}
 			for (const token of tokens) {
 				if (token.type !== "image") {
 					continue;
 				}
 				const src = token.attrGet("src");
-				if (!src || /^(https?:\/\/|data:|\/\/)/.test(src) || src.startsWith("/")) {
+				if (!src) {
 					continue;
 				}
-				const resolved = resolvePosixPath(currentMarkdownDir, src);
-				const newSrc = `${API_URL}/projects/${currentProjectId}/files/${resolved}`;
+				const newSrc = rewriteImageSrc(src);
 				token.attrSet("src", newSrc);
 				if (token.meta?.marpitImage) {
 					token.meta.marpitImage.url = newSrc;
@@ -45,24 +57,6 @@ marp.use((md) => {
 			}
 		},
 	);
-
-	md.core.ruler.push("rewrite_html_img_urls", (state: any) => {
-		if (!currentProjectId) {
-			return;
-		}
-		for (const token of state.tokens) {
-			if (token.type !== "html_inline" && token.type !== "html_block") {
-				continue;
-			}
-			token.content = token.content.replace(
-				/(<img[^>]+src=["'])(?!https?:\/\/|data:|\/\/)([^"']+)(["'])/gi,
-				(_: string, pre: string, src: string, quote: string) => {
-					const resolved = resolvePosixPath(currentMarkdownDir, src);
-					return `${pre}${API_URL}/projects/${currentProjectId}/files/${resolved}${quote}`;
-				},
-			);
-		}
-	});
 });
 
 export const renderMarp = (
