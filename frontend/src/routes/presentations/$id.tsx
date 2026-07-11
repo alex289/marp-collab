@@ -848,70 +848,70 @@ function RouteComponent() {
 						: "xl:grid-cols-[48px_minmax(0,1fr)_minmax(320px,42%)]",
 				)}
 			>
-					<FileSidebar
+				<FileSidebar
+					projectId={id}
+					files={files}
+					selectedFileId={selectedFile?.id ?? null}
+					onSelectFile={setSelectedFile}
+					isLoading={isLoading}
+					error={error}
+					onRetry={reload}
+					sidebarOpen={sidebarOpen}
+					setSidebarOpen={setSidebarOpen}
+					themeNames={themeNames}
+					currentTheme={currentTheme}
+					onThemeChange={handleThemeChange}
+					themeSelectDisabled={!isMarkdownDeckFile(selectedFile) || collab.readOnly}
+					onProjectDeleted={() => {
+						void navigate({ to: "/", replace: true });
+					}}
+					presenceAwareness={projectPresenceAwareness}
+					currentUserId={presenceUser.userId}
+					searchPanel={
+						<SearchPanel
+							matches={searchMatches}
+							isLoading={searchLoading}
+							error={searchError}
+							onSearch={(query) => {
+								runActiveFileSearch(query);
+							}}
+							onReplaceOne={(match, replacement) => {
+								handleReplaceOne(match, replacement);
+							}}
+							onReplaceAll={(query, replacement) => {
+								handleReplaceAll(query, replacement);
+							}}
+						/>
+					}
+					outlinePanel={
+						<OutlinePanel
+							items={outlineItems}
+							isMarkdown={isMarkdownDeckFile(selectedFile)}
+							onSelectLine={(line) => editorPaneRef.current?.jumpToLine(line)}
+						/>
+					}
+				/>
+
+				<Suspense>
+					<EditorPane
+						ref={editorPaneRef}
+						label={selectedFile?.label ?? null}
+						yText={collab.yText}
+						awareness={collab.awareness}
+						undoManager={collab.undoManager}
+						readOnly={collab.readOnly}
 						projectId={id}
-						files={files}
-						selectedFileId={selectedFile?.id ?? null}
-						onSelectFile={setSelectedFile}
-						isLoading={isLoading}
-						error={error}
-						onRetry={reload}
-						sidebarOpen={sidebarOpen}
-						setSidebarOpen={setSidebarOpen}
-						themeNames={themeNames}
-						currentTheme={currentTheme}
-						onThemeChange={handleThemeChange}
-						themeSelectDisabled={!isMarkdownDeckFile(selectedFile) || collab.readOnly}
-						onProjectDeleted={() => {
-							void navigate({ to: "/", replace: true });
-						}}
-						presenceAwareness={projectPresenceAwareness}
-						currentUserId={presenceUser.userId}
-						searchPanel={
-							<SearchPanel
-								matches={searchMatches}
-								isLoading={searchLoading}
-								error={searchError}
-								onSearch={(query) => {
-									runActiveFileSearch(query);
-								}}
-								onReplaceOne={(match, replacement) => {
-									handleReplaceOne(match, replacement);
-								}}
-								onReplaceAll={(query, replacement) => {
-									handleReplaceAll(query, replacement);
-								}}
-							/>
-						}
-						outlinePanel={
-							<OutlinePanel
-								items={outlineItems}
-								isMarkdown={isMarkdownDeckFile(selectedFile)}
-								onSelectLine={(line) => editorPaneRef.current?.jumpToLine(line)}
-							/>
-						}
 					/>
+				</Suspense>
 
-					<Suspense>
-						<EditorPane
-							ref={editorPaneRef}
-							label={selectedFile?.label ?? null}
-							yText={collab.yText}
-							awareness={collab.awareness}
-							undoManager={collab.undoManager}
-							readOnly={collab.readOnly}
-							projectId={id}
-						/>
-					</Suspense>
-
-					<Suspense>
-						<PreviewPane
-							markdown={markdown}
-							label={previewFile?.label ?? null}
-							projectId={id}
-							themeRevision={themeRevision}
-							selectedFileId={previewFile?.id ?? null}
-						/>
+				<Suspense>
+					<PreviewPane
+						markdown={markdown}
+						label={previewFile?.label ?? null}
+						projectId={id}
+						themeRevision={themeRevision}
+						selectedFileId={previewFile?.id ?? null}
+					/>
 				</Suspense>
 			</main>
 		</div>
