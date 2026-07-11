@@ -9,3 +9,10 @@ services:
       - "127.0.0.1:8787:8787"
     volumes:
       - ./data:/app/data
+    depends_on:
+      - gotenberg
+  gotenberg:
+    image: gotenberg/gotenberg:8
+    container_name: gotenberg-dev
+    ports:
+      - "127.0.0.1:8912:3000" # When running Marp in dev mode on host

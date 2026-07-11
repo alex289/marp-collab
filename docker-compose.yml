@@ -3,7 +3,25 @@ services:
     image: ghcr.io/alex289/marp-collab:latest
     container_name: marp-collab
     env_file: .env
+    restart: unless-stopped
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     ports:
       - "127.0.0.1:8787:8787"
     volumes:
       - ./data:/app/data
+    depends_on:
+      - gotenberg
+  gotenberg:
+    image: gotenberg/gotenberg:8
+    container_name: marp-gotenberg
+    restart: unless-stopped
+    environment:
+      - CHROMIUM_DENY_PRIVATE_IPS=true
+      - WEBHOOK_DENY_PRIVATE_IPS=true
+      - API_DOWNLOAD_FROM_DENY_PRIVATE_IPS=true
+      - LIBREOFFICE_DENY_PRIVATE_IPS=true
+    mem_limit: 1g
+    pids_limit: 256

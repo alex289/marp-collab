@@ -8,11 +8,15 @@ import {
 	CardTitle,
 } from "@/components/ui/card";
 import { renderMarp } from "@/lib/marp";
+import { API_URL } from "@/lib/config";
 import { useNavigate } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
 import { useTheme } from "./theme-provider";
 import { getSecondaryScreen } from "@/lib/screen-management";
 import marpitSvgPolyfillScript from "@marp-team/marpit-svg-polyfill/lib/polyfill.browser.js?raw";
+import { FileDownIcon, Loader2Icon, PresentationIcon } from "lucide-react";
+import { toast } from "sonner";
+import { useProject } from "@/lib/project";
 
 type PreviewPaneProps = {
 	markdown: string;
@@ -122,7 +126,9 @@ export const PreviewPane = ({
 	const navigate = useNavigate();
 	const iframeRef = useRef<HTMLIFrameElement>(null);
 	const [iframeReady, setIframeReady] = useState(false);
+	const [isExportingPdf, setIsExportingPdf] = useState(false);
 	const prevFileKeyRef = useRef<string | null>(null);
+	const { project } = useProject(projectId);
 
 	const handleStartPresentation = useCallback(async () => {
 		const secondaryScreen = await getSecondaryScreen();
@@ -142,6 +148,38 @@ export const PreviewPane = ({
 			search: { mode: "present", file: selectedFileId ?? undefined },
 		});
 	}, [navigate, projectId, selectedFileId]);
+
+	const handleExportPdf = useCallback(async () => {
+		if (!selectedFileId || isExportingPdf) {
+			return;
+		}
+		setIsExportingPdf(true);
+		try {
+			const response = await fetch(
+				`${API_URL}/projects/${projectId}/export/pdf/${encodeURIComponent(selectedFileId)}`,
+			);
+			if (!response.ok) {
+				throw new Error(`Could not export PDF (${response.status})`);
+			}
+
+			// Sadly there is still no way to download a file in a good way
+			// across browsers while tracking the download progress.
+			const blob = await response.blob();
+			const url = URL.createObjectURL(blob);
+
+			const link = document.createElement("a");
+			link.href = url;
+			link.download = project?.name ? `${project.name}.pdf` : "presentation.pdf";
+			document.body.append(link);
+			link.click();
+			link.remove();
+			URL.revokeObjectURL(url);
+		} catch (error) {
+			toast.error(error instanceof Error ? error.message : "Could not export PDF");
+		} finally {
+			setIsExportingPdf(false);
+		}
+	}, [projectId, selectedFileId, isExportingPdf, project?.name]);
 
 	const rendered = useMemo(() => {
 		// Project themes are registered on the shared Marp instance; this invalidates stale renders.
@@ -241,9 +279,21 @@ export const PreviewPane = ({
 				<CardTitle>Live Preview</CardTitle>
 				<CardAction className="flex items-center gap-2">
 					{label ? (
-						<Button variant="outline" size="sm" onClick={() => void handleStartPresentation()}>
-							Start presentation
-						</Button>
+						<>
+							<Button
+								variant="outline"
+								size="sm"
+								disabled={isExportingPdf}
+								onClick={() => void handleExportPdf()}
+							>
+								{isExportingPdf ? <Loader2Icon className="animate-spin" /> : <FileDownIcon />}
+								Export PDF
+							</Button>
+							<Button variant="outline" size="sm" onClick={() => void handleStartPresentation()}>
+								<PresentationIcon />
+								Start presentation
+							</Button>
+						</>
 					) : (
 						<Button variant="outline" size="sm" disabled>
 							Start presentation

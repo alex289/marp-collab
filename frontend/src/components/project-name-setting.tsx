@@ -1,37 +1,21 @@
 import { useEffect, useState } from "react";
-import useSWR from "swr";
-import { API_URL } from "@/lib/config";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "./ui/label";
-
-type ProjectResponse = {
-	project: { id: string; name: string };
-	isOwner: boolean;
-};
-
-const credentialedFetcher = async (url: string): Promise<ProjectResponse> => {
-	const res = await fetch(url);
-	if (!res.ok) {
-		throw new Error(`Request failed: ${res.status} ${res.statusText}`);
-	}
-	return res.json() as Promise<ProjectResponse>;
-};
+import { updateProject, useProject } from "@/lib/project";
 
 type ProjectNameSettingProps = {
 	projectId: string;
 };
 
 export const ProjectNameSetting = ({ projectId }: ProjectNameSettingProps) => {
-	const key = `${API_URL}/projects/${projectId}`;
-	const { data, mutate } = useSWR<ProjectResponse>(key, credentialedFetcher);
+	const { project, isProjectOwner: isOwner, mutate } = useProject(projectId);
 
 	const [name, setName] = useState("");
 	const [saving, setSaving] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
-	const currentName = data?.project.name ?? "";
-	const isOwner = data?.isOwner ?? false;
+	const currentName = project?.name ?? "";
 
 	useEffect(() => {
 		setName(currentName);
@@ -48,12 +32,7 @@ export const ProjectNameSetting = ({ projectId }: ProjectNameSettingProps) => {
 		setSaving(true);
 		setError(null);
 
-		const res = await fetch(key, {
-			method: "PATCH",
-
-			headers: { "Content-Type": "application/json" },
-			body: JSON.stringify({ name: trimmed }),
-		});
+		const res = await updateProject(projectId, { name: trimmed });
 
 		setSaving(false);
 
