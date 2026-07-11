@@ -14,12 +14,14 @@ import { Field, FieldGroup } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { API_URL } from "@/lib/config";
+import { useNavigate } from "@tanstack/react-router";
 import { PlusIcon } from "lucide-react";
 import { useState } from "react";
 import { useSWRConfig } from "swr";
 
 export function CreatePresentationDialog() {
 	const { mutate } = useSWRConfig();
+	const navigate = useNavigate();
 	const [open, setOpen] = useState(false);
 	const [name, setName] = useState("");
 	const [error, setError] = useState<string | null>(null);
@@ -53,8 +55,10 @@ export function CreatePresentationDialog() {
 				return;
 			}
 
+			const { projectId } = (await res.json()) as { projectId: string };
 			await mutate(`${API_URL}/projects`);
 			setOpen(false);
+			await navigate({ to: "/presentations/$id", params: { id: projectId } });
 		} catch {
 			setError("An unexpected error occurred. Please try again.");
 		} finally {

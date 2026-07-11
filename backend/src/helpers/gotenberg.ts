@@ -6,9 +6,18 @@ import { getMimeType } from "./file-allowlist.ts";
 const GOTENBERG_URL = process.env.GOTENBERG_URL ?? "http://gotenberg:3000";
 
 function buildMetadata(rendered: RenderedPdfInput): string {
-	const metadata: Record<string, string> = { Title: rendered.title, Creator: "Marp Collab" };
+	const metadata: Record<string, string | string[]> = {
+		Title: rendered.title,
+		Creator: "Marp Collab",
+	};
 	if (rendered.author) {
 		metadata.Author = rendered.author;
+	}
+	if (rendered.description) {
+		metadata.Subject = rendered.description;
+	}
+	if (rendered.keywords?.length) {
+		metadata.Keywords = rendered.keywords;
 	}
 	return JSON.stringify(metadata);
 }

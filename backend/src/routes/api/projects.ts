@@ -194,6 +194,26 @@ app.delete("/:projectId/collaborators/:userId", (c) => {
 	return c.json({ success: true });
 });
 
+function createDefaultPresentationMarkdown(name: string, authorName: string) {
+	return `---
+marp: true
+size: 16:9
+title: ${name}
+description: A Marp presentation
+keywords: Presentation, ${name}
+author: ${authorName}
+theme: default
+paginate: true
+---
+
+# ${name}
+
+---
+
+## Slide 2
+`;
+}
+
 app.post("/", async (c) => {
 	const user = c.get("user");
 	if (!user) {
@@ -213,7 +233,7 @@ app.post("/", async (c) => {
 
 	await saveDocumentContent(
 		toDocumentName(id, "presentation.md"),
-		`---\nmarp: true\n---\n\n# ${name}\n\n---\n\n## Slide 2\n`,
+		createDefaultPresentationMarkdown(name, user.name ?? ""),
 	);
 
 	return c.json({ projectId: id });

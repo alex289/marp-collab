@@ -61,6 +61,7 @@ const staticSrcDoc = `<!doctype html>
       }, { passive: false });
 
       window.addEventListener('dblclick', function (e) {
+        if (zoom === 1) return;
         e.preventDefault();
         resetZoom();
       });
