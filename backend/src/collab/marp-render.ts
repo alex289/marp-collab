@@ -85,6 +85,8 @@ export type RenderedPdfInput = {
 	assets: Map<string, string>;
 	title: string;
 	author: string | undefined;
+	description: string | undefined;
+	keywords: string[] | undefined;
 };
 
 export async function renderMarkdownForPdf(
@@ -188,5 +190,10 @@ export async function renderMarkdownForPdf(
 	const { html, css } = marp.render(markdown);
 	const title = getFrontmatterField(markdown, "title") ?? basenameWithoutExt(markdownFileId);
 	const author = getFrontmatterField(markdown, "author");
-	return { html, css, assets, title, author };
+	const description = getFrontmatterField(markdown, "description");
+	const keywords = getFrontmatterField(markdown, "keywords")
+		?.split(",")
+		.map((keyword) => keyword.trim())
+		.filter(Boolean);
+	return { html, css, assets, title, author, description, keywords };
 }
