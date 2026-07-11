@@ -38,7 +38,7 @@ const frontmatterRegex = /^---\r?\n([\s\S]*?)\r?\n---/;
 function stripQuotes(value: string): string {
 	const first = value[0];
 	const last = value[value.length - 1];
-	if (value.length >= 2 && (first === last) && (first === '"' || first === "'")) {
+	if (value.length >= 2 && first === last && (first === '"' || first === "'")) {
 		return value.slice(1, -1);
 	}
 	return value;

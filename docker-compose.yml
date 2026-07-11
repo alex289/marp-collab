@@ -1,9 +1,13 @@
 services:
   marp-collab:
-    image: ghcr.io/alex289/marp-collab:latest
+    image: ghcr.io/alex289/marp-collab:test
     container_name: marp-collab
     env_file: .env
     restart: unless-stopped
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
     ports:
       - "127.0.0.1:8787:8787"
     volumes:
@@ -19,8 +23,5 @@ services:
       - WEBHOOK_DENY_PRIVATE_IPS=true
       - API_DOWNLOAD_FROM_DENY_PRIVATE_IPS=true
       - LIBREOFFICE_DENY_PRIVATE_IPS=true
-    read_only: true
-    tmpfs:
-      - /tmp:size=512m,mode=1777
     mem_limit: 1g
     pids_limit: 256
