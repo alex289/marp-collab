@@ -48,7 +48,6 @@ type EditorPaneProps = {
 	yText: Y.Text | null;
 	awareness: Awareness | null;
 	undoManager: Y.UndoManager | null;
-	status: "connecting" | "connected" | "disconnected";
 	readOnly: boolean;
 	projectId: string;
 };
@@ -200,7 +199,7 @@ const editorTheme = EditorView.theme({
 });
 
 export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function EditorPane(
-	{ label, yText, awareness, undoManager, status, readOnly, projectId },
+	{ label, yText, awareness, undoManager, readOnly, projectId },
 	ref,
 ) {
 	const mountRef = useRef<HTMLDivElement | null>(null);
@@ -211,18 +210,6 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 	const [isFocused, setIsFocused] = useState(false);
 	const [copiedLabel, setCopiedLabel] = useState(false);
 	const { resolvedTheme } = useTheme();
-
-	const statusVariant = useMemo(() => {
-		if (status === "connected") {
-			return "default";
-		}
-
-		if (status === "connecting") {
-			return "secondary";
-		}
-
-		return "outline";
-	}, [status]);
 
 	const fileKind = useMemo(() => {
 		if (!label) {
@@ -400,10 +387,6 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 				</div>
 				<CardAction>
 					<div className="flex items-center gap-2">
-						<Badge variant={statusVariant} className="capitalize">
-							<span className="size-1.5 rounded-full bg-current" aria-hidden="true" />
-							{status}
-						</Badge>
 						{readOnly ? <Badge variant="outline">Read-only</Badge> : null}
 						<ManageProjectCollaborator projectId={projectId} />
 						<TooltipProvider>
