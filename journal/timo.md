@@ -35,3 +35,7 @@ Erkenntnisse:
 Erkenntnisse:
 
 - Es gibt eine WakeLock API, die es Webseiten ermöglicht, den Bildschirm und das Gerät aktiv zu erhalten. Während einer Präsentation in FDB bemerkten wir, dass wir verhindern müssen, dass der Bildschirm während einer Präsentation in den Standby-Modus geht. Die API ist bereits in allen verbrauchten Browsern verfügbar. Implementierung mit Claude Code.
+
+Herausforderungen:
+
+- Es stört mich jedes Mal, dass es in Web Browsern immer noch keinen guten Weg ohne <a> Tag mit Blob URLs gibt, um Dateien asynchron herunterzuladen und den Status des Downloads zu verfolgen, der in allen modernen Browsern funktioniert.
