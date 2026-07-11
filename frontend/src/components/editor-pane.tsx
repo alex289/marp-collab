@@ -101,9 +101,9 @@ const editorTheme = EditorView.theme({
 		color: "var(--card-foreground)",
 	},
 	".cm-gutters": {
-		borderRight: "1px solid var(--border)",
-		background: "color-mix(in oklab, var(--muted) 64%, transparent)",
-		color: "var(--muted-foreground)",
+		borderRight: "none",
+		background: "transparent",
+		color: "color-mix(in oklab, var(--muted-foreground) 70%, transparent)",
 		paddingRight: "6px",
 	},
 	".cm-activeLine": {
@@ -358,11 +358,11 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 		<Card
 			className={
 				isFocused
-					? "fixed inset-4 z-50 flex min-h-0 flex-col gap-0 overflow-hidden border-border/80 bg-card py-0 shadow-2xl"
-					: "flex h-full min-h-0 flex-col gap-0 overflow-hidden border-border/80 py-0"
+					? "fixed inset-4 z-50 flex min-h-0 flex-col gap-0 overflow-hidden rounded-lg bg-card py-0 shadow-2xl ring-1 ring-border"
+					: "flex h-full min-h-0 flex-col gap-0 overflow-hidden rounded-none py-0 ring-0"
 			}
 		>
-			<CardHeader className="shrink-0 border border-border bg-card/95 px-4 py-3 backdrop-blur">
+			<CardHeader className="shrink-0 border-b border-border px-3 py-2">
 				<div className="flex min-w-0 items-start gap-3">
 					<div className="min-w-0">
 						<CardTitle className="flex min-w-0 items-center gap-2">
@@ -431,17 +431,26 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 				</CardAction>
 			</CardHeader>
 
-			<div className="flex shrink-0 items-center justify-between gap-3 border-b border-border bg-muted/35 px-4 py-2">
-				<div>
-					<div
-						className={`${isFocused ? "flex" : "hidden 2xl:flex"} min-w-0 flex-wrap items-center gap-2`}
-					>
-						<Badge variant="outline">{stats.words.toLocaleString()} words</Badge>
-						<Badge variant="outline">{stats.chars.toLocaleString()} chars</Badge>
-						{fileKind === "Markdown" ? (
-							<Badge variant="outline">{stats.slides.toLocaleString()} slides</Badge>
-						) : null}
+			<CardContent className="relative min-h-0 flex-1 p-0">
+				{yText ? (
+					<div ref={mountRef} className="h-full" />
+				) : (
+					<div className="flex h-full flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
+						<div className="flex size-12 items-center justify-center rounded-md border border-dashed border-border bg-muted/40">
+							<FileText className="size-5" />
+						</div>
+						<span>Choose a file on the left to get started.</span>
 					</div>
+				)}
+			</CardContent>
+
+			<div className="flex shrink-0 items-center justify-between gap-3 border-t border-border bg-background px-3 py-1">
+				<div
+					className={`${isFocused ? "flex" : "hidden 2xl:flex"} min-w-0 flex-wrap items-center gap-3 font-mono text-[11px] text-muted-foreground`}
+				>
+					<span>{stats.words.toLocaleString()} words</span>
+					<span>{stats.chars.toLocaleString()} chars</span>
+					{fileKind === "Markdown" ? <span>{stats.slides.toLocaleString()} slides</span> : null}
 				</div>
 				<div className="flex min-w-0 items-center gap-3">
 					<div className="hidden items-center gap-1 text-xs text-muted-foreground sm:flex">
@@ -480,19 +489,6 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 					</span>
 				</div>
 			</div>
-
-			<CardContent className="relative min-h-0 flex-1 p-0">
-				{yText ? (
-					<div ref={mountRef} className="h-full" />
-				) : (
-					<div className="flex h-full flex-col items-center justify-center gap-3 text-sm text-muted-foreground">
-						<div className="flex size-12 items-center justify-center rounded-md border border-dashed border-border bg-muted/40">
-							<FileText className="size-5" />
-						</div>
-						<span>Choose a file on the left to get started.</span>
-					</div>
-				)}
-			</CardContent>
 		</Card>
 	);
 });
