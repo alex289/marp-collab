@@ -187,9 +187,13 @@ export function ManageProjectCollaborator({ projectId }: { projectId: string }) 
 										<Button
 											variant="destructive"
 											size="sm"
-											title="Remove collaborator"
+											title={
+												isOwner
+													? "Remove collaborator"
+													: "Only the project owner can remove collaborators"
+											}
 											aria-label="Remove collaborator"
-											disabled={isRemoving}
+											disabled={!isOwner || isRemoving}
 											onClick={() => handleRemoveCollaborator(collaborator.userId)}
 										>
 											<Trash />
