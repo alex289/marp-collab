@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { MinusIcon, PlusIcon } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { renderMarp } from "@/lib/marp";
 import { useTheme } from "./theme-provider";
 import marpitSvgPolyfillScript from "@marp-team/marpit-svg-polyfill/lib/polyfill.browser.js?raw";
@@ -31,6 +32,7 @@ const staticSrcDoc = `<!doctype html>
       function applyZoom() {
         var el = document.querySelector('div.marpit');
         if (el) el.style.transform = 'scale(' + zoom + ')';
+        window.parent.postMessage({ type: 'marp-zoom-changed', zoom: zoom }, '*');
       }
 
       function resetZoom() {
@@ -87,7 +89,18 @@ const staticSrcDoc = `<!doctype html>
 
       window.addEventListener('message', function(e) {
         if (e.source !== window.parent) return;
-        if (!e.data || e.data.type !== 'marp-update') return;
+        if (!e.data) return;
+        if (e.data.type === 'marp-zoom') {
+          if (e.data.action === 'reset') {
+            resetZoom();
+            return;
+          }
+          var factor = e.data.action === 'in' ? 1.2 : 1 / 1.2;
+          zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom * factor));
+          applyZoom();
+          return;
+        }
+        if (e.data.type !== 'marp-update') return;
         document.getElementById('marp-styles').textContent = e.data.css;
         document.body.innerHTML = e.data.html;
         if (e.data.scrollToTop) {
@@ -112,6 +125,14 @@ export const PreviewPane = ({
 	const iframeRef = useRef<HTMLIFrameElement>(null);
 	const [iframeReady, setIframeReady] = useState(false);
 	const prevFileKeyRef = useRef<string | null>(null);
+	const [zoomPercent, setZoomPercent] = useState(100);
+
+	const sendZoom = useCallback((action: "in" | "out" | "reset") => {
+		iframeRef.current?.contentWindow?.postMessage(
+			{ type: "marp-zoom", action },
+			window.location.origin,
+		);
+	}, []);
 
 	const rendered = useMemo(() => {
 		// Project themes are registered on the shared Marp instance; this invalidates stale renders.
@@ -133,6 +154,11 @@ export const PreviewPane = ({
 			}
 
 			const payload = event.data;
+			if (payload?.type === "marp-zoom-changed" && typeof payload.zoom === "number") {
+				setZoomPercent(Math.round(payload.zoom * 100));
+				return;
+			}
+
 			if (!payload || payload.type !== "presentation-key") {
 				return;
 			}
@@ -164,8 +190,9 @@ export const PreviewPane = ({
 		const scrollToTop = prevFileKeyRef.current !== fileKey;
 		prevFileKeyRef.current = fileKey;
 
-		const bg = resolvedTheme === "dark" ? "oklch(0.205 0 0)" : "oklch(1 0 0)";
-		const border = resolvedTheme === "dark" ? "oklch(1 0 0 / 10%)" : "oklch(0.922 0 0)";
+		const bg = resolvedTheme === "dark" ? "oklch(0.12 0 0)" : "oklch(0.92 0 0)";
+		const pageShadow =
+			resolvedTheme === "dark" ? "0 2px 12px rgb(0 0 0 / 0.55)" : "0 1px 6px rgb(0 0 0 / 0.18)";
 
 		iframeRef.current.contentWindow.postMessage(
 			{
@@ -186,14 +213,18 @@ export const PreviewPane = ({
       div.marpit {
         display: flex;
         flex-direction: column;
-        gap: 24px;
+        gap: 28px;
         align-items: center;
         width: 100%;
+        padding: 24px 20px;
+        box-sizing: border-box;
       }
       div.marpit > svg[data-marpit-svg],
       body > section {
         flex: 0 0 auto;
-        border: 1px solid ${border};
+        border: 0;
+        border-radius: 2px;
+        box-shadow: ${pageShadow};
         height: auto !important;
         max-width: 100%;
         width: 100% !important;
@@ -206,22 +237,49 @@ export const PreviewPane = ({
 	}, [iframeReady, rendered, resolvedTheme, projectId, selectedFileId]);
 
 	return (
-		<Card className="flex h-full min-h-0 flex-col overflow-hidden border-border/80 py-0">
-			<CardHeader className="shrink-0 border-b border-border px-4 py-3">
-				<CardTitle>Live Preview</CardTitle>
-				<CardDescription>{label ? `Active file: ${label}` : "No file selected"}</CardDescription>
-			</CardHeader>
+		<div className="relative flex h-full min-h-0 flex-col overflow-hidden border-l border-border bg-canvas">
+			<div className="flex shrink-0 items-center justify-between gap-2 border-b border-border bg-background px-3 py-1.5">
+				<span className="truncate text-xs text-muted-foreground">
+					{label ? `Active file: ${label}` : "No file selected"}
+				</span>
+				<div className="flex shrink-0 items-center gap-0.5">
+					<Button
+						type="button"
+						variant="ghost"
+						size="icon-xs"
+						aria-label="Zoom out"
+						onClick={() => sendZoom("out")}
+					>
+						<MinusIcon />
+					</Button>
+					<button
+						type="button"
+						title="Reset zoom"
+						onClick={() => sendZoom("reset")}
+						className="min-w-11 rounded-md px-1 py-0.5 text-center font-mono text-[11px] text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+					>
+						{zoomPercent}%
+					</button>
+					<Button
+						type="button"
+						variant="ghost"
+						size="icon-xs"
+						aria-label="Zoom in"
+						onClick={() => sendZoom("in")}
+					>
+						<PlusIcon />
+					</Button>
+				</div>
+			</div>
 
-			<CardContent className="min-h-0 flex-1 overflow-hidden p-0">
-				<iframe
-					ref={iframeRef}
-					title="Marp preview"
-					srcDoc={staticSrcDoc}
-					className="h-full w-full"
-					sandbox="allow-scripts allow-same-origin"
-					onLoad={() => setIframeReady(true)}
-				/>
-			</CardContent>
-		</Card>
+			<iframe
+				ref={iframeRef}
+				title="Marp preview"
+				srcDoc={staticSrcDoc}
+				className="min-h-0 w-full flex-1"
+				sandbox="allow-scripts allow-same-origin"
+				onLoad={() => setIframeReady(true)}
+			/>
+		</div>
 	);
 };

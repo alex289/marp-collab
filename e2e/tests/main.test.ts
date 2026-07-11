@@ -201,7 +201,7 @@ test.describe("Editor page — file management", () => {
 		await expect(
 			page.locator('[data-slot="card-title"]').filter({ hasText: "Editor" }),
 		).toBeVisible();
-		await expect(page.getByText("Live Preview")).toBeVisible();
+		await expect(page.locator('iframe[title="Marp preview"]')).toBeVisible();
 	});
 
 	test("auto-selects presentation.md and shows it in the editor", async ({ page }) => {
