@@ -1,6 +1,6 @@
 services:
   marp-collab:
-    image: ghcr.io/alex289/marp-collab:test
+    image: ghcr.io/alex289/marp-collab:latest
     container_name: marp-collab
     env_file: .env
     restart: unless-stopped
