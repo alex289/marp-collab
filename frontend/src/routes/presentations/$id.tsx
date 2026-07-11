@@ -822,7 +822,7 @@ function RouteComponent() {
 	}
 
 	return (
-		<div className="h-svh overflow-hidden bg-halo p-2 text-foreground">
+		<div className="h-svh overflow-hidden bg-background p-2 text-foreground">
 			<div className="mx-auto flex h-full min-h-0 flex-col gap-2 px-4">
 				<Navbar />
 				<main

@@ -49,7 +49,7 @@ export const Route = createRootRoute({
 
 function RootWrapper() {
 	return (
-		<ThemeProvider defaultTheme="system" storageKey="marp-collab-theme">
+		<ThemeProvider defaultTheme="dark" storageKey="marp-collab-theme">
 			<RootComponent />
 			<Toaster />
 		</ThemeProvider>
