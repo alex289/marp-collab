@@ -5,6 +5,14 @@ import { getMimeType } from "./file-allowlist.ts";
 
 const GOTENBERG_URL = process.env.GOTENBERG_URL ?? "http://gotenberg:3000";
 
+function buildMetadata(rendered: RenderedPdfInput): string {
+	const metadata: Record<string, string> = { Title: rendered.title, Creator: "Marp Collab" };
+	if (rendered.author) {
+		metadata.Author = rendered.author;
+	}
+	return JSON.stringify(metadata);
+}
+
 function buildIndexHtml(rendered: RenderedPdfInput): string {
 	return `<!doctype html>
 <html>
@@ -48,6 +56,7 @@ export async function renderPdfViaGotenberg(
 	form.append("emulatedMediaType", "print");
 	form.append("waitDelay", "2s");
 	form.append("generateDocumentOutline", "true");
+	form.append("metadata", buildMetadata(rendered));
 
 	return fetch(`${GOTENBERG_URL}/forms/chromium/convert/html`, {
 		method: "POST",

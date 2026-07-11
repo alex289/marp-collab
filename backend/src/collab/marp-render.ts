@@ -33,6 +33,34 @@ function sanitizeThemeImports(css: string): string {
 	});
 }
 
+const frontmatterRegex = /^---\r?\n([\s\S]*?)\r?\n---/;
+
+function stripQuotes(value: string): string {
+	const first = value[0];
+	const last = value[value.length - 1];
+	if (value.length >= 2 && (first === last) && (first === '"' || first === "'")) {
+		return value.slice(1, -1);
+	}
+	return value;
+}
+
+/** Reads a directive (e.g. `title:`, `author:`) from a Marp markdown frontmatter, if present. */
+function getFrontmatterField(markdown: string, field: string): string | undefined {
+	const frontmatter = frontmatterRegex.exec(markdown);
+	if (!frontmatter) {
+		return undefined;
+	}
+	const lineRegex = new RegExp(`^${field}:\\s*(.+?)\\s*$`, "m");
+	const line = lineRegex.exec(frontmatter[1]);
+	return line ? stripQuotes(line[1]) : undefined;
+}
+
+function basenameWithoutExt(fileId: string): string {
+	const base = posix.basename(fileId);
+	const dotIndex = base.lastIndexOf(".");
+	return dotIndex > 0 ? base.slice(0, dotIndex) : base;
+}
+
 function sanitizeThemeName(fileId: string): string {
 	const base = fileId.split("/").pop() ?? fileId;
 	const name = base
@@ -55,6 +83,8 @@ export type RenderedPdfInput = {
 	html: string;
 	css: string;
 	assets: Map<string, string>;
+	title: string;
+	author: string | undefined;
 };
 
 export async function renderMarkdownForPdf(
@@ -156,5 +186,7 @@ export async function renderMarkdownForPdf(
 	}
 
 	const { html, css } = marp.render(markdown);
-	return { html, css, assets };
+	const title = getFrontmatterField(markdown, "title") ?? basenameWithoutExt(markdownFileId);
+	const author = getFrontmatterField(markdown, "author");
+	return { html, css, assets, title, author };
 }
