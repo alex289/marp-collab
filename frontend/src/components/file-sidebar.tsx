@@ -446,7 +446,7 @@ const MobileWorkspaceRail = ({ activePanel, setActivePanel }: MobileWorkspaceRai
 	};
 
 	return (
-		<div className="flex h-12 items-center gap-2 rounded-md border border-sidebar-border bg-sidebar px-2 text-sidebar-foreground md:hidden">
+		<div className="flex h-12 items-center gap-2 border-b border-sidebar-border bg-sidebar px-2 text-sidebar-foreground md:hidden">
 			<WorkspaceRailButtons activePanel={activePanel} onPanelClick={handlePanelClick} />
 		</div>
 	);
@@ -1356,7 +1356,7 @@ export const FileSidebar = ({
 						collapsible="icon"
 						className="static h-full border-0 pt-0 group-data-[side=left]:border-r-0"
 					>
-						<SidebarContent className="h-full overflow-hidden rounded-lg border border-sidebar-border bg-sidebar">
+						<SidebarContent className="h-full overflow-hidden border-r border-sidebar-border bg-sidebar">
 							<div className="flex h-full min-h-0 flex-1">
 								<div className="flex w-12 shrink-0 flex-col items-center gap-2 border-r border-sidebar-border px-1.5 py-2 group-data-[collapsible=icon]:rounded-lg group-data-[collapsible=icon]:border-r-0">
 									<WorkspaceRailButtons

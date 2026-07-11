@@ -825,30 +825,29 @@ function RouteComponent() {
 	}
 
 	return (
-		<div className="h-svh overflow-hidden bg-background p-2 text-foreground">
-			<div className="mx-auto flex h-full min-h-0 flex-col gap-2 px-4">
-				<Navbar
-					breadcrumb={{
-						projectName: project?.name ?? null,
-						fileName: selectedFile?.label ?? null,
-						status: collab.status,
-					}}
-					actions={
-						<PresentationActions
-							projectId={id}
-							selectedFileId={previewFile?.id ?? null}
-							fileLabel={previewFile?.label ?? null}
-						/>
-					}
-				/>
-				<main
-					className={cn(
-						"grid min-h-0 flex-1 gap-2 grid-cols-1 overflow-hidden",
-						sidebarOpen
-							? "xl:grid-cols-[304px_minmax(0,1fr)_minmax(320px,42%)]"
-							: "xl:grid-cols-[48px_minmax(0,1fr)_minmax(320px,42%)]",
-					)}
-				>
+		<div className="flex h-svh flex-col overflow-hidden bg-background text-foreground">
+			<Navbar
+				breadcrumb={{
+					projectName: project?.name ?? null,
+					fileName: selectedFile?.label ?? null,
+					status: collab.status,
+				}}
+				actions={
+					<PresentationActions
+						projectId={id}
+						selectedFileId={previewFile?.id ?? null}
+						fileLabel={previewFile?.label ?? null}
+					/>
+				}
+			/>
+			<main
+				className={cn(
+					"grid min-h-0 flex-1 grid-cols-1 overflow-hidden",
+					sidebarOpen
+						? "xl:grid-cols-[304px_minmax(0,1fr)_minmax(320px,42%)]"
+						: "xl:grid-cols-[48px_minmax(0,1fr)_minmax(320px,42%)]",
+				)}
+			>
 					<FileSidebar
 						projectId={id}
 						files={files}
@@ -913,9 +912,8 @@ function RouteComponent() {
 							themeRevision={themeRevision}
 							selectedFileId={previewFile?.id ?? null}
 						/>
-					</Suspense>
-				</main>
-			</div>
+				</Suspense>
+			</main>
 		</div>
 	);
 }
