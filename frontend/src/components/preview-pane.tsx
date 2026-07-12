@@ -28,11 +28,17 @@ const staticSrcDoc = `<!doctype html>
       var zoom = 1;
       var MIN_ZOOM = 0.5;
       var MAX_ZOOM = 4;
+      var lastNotifiedZoom = null;
 
       function applyZoom() {
         var el = document.querySelector('div.marpit');
         if (el) el.style.transform = 'scale(' + zoom + ')';
-        window.parent.postMessage({ type: 'marp-zoom-changed', zoom: zoom }, '*');
+        // marp-update calls this on every content push (each keystroke);
+        // only message the parent when the zoom value actually changed.
+        if (zoom !== lastNotifiedZoom) {
+          lastNotifiedZoom = zoom;
+          window.parent.postMessage({ type: 'marp-zoom-changed', zoom: zoom }, '*');
+        }
       }
 
       function resetZoom() {
