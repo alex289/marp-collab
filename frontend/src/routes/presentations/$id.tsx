@@ -846,7 +846,7 @@ function RouteComponent() {
 			/>
 			<main
 				className={cn(
-					"grid min-h-0 flex-1 grid-cols-1 overflow-hidden",
+					"grid min-h-0 flex-1 grid-cols-1 overflow-hidden max-md:grid-rows-[auto_minmax(0,3fr)_minmax(0,2fr)]",
 					sidebarOpen
 						? "xl:grid-cols-[304px_minmax(0,1fr)_minmax(320px,42%)]"
 						: "xl:grid-cols-[48px_minmax(0,1fr)_minmax(320px,42%)]",

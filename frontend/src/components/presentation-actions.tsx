@@ -85,7 +85,7 @@ export const PresentationActions = ({
 				onClick={() => void handleExportPdf()}
 			>
 				{isExportingPdf ? <Loader2Icon className="animate-spin" /> : <FileDownIcon />}
-				Export PDF
+				<span className="max-sm:sr-only">Export PDF</span>
 			</Button>
 			<Button
 				variant="ghost"
@@ -94,7 +94,7 @@ export const PresentationActions = ({
 				onClick={() => void handleStartPresentation()}
 			>
 				<PresentationIcon />
-				Start presentation
+				<span className="max-sm:sr-only">Start presentation</span>
 			</Button>
 		</>
 	);

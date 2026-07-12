@@ -46,7 +46,7 @@ export default function Navbar({ breadcrumb, actions }: NavbarProps) {
 		return null;
 	}
 	return (
-		<header className="grid h-11 shrink-0 grid-cols-[1fr_auto_1fr] items-center border-b border-border bg-background px-2">
+		<header className="grid h-11 shrink-0 grid-cols-[auto_minmax(0,1fr)_auto] items-center border-b border-border bg-background px-2 sm:grid-cols-[1fr_auto_1fr]">
 			<div className="flex items-center gap-1 justify-self-start">
 				{breadcrumb ? (
 					<Link
@@ -73,7 +73,7 @@ export default function Navbar({ breadcrumb, actions }: NavbarProps) {
 			{breadcrumb ? (
 				<nav
 					aria-label="Breadcrumb"
-					className="flex min-w-0 items-center gap-1.5 text-sm text-muted-foreground"
+					className="flex min-w-0 items-center justify-center gap-1.5 text-sm text-muted-foreground"
 				>
 					<Link to="/" className="max-w-48 truncate hover:text-foreground">
 						{breadcrumb.projectName ?? "Untitled"}
