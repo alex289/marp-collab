@@ -11,6 +11,7 @@ import {
 import { useFiles } from "@/hooks/use-files";
 import type { DeckFile } from "@/lib/types";
 import Navbar from "@/components/navbar";
+import { PresenceAvatars } from "@/components/presence-avatars";
 import { PresentationActions } from "@/components/presentation-actions";
 import { useProject } from "@/lib/project";
 import { useHotkeys } from "@tanstack/react-hotkeys";
@@ -833,11 +834,14 @@ function RouteComponent() {
 					status: collab.status,
 				}}
 				actions={
-					<PresentationActions
-						projectId={id}
-						selectedFileId={previewFile?.id ?? null}
-						fileLabel={previewFile?.label ?? null}
-					/>
+					<>
+						<PresenceAvatars awareness={projectPresenceAwareness} />
+						<PresentationActions
+							projectId={id}
+							selectedFileId={previewFile?.id ?? null}
+							fileLabel={previewFile?.label ?? null}
+						/>
+					</>
 				}
 			/>
 			<main
