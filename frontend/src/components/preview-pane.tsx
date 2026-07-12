@@ -261,14 +261,16 @@ export const PreviewPane = ({
 					>
 						<MinusIcon />
 					</Button>
-					<button
+					<Button
 						type="button"
+						variant="ghost"
+						size="xs"
 						title="Reset zoom"
 						onClick={() => sendZoom("reset")}
-						className="min-w-11 rounded-md px-1 py-0.5 text-center font-mono text-[11px] text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+						className="font-mono"
 					>
 						{zoomPercent}%
-					</button>
+					</Button>
 					<Button
 						type="button"
 						variant="ghost"
