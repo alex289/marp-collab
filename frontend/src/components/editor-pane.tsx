@@ -10,13 +10,6 @@ import * as Y from "yjs";
 import { yCollab, yUndoManagerKeymap } from "y-codemirror.next";
 import { Badge } from "@/components/ui/badge";
 import {
-	Avatar,
-	AvatarFallback,
-	AvatarGroup,
-	AvatarGroupCount,
-	AvatarImage,
-} from "@/components/ui/avatar";
-import {
 	Card,
 	CardAction,
 	CardContent,
@@ -26,29 +19,20 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Check, Copy, FileText, Maximize2, Users, WrapText } from "lucide-react";
+import { Check, Copy, FileText, Maximize2, WrapText } from "lucide-react";
 import { useTheme } from "./theme-provider";
 import { vsCodeLight } from "@fsegurai/codemirror-theme-vscode-light";
 import { vsCodeDark } from "@fsegurai/codemirror-theme-vscode-dark";
 import { ManageProjectCollaborator } from "./dialog/manage-project-collaborator";
 import { toast } from "sonner";
-import { getInitials } from "@/lib/utils";
 import { useHotkey } from "@tanstack/react-hotkeys";
 import { countMarpSlides } from "@/lib/slide-count";
-
-type Participant = {
-	id: string;
-	name: string;
-	color: string;
-	image: string | null;
-};
 
 type EditorPaneProps = {
 	label: string | null;
 	yText: Y.Text | null;
 	awareness: Awareness | null;
 	undoManager: Y.UndoManager | null;
-	status: "connecting" | "connected" | "disconnected";
 	readOnly: boolean;
 	projectId: string;
 };
@@ -102,9 +86,9 @@ const editorTheme = EditorView.theme({
 		color: "var(--card-foreground)",
 	},
 	".cm-gutters": {
-		borderRight: "1px solid var(--border)",
-		background: "color-mix(in oklab, var(--muted) 64%, transparent)",
-		color: "var(--muted-foreground)",
+		borderRight: "none",
+		background: "transparent",
+		color: "color-mix(in oklab, var(--muted-foreground) 70%, transparent)",
 		paddingRight: "6px",
 	},
 	".cm-activeLine": {
@@ -200,29 +184,16 @@ const editorTheme = EditorView.theme({
 });
 
 export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function EditorPane(
-	{ label, yText, awareness, undoManager, status, readOnly, projectId },
+	{ label, yText, awareness, undoManager, readOnly, projectId },
 	ref,
 ) {
 	const mountRef = useRef<HTMLDivElement | null>(null);
 	const viewRef = useRef<EditorView | null>(null);
-	const [participants, setParticipants] = useState<Participant[]>([]);
 	const [stats, setStats] = useState<EditorStats>(emptyStats);
 	const [wrapEnabled, setWrapEnabled] = useState(true);
 	const [isFocused, setIsFocused] = useState(false);
 	const [copiedLabel, setCopiedLabel] = useState(false);
 	const { resolvedTheme } = useTheme();
-
-	const statusVariant = useMemo(() => {
-		if (status === "connected") {
-			return "default";
-		}
-
-		if (status === "connecting") {
-			return "secondary";
-		}
-
-		return "outline";
-	}, [status]);
 
 	const fileKind = useMemo(() => {
 		if (!label) {
@@ -235,9 +206,6 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 
 		return "Markdown";
 	}, [label]);
-
-	const visibleParticipants = participants.slice(0, 4);
-	const hiddenParticipants = Math.max(0, participants.length - visibleParticipants.length);
 
 	const copyLabel = async () => {
 		if (!label) {
@@ -307,41 +275,6 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 		};
 	}, [yText, awareness, undoManager, label, resolvedTheme, wrapEnabled, readOnly]);
 
-	useEffect(() => {
-		if (!awareness) {
-			setParticipants([]);
-			return;
-		}
-
-		const update = () => {
-			const byId = new Map<string, Participant>();
-
-			for (const state of awareness.getStates().values()) {
-				const user = state.user as Partial<Participant> | undefined;
-				if (!user) {
-					continue;
-				}
-
-				const id = user.id ?? crypto.randomUUID();
-				byId.set(id, {
-					id,
-					name: user.name ?? "Unknown",
-					color: user.color ?? "#0ea5e9",
-					image: user.image ?? null,
-				});
-			}
-
-			setParticipants(Array.from(byId.values()));
-		};
-
-		update();
-		awareness.on("change", update);
-
-		return () => {
-			awareness.off("change", update);
-		};
-	}, [awareness]);
-
 	useImperativeHandle(ref, () => ({
 		jumpToLine(line: number) {
 			const view = viewRef.current;
@@ -371,11 +304,11 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 		<Card
 			className={
 				isFocused
-					? "fixed inset-4 z-50 flex min-h-0 flex-col gap-0 overflow-hidden border-border/80 bg-card py-0 shadow-2xl"
-					: "flex h-full min-h-0 flex-col gap-0 overflow-hidden border-border/80 py-0"
+					? "fixed inset-4 z-50 flex min-h-0 flex-col gap-0 overflow-hidden rounded-lg bg-card py-0 shadow-2xl ring-1 ring-border"
+					: "flex h-full min-h-0 flex-col gap-0 overflow-hidden rounded-none py-0 ring-0"
 			}
 		>
-			<CardHeader className="shrink-0 border border-border bg-card/95 px-4 py-3 backdrop-blur">
+			<CardHeader className="shrink-0 border-b border-border px-3 py-2">
 				<div className="flex min-w-0 items-start gap-3">
 					<div className="min-w-0">
 						<CardTitle className="flex min-w-0 items-center gap-2">
@@ -400,10 +333,6 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 				</div>
 				<CardAction>
 					<div className="flex items-center gap-2">
-						<Badge variant={statusVariant} className="capitalize">
-							<span className="size-1.5 rounded-full bg-current" aria-hidden="true" />
-							{status}
-						</Badge>
 						{readOnly ? <Badge variant="outline">Read-only</Badge> : null}
 						<ManageProjectCollaborator projectId={projectId} />
 						<TooltipProvider>
@@ -448,56 +377,6 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 				</CardAction>
 			</CardHeader>
 
-			<div className="flex shrink-0 items-center justify-between gap-3 border-b border-border bg-muted/35 px-4 py-2">
-				<div>
-					<div
-						className={`${isFocused ? "flex" : "hidden 2xl:flex"} min-w-0 flex-wrap items-center gap-2`}
-					>
-						<Badge variant="outline">{stats.words.toLocaleString()} words</Badge>
-						<Badge variant="outline">{stats.chars.toLocaleString()} chars</Badge>
-						{fileKind === "Markdown" ? (
-							<Badge variant="outline">{stats.slides.toLocaleString()} slides</Badge>
-						) : null}
-					</div>
-				</div>
-				<div className="flex min-w-0 items-center gap-3">
-					<div className="hidden items-center gap-1 text-xs text-muted-foreground sm:flex">
-						<Users className="size-3" />
-						<span>{participants.length} online</span>
-					</div>
-					<AvatarGroup>
-						{visibleParticipants.map((participant) => (
-							<TooltipProvider key={participant.id}>
-								<Tooltip>
-									<TooltipTrigger
-										render={
-											<Avatar size="sm" className="ring-1 ring-card after:border-0">
-												{participant.image ? (
-													<AvatarImage src={participant.image} alt={participant.name} />
-												) : null}
-												<AvatarFallback
-													className="text-white"
-													style={{ backgroundColor: participant.color }}
-												>
-													{getInitials(participant.name)}
-												</AvatarFallback>
-											</Avatar>
-										}
-									/>
-									<TooltipContent>{participant.name}</TooltipContent>
-								</Tooltip>
-							</TooltipProvider>
-						))}
-						{hiddenParticipants > 0 ? (
-							<AvatarGroupCount>+{hiddenParticipants}</AvatarGroupCount>
-						) : null}
-					</AvatarGroup>
-					<span className="font-mono text-[11px] text-muted-foreground">
-						Ln {stats.cursorLine}, Col {stats.cursorColumn}
-					</span>
-				</div>
-			</div>
-
 			<CardContent className="relative min-h-0 flex-1 p-0">
 				{yText ? (
 					<div ref={mountRef} className="h-full" />
@@ -510,6 +389,21 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 					</div>
 				)}
 			</CardContent>
+
+			<div className="flex shrink-0 items-center justify-between gap-3 border-t border-border bg-background px-3 py-1">
+				<div>
+					<div
+						className={`${isFocused ? "flex" : "hidden 2xl:flex"} min-w-0 flex-wrap items-center gap-3 font-mono text-[11px] text-muted-foreground`}
+					>
+						<span>{stats.words.toLocaleString()} words</span>
+						<span>{stats.chars.toLocaleString()} chars</span>
+						{fileKind === "Markdown" ? <span>{stats.slides.toLocaleString()} slides</span> : null}
+					</div>
+				</div>
+				<span className="font-mono text-[11px] text-muted-foreground">
+					Ln {stats.cursorLine}, Col {stats.cursorColumn}
+				</span>
+			</div>
 		</Card>
 	);
 });

@@ -11,6 +11,9 @@ import {
 import { useFiles } from "@/hooks/use-files";
 import type { DeckFile } from "@/lib/types";
 import Navbar from "@/components/navbar";
+import { PresenceAvatars } from "@/components/presence-avatars";
+import { PresentationActions } from "@/components/presentation-actions";
+import { useProject } from "@/lib/project";
 import { useHotkeys } from "@tanstack/react-hotkeys";
 import { PresentationFrame } from "@/components/presentation-frame";
 import { Button } from "@/components/ui/button";
@@ -138,6 +141,7 @@ function RouteComponent() {
 	const navigate = Route.useNavigate();
 	const presenceUser = usePresenceUser(session?.user ?? null);
 	const { files, isLoading, error, reload } = useFiles(id);
+	const { project } = useProject(id);
 	const [selectedFile, setSelectedFile] = useState<DeckFile | null>(null);
 	const [previewFile, setPreviewFile] = useState<DeckFile | null>(null);
 	const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -822,85 +826,98 @@ function RouteComponent() {
 	}
 
 	return (
-		<div className="h-svh overflow-hidden bg-halo p-2 text-foreground">
-			<div className="mx-auto flex h-full min-h-0 flex-col gap-2 px-4">
-				<Navbar />
-				<main
-					className={cn(
-						"grid min-h-0 flex-1 gap-2 grid-cols-1 overflow-hidden",
-						sidebarOpen
-							? "xl:grid-cols-[304px_minmax(0,1fr)_minmax(320px,42%)]"
-							: "xl:grid-cols-[48px_minmax(0,1fr)_minmax(320px,42%)]",
-					)}
-				>
-					<FileSidebar
-						projectId={id}
-						files={files}
-						selectedFileId={selectedFile?.id ?? null}
-						onSelectFile={setSelectedFile}
-						isLoading={isLoading}
-						error={error}
-						onRetry={reload}
-						sidebarOpen={sidebarOpen}
-						setSidebarOpen={setSidebarOpen}
-						themeNames={themeNames}
-						currentTheme={currentTheme}
-						onThemeChange={handleThemeChange}
-						themeSelectDisabled={!isMarkdownDeckFile(selectedFile) || collab.readOnly}
-						onProjectDeleted={() => {
-							void navigate({ to: "/", replace: true });
-						}}
-						presenceAwareness={projectPresenceAwareness}
-						currentUserId={presenceUser.userId}
-						searchPanel={
-							<SearchPanel
-								matches={searchMatches}
-								isLoading={searchLoading}
-								error={searchError}
-								onSearch={(query) => {
-									runActiveFileSearch(query);
-								}}
-								onReplaceOne={(match, replacement) => {
-									handleReplaceOne(match, replacement);
-								}}
-								onReplaceAll={(query, replacement) => {
-									handleReplaceAll(query, replacement);
-								}}
-							/>
-						}
-						outlinePanel={
-							<OutlinePanel
-								items={outlineItems}
-								isMarkdown={isMarkdownDeckFile(selectedFile)}
-								onSelectLine={(line) => editorPaneRef.current?.jumpToLine(line)}
-							/>
-						}
-					/>
-
-					<Suspense>
-						<EditorPane
-							ref={editorPaneRef}
-							label={selectedFile?.label ?? null}
-							yText={collab.yText}
-							awareness={collab.awareness}
-							undoManager={collab.undoManager}
-							status={collab.status}
-							readOnly={collab.readOnly}
+		<div className="flex h-svh flex-col overflow-hidden bg-background text-foreground">
+			<Navbar
+				breadcrumb={{
+					projectName: project?.name ?? null,
+					fileName: selectedFile?.label ?? null,
+					status: collab.status,
+				}}
+				actions={
+					<>
+						<PresenceAvatars awareness={projectPresenceAwareness} />
+						<PresentationActions
 							projectId={id}
-						/>
-					</Suspense>
-
-					<Suspense>
-						<PreviewPane
-							markdown={markdown}
-							label={previewFile?.label ?? null}
-							projectId={id}
-							themeRevision={themeRevision}
 							selectedFileId={previewFile?.id ?? null}
+							fileLabel={previewFile?.label ?? null}
 						/>
-					</Suspense>
-				</main>
-			</div>
+					</>
+				}
+			/>
+			<main
+				className={cn(
+					"grid min-h-0 flex-1 grid-cols-1 overflow-hidden max-md:grid-rows-[auto_minmax(0,3fr)_minmax(0,2fr)]",
+					sidebarOpen
+						? "xl:grid-cols-[304px_minmax(0,1fr)_minmax(320px,42%)]"
+						: "xl:grid-cols-[48px_minmax(0,1fr)_minmax(320px,42%)]",
+				)}
+			>
+				<FileSidebar
+					projectId={id}
+					files={files}
+					selectedFileId={selectedFile?.id ?? null}
+					onSelectFile={setSelectedFile}
+					isLoading={isLoading}
+					error={error}
+					onRetry={reload}
+					sidebarOpen={sidebarOpen}
+					setSidebarOpen={setSidebarOpen}
+					themeNames={themeNames}
+					currentTheme={currentTheme}
+					onThemeChange={handleThemeChange}
+					themeSelectDisabled={!isMarkdownDeckFile(selectedFile) || collab.readOnly}
+					onProjectDeleted={() => {
+						void navigate({ to: "/", replace: true });
+					}}
+					presenceAwareness={projectPresenceAwareness}
+					currentUserId={presenceUser.userId}
+					searchPanel={
+						<SearchPanel
+							matches={searchMatches}
+							isLoading={searchLoading}
+							error={searchError}
+							onSearch={(query) => {
+								runActiveFileSearch(query);
+							}}
+							onReplaceOne={(match, replacement) => {
+								handleReplaceOne(match, replacement);
+							}}
+							onReplaceAll={(query, replacement) => {
+								handleReplaceAll(query, replacement);
+							}}
+						/>
+					}
+					outlinePanel={
+						<OutlinePanel
+							items={outlineItems}
+							isMarkdown={isMarkdownDeckFile(selectedFile)}
+							onSelectLine={(line) => editorPaneRef.current?.jumpToLine(line)}
+						/>
+					}
+				/>
+
+				<Suspense>
+					<EditorPane
+						ref={editorPaneRef}
+						label={selectedFile?.label ?? null}
+						yText={collab.yText}
+						awareness={collab.awareness}
+						undoManager={collab.undoManager}
+						readOnly={collab.readOnly}
+						projectId={id}
+					/>
+				</Suspense>
+
+				<Suspense>
+					<PreviewPane
+						markdown={markdown}
+						label={previewFile?.label ?? null}
+						projectId={id}
+						themeRevision={themeRevision}
+						selectedFileId={previewFile?.id ?? null}
+					/>
+				</Suspense>
+			</main>
 		</div>
 	);
 }

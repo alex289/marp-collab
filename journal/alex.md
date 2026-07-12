@@ -1,5 +1,11 @@
 # Development Journal
 
+## KW 28
+
+Gelernt:
+
+Mit Hilfe der Superpower Skills (https://github.com/obra/superpowers) und Claude Fable kann man mit Leichtigkeit User Interfaces anpassen und sie mit einfachen Worten und sogar aus Screenshots als Inspiration erstellen lassen.
+
 ## KW 27
 
 Gelernt:

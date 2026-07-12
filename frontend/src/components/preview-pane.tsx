@@ -1,22 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-	Card,
-	CardAction,
-	CardContent,
-	CardDescription,
-	CardHeader,
-	CardTitle,
-} from "@/components/ui/card";
-import { renderMarp } from "@/lib/marp";
-import { API_URL } from "@/lib/config";
-import { useNavigate } from "@tanstack/react-router";
+import { MinusIcon, PlusIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { renderMarp } from "@/lib/marp";
 import { useTheme } from "./theme-provider";
-import { getSecondaryScreen } from "@/lib/screen-management";
 import marpitSvgPolyfillScript from "@marp-team/marpit-svg-polyfill/lib/polyfill.browser.js?raw";
-import { FileDownIcon, Loader2Icon, PresentationIcon } from "lucide-react";
-import { toast } from "sonner";
-import { useProject } from "@/lib/project";
 
 type PreviewPaneProps = {
 	markdown: string;
@@ -41,10 +28,17 @@ const staticSrcDoc = `<!doctype html>
       var zoom = 1;
       var MIN_ZOOM = 0.5;
       var MAX_ZOOM = 4;
+      var lastNotifiedZoom = null;
 
       function applyZoom() {
         var el = document.querySelector('div.marpit');
         if (el) el.style.transform = 'scale(' + zoom + ')';
+        // marp-update calls this on every content push (each keystroke);
+        // only message the parent when the zoom value actually changed.
+        if (zoom !== lastNotifiedZoom) {
+          lastNotifiedZoom = zoom;
+          window.parent.postMessage({ type: 'marp-zoom-changed', zoom: zoom }, '*');
+        }
       }
 
       function resetZoom() {
@@ -102,7 +96,18 @@ const staticSrcDoc = `<!doctype html>
 
       window.addEventListener('message', function(e) {
         if (e.source !== window.parent) return;
-        if (!e.data || e.data.type !== 'marp-update') return;
+        if (!e.data) return;
+        if (e.data.type === 'marp-zoom') {
+          if (e.data.action === 'reset') {
+            resetZoom();
+            return;
+          }
+          var factor = e.data.action === 'in' ? 1.2 : 1 / 1.2;
+          zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom * factor));
+          applyZoom();
+          return;
+        }
+        if (e.data.type !== 'marp-update') return;
         document.getElementById('marp-styles').textContent = e.data.css;
         document.body.innerHTML = e.data.html;
         if (e.data.scrollToTop) {
@@ -124,63 +129,17 @@ export const PreviewPane = ({
 	themeRevision,
 }: PreviewPaneProps) => {
 	const { resolvedTheme } = useTheme();
-	const navigate = useNavigate();
 	const iframeRef = useRef<HTMLIFrameElement>(null);
 	const [iframeReady, setIframeReady] = useState(false);
-	const [isExportingPdf, setIsExportingPdf] = useState(false);
 	const prevFileKeyRef = useRef<string | null>(null);
-	const { project } = useProject(projectId);
+	const [zoomPercent, setZoomPercent] = useState(100);
 
-	const handleStartPresentation = useCallback(async () => {
-		const secondaryScreen = await getSecondaryScreen();
-
-		if (secondaryScreen) {
-			const viewerPath = `/presentations/${projectId}?mode=viewer&fullscreen=true${selectedFileId ? `&file=${encodeURIComponent(selectedFileId)}` : ""}`;
-			window.open(
-				viewerPath,
-				"_blank",
-				`left=${secondaryScreen.left},top=${secondaryScreen.top},width=${secondaryScreen.width},height=${secondaryScreen.height}`,
-			);
-		}
-
-		void navigate({
-			to: "/presentations/$id",
-			params: { id: projectId },
-			search: { mode: "present", file: selectedFileId ?? undefined },
-		});
-	}, [navigate, projectId, selectedFileId]);
-
-	const handleExportPdf = useCallback(async () => {
-		if (!selectedFileId || isExportingPdf) {
-			return;
-		}
-		setIsExportingPdf(true);
-		try {
-			const response = await fetch(
-				`${API_URL}/projects/${projectId}/export/pdf/${encodeURIComponent(selectedFileId)}`,
-			);
-			if (!response.ok) {
-				throw new Error(`Could not export PDF (${response.status})`);
-			}
-
-			// Sadly there is still no way to download a file in a good way
-			// across browsers while tracking the download progress.
-			const blob = await response.blob();
-			const url = URL.createObjectURL(blob);
-
-			const link = document.createElement("a");
-			link.href = url;
-			link.download = project?.name ? `${project.name}.pdf` : "presentation.pdf";
-			document.body.append(link);
-			link.click();
-			link.remove();
-			URL.revokeObjectURL(url);
-		} catch (error) {
-			toast.error(error instanceof Error ? error.message : "Could not export PDF");
-		} finally {
-			setIsExportingPdf(false);
-		}
-	}, [projectId, selectedFileId, isExportingPdf, project?.name]);
+	const sendZoom = useCallback((action: "in" | "out" | "reset") => {
+		iframeRef.current?.contentWindow?.postMessage(
+			{ type: "marp-zoom", action },
+			window.location.origin,
+		);
+	}, []);
 
 	const rendered = useMemo(() => {
 		// Project themes are registered on the shared Marp instance; this invalidates stale renders.
@@ -202,6 +161,11 @@ export const PreviewPane = ({
 			}
 
 			const payload = event.data;
+			if (payload?.type === "marp-zoom-changed" && typeof payload.zoom === "number") {
+				setZoomPercent(Math.round(payload.zoom * 100));
+				return;
+			}
+
 			if (!payload || payload.type !== "presentation-key") {
 				return;
 			}
@@ -233,8 +197,11 @@ export const PreviewPane = ({
 		const scrollToTop = prevFileKeyRef.current !== fileKey;
 		prevFileKeyRef.current = fileKey;
 
-		const bg = resolvedTheme === "dark" ? "oklch(0.205 0 0)" : "oklch(1 0 0)";
-		const border = resolvedTheme === "dark" ? "oklch(1 0 0 / 10%)" : "oklch(0.922 0 0)";
+		// Must match --canvas in index.css; the srcDoc iframe can't read the
+		// parent's CSS custom properties.
+		const bg = resolvedTheme === "dark" ? "oklch(0.14 0 0)" : "oklch(0.92 0 0)";
+		const pageShadow =
+			resolvedTheme === "dark" ? "0 2px 12px rgb(0 0 0 / 0.55)" : "0 1px 6px rgb(0 0 0 / 0.18)";
 
 		iframeRef.current.contentWindow.postMessage(
 			{
@@ -255,14 +222,18 @@ export const PreviewPane = ({
       div.marpit {
         display: flex;
         flex-direction: column;
-        gap: 24px;
+        gap: 28px;
         align-items: center;
         width: 100%;
+        padding: 24px 20px;
+        box-sizing: border-box;
       }
       div.marpit > svg[data-marpit-svg],
       body > section {
         flex: 0 0 auto;
-        border: 1px solid ${border};
+        border: 0;
+        border-radius: 2px;
+        box-shadow: ${pageShadow};
         height: auto !important;
         max-width: 100%;
         width: 100% !important;
@@ -275,45 +246,51 @@ export const PreviewPane = ({
 	}, [iframeReady, rendered, resolvedTheme, projectId, selectedFileId]);
 
 	return (
-		<Card className="flex h-full min-h-0 flex-col overflow-hidden border-border/80 py-0">
-			<CardHeader className="shrink-0 border border-border px-4 py-3">
-				<CardTitle>Live Preview</CardTitle>
-				<CardAction className="flex items-center gap-2">
-					{label ? (
-						<>
-							<Button
-								variant="outline"
-								size="sm"
-								disabled={isExportingPdf}
-								onClick={() => void handleExportPdf()}
-							>
-								{isExportingPdf ? <Loader2Icon className="animate-spin" /> : <FileDownIcon />}
-								Export PDF
-							</Button>
-							<Button variant="outline" size="sm" onClick={() => void handleStartPresentation()}>
-								<PresentationIcon />
-								Start presentation
-							</Button>
-						</>
-					) : (
-						<Button variant="outline" size="sm" disabled>
-							Start presentation
-						</Button>
-					)}
-				</CardAction>
-				<CardDescription>{label ? `Active file: ${label}` : "No file selected"}</CardDescription>
-			</CardHeader>
+		<div className="relative flex h-full min-h-0 flex-col overflow-hidden border-l border-border bg-canvas">
+			<div className="flex shrink-0 items-center justify-between gap-2 border-b border-border bg-background px-3 py-1.5">
+				<span className="truncate text-xs text-muted-foreground">
+					{label ? `Active file: ${label}` : "No file selected"}
+				</span>
+				<div className="flex shrink-0 items-center gap-0.5">
+					<Button
+						type="button"
+						variant="ghost"
+						size="icon-xs"
+						aria-label="Zoom out"
+						onClick={() => sendZoom("out")}
+					>
+						<MinusIcon />
+					</Button>
+					<Button
+						type="button"
+						variant="ghost"
+						size="xs"
+						title="Reset zoom"
+						onClick={() => sendZoom("reset")}
+						className="font-mono"
+					>
+						{zoomPercent}%
+					</Button>
+					<Button
+						type="button"
+						variant="ghost"
+						size="icon-xs"
+						aria-label="Zoom in"
+						onClick={() => sendZoom("in")}
+					>
+						<PlusIcon />
+					</Button>
+				</div>
+			</div>
 
-			<CardContent className="min-h-0 flex-1 overflow-hidden p-0">
-				<iframe
-					ref={iframeRef}
-					title="Marp preview"
-					srcDoc={staticSrcDoc}
-					className="h-full w-full"
-					sandbox="allow-scripts allow-same-origin"
-					onLoad={() => setIframeReady(true)}
-				/>
-			</CardContent>
-		</Card>
+			<iframe
+				ref={iframeRef}
+				title="Marp preview"
+				srcDoc={staticSrcDoc}
+				className="min-h-0 w-full flex-1"
+				sandbox="allow-scripts allow-same-origin"
+				onLoad={() => setIframeReady(true)}
+			/>
+		</div>
 	);
 };

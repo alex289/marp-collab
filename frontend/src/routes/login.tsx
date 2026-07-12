@@ -32,8 +32,8 @@ function LoginRoute() {
 	}
 
 	return (
-		<div className="flex min-h-screen items-center justify-center">
-			<Card className="w-full max-w-sm p-8 shadow-panel">
+		<div className="flex min-h-screen items-center justify-center bg-background">
+			<Card className="w-full max-w-sm p-8">
 				<div className="mb-3 text-center">
 					<img src="/logo.svg" alt="Logo" className="mx-auto mb-5 w-26" />
 					<h1 className="text-2xl font-bold tracking-tight">Marp Collab</h1>
