@@ -56,6 +56,7 @@ export default function Navbar({ breadcrumb, actions }: NavbarProps) {
 					>
 						<ChevronLeft className="h-4 w-4" />
 						<img src="/logo.svg" alt="" className="h-5 w-5" />
+						<span className="hidden sm:inline">Marp Collab</span>
 					</Link>
 				) : (
 					<Link
