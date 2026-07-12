@@ -197,7 +197,9 @@ export const PreviewPane = ({
 		const scrollToTop = prevFileKeyRef.current !== fileKey;
 		prevFileKeyRef.current = fileKey;
 
-		const bg = resolvedTheme === "dark" ? "oklch(0.12 0 0)" : "oklch(0.92 0 0)";
+		// Must match --canvas in index.css; the srcDoc iframe can't read the
+		// parent's CSS custom properties.
+		const bg = resolvedTheme === "dark" ? "oklch(0.14 0 0)" : "oklch(0.92 0 0)";
 		const pageShadow =
 			resolvedTheme === "dark" ? "0 2px 12px rgb(0 0 0 / 0.55)" : "0 1px 6px rgb(0 0 0 / 0.18)";
 
