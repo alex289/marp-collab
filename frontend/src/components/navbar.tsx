@@ -1,10 +1,20 @@
 import { Link, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
-import { ChevronLeft, ChevronRight, LogOut } from "lucide-react";
+import { ChevronLeft, ChevronRight, EllipsisVertical, LogOut } from "lucide-react";
 import { signOut, useSession } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
+import {
+	DropdownMenu,
+	DropdownMenuContent,
+	DropdownMenuGroup,
+	DropdownMenuItem,
+	DropdownMenuLabel,
+	DropdownMenuSeparator,
+	DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { ModeToggle } from "./mode-toggle";
+import { useTheme } from "./theme-provider";
 import { TooltipProvider } from "./ui/tooltip";
 
 type CollabStatus = "connecting" | "connected" | "disconnected";
@@ -28,6 +38,7 @@ export default function Navbar({ breadcrumb, actions }: NavbarProps) {
 	const { data, refetch } = useSession();
 	const user = data?.user ?? null;
 	const router = useRouter();
+	const { setTheme } = useTheme();
 
 	const [busy, setBusy] = useState(false);
 
@@ -75,12 +86,18 @@ export default function Navbar({ breadcrumb, actions }: NavbarProps) {
 					aria-label="Breadcrumb"
 					className="flex min-w-0 items-center justify-center gap-1.5 text-sm text-muted-foreground"
 				>
-					<Link to="/" className="max-w-48 truncate hover:text-foreground">
+					<Link
+						to="/"
+						className={cn(
+							"max-w-48 truncate hover:text-foreground",
+							breadcrumb.fileName && "max-sm:hidden",
+						)}
+					>
 						{breadcrumb.projectName ?? "Untitled"}
 					</Link>
 					{breadcrumb.fileName ? (
 						<>
-							<ChevronRight className="h-3.5 w-3.5 shrink-0" />
+							<ChevronRight className="h-3.5 w-3.5 shrink-0 max-sm:hidden" />
 							<span className="max-w-56 truncate font-medium text-foreground">
 								{breadcrumb.fileName}
 							</span>
@@ -100,21 +117,52 @@ export default function Navbar({ breadcrumb, actions }: NavbarProps) {
 
 			<div className="flex items-center gap-1 justify-self-end">
 				{actions}
-				<TooltipProvider>
-					<ModeToggle />
-				</TooltipProvider>
+				<div className="hidden items-center gap-1 sm:flex">
+					<TooltipProvider>
+						<ModeToggle />
+					</TooltipProvider>
 
-				<Button
-					type="button"
-					variant="ghost"
-					size="icon"
-					onClick={onLogout}
-					disabled={busy}
-					title="Logout"
-					aria-label="Logout"
-				>
-					<LogOut className="h-4 w-4" />
-				</Button>
+					<Button
+						type="button"
+						variant="ghost"
+						size="icon"
+						onClick={onLogout}
+						disabled={busy}
+						title="Logout"
+						aria-label="Logout"
+					>
+						<LogOut className="h-4 w-4" />
+					</Button>
+				</div>
+
+				<DropdownMenu>
+					<DropdownMenuTrigger
+						render={
+							<Button
+								type="button"
+								variant="ghost"
+								size="icon"
+								className="sm:hidden"
+								aria-label="More options"
+							>
+								<EllipsisVertical className="h-4 w-4" />
+							</Button>
+						}
+					/>
+					<DropdownMenuContent align="end">
+						<DropdownMenuGroup>
+							<DropdownMenuLabel>Theme</DropdownMenuLabel>
+							<DropdownMenuItem onClick={() => setTheme("light")}>Light</DropdownMenuItem>
+							<DropdownMenuItem onClick={() => setTheme("dark")}>Dark</DropdownMenuItem>
+							<DropdownMenuItem onClick={() => setTheme("system")}>System</DropdownMenuItem>
+						</DropdownMenuGroup>
+						<DropdownMenuSeparator />
+						<DropdownMenuItem disabled={busy} onClick={() => void onLogout()}>
+							<LogOut />
+							Logout
+						</DropdownMenuItem>
+					</DropdownMenuContent>
+				</DropdownMenu>
 			</div>
 		</header>
 	);
