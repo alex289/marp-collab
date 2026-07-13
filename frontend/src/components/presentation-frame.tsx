@@ -1,5 +1,6 @@
 import { renderMarp } from "@/lib/marp";
 import { useEffect, useMemo, useRef } from "react";
+import { useKeyHold } from "@tanstack/react-hotkeys";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import marpitSvgPolyfillScript from "@marp-team/marpit-svg-polyfill/lib/polyfill.browser.js?raw";
 
@@ -25,6 +26,9 @@ export function PresentationFrame({
 	className,
 }: PresentationFrameProps) {
 	const iframeRef = useRef<HTMLIFrameElement | null>(null);
+	// Shift held anywhere (iframe key events are forwarded to this document) turns
+	// the cursor into a laser pointer on the active slide.
+	const isLaserActive = useKeyHold("Shift");
 
 	const rendered = useMemo(() => {
 		// Project themes are registered on the shared Marp instance; this invalidates stale renders.
@@ -220,9 +224,50 @@ export function PresentationFrame({
         window.addEventListener('keydown', forwardKey('keydown'));
         window.addEventListener('keyup', forwardKey('keyup'));
 
+        // Laser pointer: while Shift is held, replace the cursor with a glowing
+        // red dot. The parent syncs the held state via 'presentation-laser'
+        // messages; mousemove's shiftKey keeps it accurate while the pointer
+        // moves inside this frame.
+        var laser = document.createElement('div');
+        laser.style.cssText = 'position:fixed;left:-8px;top:-8px;width:16px;height:16px;border-radius:50%;background:radial-gradient(circle, #ff6b6b 0%, #f00 45%, rgba(255,0,0,0) 72%);box-shadow:0 0 14px 5px rgba(255,0,0,0.55);pointer-events:none;z-index:2147483647;display:none;';
+        document.body.appendChild(laser);
+
+        var laserActive = false;
+        var laserX = -1;
+        var laserY = -1;
+
+        function updateLaser() {
+          var visible = laserActive && laserX >= 0;
+          laser.style.display = visible ? 'block' : 'none';
+          laser.style.transform = 'translate(' + laserX + 'px,' + laserY + 'px)';
+          document.documentElement.style.cursor = laserActive ? 'none' : '';
+          document.body.style.cursor = laserActive ? 'none' : '';
+        }
+
+        window.addEventListener('mousemove', function (e) {
+          laserX = e.clientX;
+          laserY = e.clientY;
+          laserActive = e.shiftKey;
+          updateLaser();
+        });
+
+        document.addEventListener('mouseleave', function () {
+          laserX = -1;
+          laserY = -1;
+          updateLaser();
+        });
+
         window.addEventListener('message', function (event) {
           var data = event.data;
-          if (!data || data.type !== 'presentation-set-slide') {
+          if (!data) {
+            return;
+          }
+          if (data.type === 'presentation-laser') {
+            laserActive = !!data.active;
+            updateLaser();
+            return;
+          }
+          if (data.type !== 'presentation-set-slide') {
             return;
           }
           apply(Number(data.index) || 0);
@@ -283,6 +328,16 @@ export function PresentationFrame({
 			"*",
 		);
 	}, [slideIndex, srcDoc]);
+
+	useEffect(() => {
+		iframeRef.current?.contentWindow?.postMessage(
+			{
+				type: "presentation-laser",
+				active: isLaserActive,
+			},
+			"*",
+		);
+	}, [isLaserActive, srcDoc]);
 
 	const iframe = (
 		<iframe
