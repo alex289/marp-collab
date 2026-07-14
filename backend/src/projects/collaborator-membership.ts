@@ -8,11 +8,8 @@ import {
 	type ProjectCollaborator,
 } from "../db/models/project-collaborator.ts";
 import { getUserByEmail } from "../db/models/user.ts";
-import { getProjectAuthorization } from "./access-policy.ts";
 
 export type MembershipFailure =
-	| "access-denied"
-	| "owner-required"
 	| "user-not-found"
 	| "already-collaborator"
 	| "collaborator-not-found";
@@ -23,53 +20,29 @@ export type MembershipResult<T = undefined> =
 	| MembershipSuccess<T>
 	| { ok: false; reason: MembershipFailure };
 
-type MembershipActorInput = {
+type ProjectMembershipInput = {
 	projectId: string;
-	actorUserId: string;
 };
 
-type AddProjectCollaboratorInput = MembershipActorInput & {
+type AddProjectCollaboratorInput = ProjectMembershipInput & {
 	email: string;
 	readOnly: boolean;
 };
 
-type UpdateProjectCollaboratorInput = MembershipActorInput & {
+type UpdateProjectCollaboratorInput = ProjectMembershipInput & {
 	userId: string;
 	readOnly: boolean;
 };
 
-type RemoveProjectCollaboratorInput = MembershipActorInput & {
+type RemoveProjectCollaboratorInput = ProjectMembershipInput & {
 	userId: string;
 };
 
-function getManagementAuthorization({
-	projectId,
-	actorUserId,
-}: MembershipActorInput): MembershipFailure | undefined {
-	const authorization = getProjectAuthorization(projectId, actorUserId, "manage");
-	if (authorization.allowed) {
-		return undefined;
-	}
-	return authorization.reason === "no-access" ? "access-denied" : "owner-required";
-}
-
-export function listProjectCollaborators(
-	projectId: string,
-	actorUserId: string,
-): MembershipResult<ProjectCollaborator[]> {
-	const authorization = getProjectAuthorization(projectId, actorUserId, "read");
-	if (!authorization.allowed) {
-		return { ok: false, reason: "access-denied" };
-	}
-	return { ok: true, value: getCollaboratorsByProjectId(projectId) };
+export function listProjectCollaborators(projectId: string): ProjectCollaborator[] {
+	return getCollaboratorsByProjectId(projectId);
 }
 
 export function addProjectCollaborator(input: AddProjectCollaboratorInput): MembershipResult {
-	const authorizationFailure = getManagementAuthorization(input);
-	if (authorizationFailure) {
-		return { ok: false, reason: authorizationFailure };
-	}
-
 	// User enumeration risk accepted: private OIDC-only deployment where all users
 	// are known within the organisation.
 	const user = getUserByEmail(input.email);
@@ -85,11 +58,6 @@ export function addProjectCollaborator(input: AddProjectCollaboratorInput): Memb
 }
 
 export function updateProjectCollaborator(input: UpdateProjectCollaboratorInput): MembershipResult {
-	const authorizationFailure = getManagementAuthorization(input);
-	if (authorizationFailure) {
-		return { ok: false, reason: authorizationFailure };
-	}
-
 	const collaborator = getCollaborator(input.projectId, input.userId);
 	if (!collaborator) {
 		return { ok: false, reason: "collaborator-not-found" };
@@ -103,11 +71,6 @@ export function updateProjectCollaborator(input: UpdateProjectCollaboratorInput)
 }
 
 export function removeProjectCollaborator(input: RemoveProjectCollaboratorInput): MembershipResult {
-	const authorizationFailure = getManagementAuthorization(input);
-	if (authorizationFailure) {
-		return { ok: false, reason: authorizationFailure };
-	}
-
 	removeCollaborator(input.projectId, input.userId);
 	closeProjectCollaboratorConnections(input.projectId, input.userId);
 	return { ok: true };

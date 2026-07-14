@@ -8,7 +8,6 @@ import {
 	isAllowedUpload,
 	isEditableExtension,
 } from "../../../helpers/file-allowlist.ts";
-import { getProjectAuthorization } from "../../../projects/access-policy.ts";
 import {
 	createEditableProjectFile,
 	createProjectFolder,
@@ -26,7 +25,11 @@ import {
 	isValidProjectFileLocation,
 	openProjectFile,
 } from "../../../projects/storage.ts";
-import type { HonoVariables } from "../../../types.ts";
+import {
+	requireProjectAccess,
+	requireProjectWriteAccess,
+	type ProjectRouteVariables,
+} from "./project-access-middleware.ts";
 import {
 	createFileSchema,
 	createFolderSchema,
@@ -35,38 +38,17 @@ import {
 	uploadDestinationSchema,
 } from "./schemas.ts";
 
-const app = new Hono<{ Variables: HonoVariables }>();
+const app = new Hono<{ Variables: ProjectRouteVariables }>();
+
+app.use("/:projectId/*", requireProjectAccess);
 
 app.get("/:projectId/files", async (c) => {
-	const user = c.get("user");
-	if (!user) {
-		return c.json({ error: "Unauthorized" }, 401);
-	}
-
 	const { projectId } = c.req.param();
-
-	const authorization = getProjectAuthorization(projectId, user.id, "read");
-	if (!authorization.allowed) {
-		return c.json({ error: "Project not found or access denied" }, 403);
-	}
-
 	return c.json({ files: await listProjectContent(projectId) });
 });
 
-app.post("/:projectId/files", async (c) => {
-	const user = c.get("user");
-	if (!user) {
-		return c.json({ error: "Unauthorized" }, 401);
-	}
-
+app.post("/:projectId/files", requireProjectWriteAccess, async (c) => {
 	const { projectId } = c.req.param();
-	const authorization = getProjectAuthorization(projectId, user.id, "write");
-	if (!authorization.allowed && authorization.reason === "no-access") {
-		return c.json({ error: "Project not found or access denied" }, 403);
-	}
-	if (!authorization.allowed) {
-		return c.json({ error: "You do not have write access to this project" }, 403);
-	}
 
 	const body = await c.req.json();
 	const parseResult = createFileSchema.safeParse(body);
@@ -77,20 +59,8 @@ app.post("/:projectId/files", async (c) => {
 	return c.json({ file: await createEditableProjectFile(projectId, parseResult.data.name) });
 });
 
-app.post("/:projectId/folders", async (c) => {
-	const user = c.get("user");
-	if (!user) {
-		return c.json({ error: "Unauthorized" }, 401);
-	}
-
+app.post("/:projectId/folders", requireProjectWriteAccess, async (c) => {
 	const { projectId } = c.req.param();
-	const authorization = getProjectAuthorization(projectId, user.id, "write");
-	if (!authorization.allowed && authorization.reason === "no-access") {
-		return c.json({ error: "Project not found or access denied" }, 403);
-	}
-	if (!authorization.allowed) {
-		return c.json({ error: "You do not have write access to this project" }, 403);
-	}
 
 	const body = await c.req.json();
 	const parseResult = createFolderSchema.safeParse(body);
@@ -103,20 +73,8 @@ app.post("/:projectId/folders", async (c) => {
 	return c.json({ success: true });
 });
 
-app.post("/:projectId/files/upload", async (c) => {
-	const user = c.get("user");
-	if (!user) {
-		return c.json({ error: "Unauthorized" }, 401);
-	}
-
+app.post("/:projectId/files/upload", requireProjectWriteAccess, async (c) => {
 	const { projectId } = c.req.param();
-	const authorization = getProjectAuthorization(projectId, user.id, "write");
-	if (!authorization.allowed && authorization.reason === "no-access") {
-		return c.json({ error: "Project not found or access denied" }, 403);
-	}
-	if (!authorization.allowed) {
-		return c.json({ error: "You do not have write access to this project" }, 403);
-	}
 
 	const body = await c.req.parseBody();
 	const uploadedFile = body["file"];
@@ -175,16 +133,7 @@ app.post("/:projectId/files/upload", async (c) => {
 });
 
 app.get("/:projectId/files/:fileId{.+}", async (c) => {
-	const user = c.get("user");
-	if (!user) {
-		return c.json({ error: "Unauthorized" }, 401);
-	}
-
 	const { projectId } = c.req.param();
-	const authorization = getProjectAuthorization(projectId, user.id, "read");
-	if (!authorization.allowed) {
-		return c.json({ error: "Project not found or access denied" }, 403);
-	}
 
 	const fileId = decodeURIComponent(c.req.param("fileId"));
 
@@ -209,20 +158,8 @@ app.get("/:projectId/files/:fileId{.+}", async (c) => {
 	});
 });
 
-app.patch("/:projectId/files/rename/:fileId{.+}", async (c) => {
-	const user = c.get("user");
-	if (!user) {
-		return c.json({ error: "Unauthorized" }, 401);
-	}
-
+app.patch("/:projectId/files/rename/:fileId{.+}", requireProjectWriteAccess, async (c) => {
 	const { projectId } = c.req.param();
-	const authorization = getProjectAuthorization(projectId, user.id, "write");
-	if (!authorization.allowed && authorization.reason === "no-access") {
-		return c.json({ error: "Project not found or access denied" }, 403);
-	}
-	if (!authorization.allowed) {
-		return c.json({ error: "You do not have write access to this project" }, 403);
-	}
 
 	const fileId = decodeURIComponent(c.req.param("fileId"));
 	const body = await c.req.json();
@@ -239,20 +176,8 @@ app.patch("/:projectId/files/rename/:fileId{.+}", async (c) => {
 	return c.json({ newFileId: result.id });
 });
 
-app.patch("/:projectId/files/:fileId{.+}", async (c) => {
-	const user = c.get("user");
-	if (!user) {
-		return c.json({ error: "Unauthorized" }, 401);
-	}
-
+app.patch("/:projectId/files/:fileId{.+}", requireProjectWriteAccess, async (c) => {
 	const { projectId } = c.req.param();
-	const authorization = getProjectAuthorization(projectId, user.id, "write");
-	if (!authorization.allowed && authorization.reason === "no-access") {
-		return c.json({ error: "Project not found or access denied" }, 403);
-	}
-	if (!authorization.allowed) {
-		return c.json({ error: "You do not have write access to this project" }, 403);
-	}
 
 	const fileId = decodeURIComponent(c.req.param("fileId"));
 	const body = await c.req.json();
@@ -270,20 +195,8 @@ app.patch("/:projectId/files/:fileId{.+}", async (c) => {
 	return c.json({ newFileId: result.id });
 });
 
-app.patch("/:projectId/folders/:folderPath{.+}/rename", async (c) => {
-	const user = c.get("user");
-	if (!user) {
-		return c.json({ error: "Unauthorized" }, 401);
-	}
-
+app.patch("/:projectId/folders/:folderPath{.+}/rename", requireProjectWriteAccess, async (c) => {
 	const { projectId } = c.req.param();
-	const authorization = getProjectAuthorization(projectId, user.id, "write");
-	if (!authorization.allowed && authorization.reason === "no-access") {
-		return c.json({ error: "Project not found or access denied" }, 403);
-	}
-	if (!authorization.allowed) {
-		return c.json({ error: "You do not have write access to this project" }, 403);
-	}
 
 	const folderPath = decodeURIComponent(c.req.param("folderPath"));
 	const body = await c.req.json();
@@ -300,20 +213,8 @@ app.patch("/:projectId/folders/:folderPath{.+}/rename", async (c) => {
 	return c.json({ newFolderPath: result.id });
 });
 
-app.delete("/:projectId/folders/:folderPath{.+}", async (c) => {
-	const user = c.get("user");
-	if (!user) {
-		return c.json({ error: "Unauthorized" }, 401);
-	}
-
+app.delete("/:projectId/folders/:folderPath{.+}", requireProjectWriteAccess, async (c) => {
 	const { projectId } = c.req.param();
-	const authorization = getProjectAuthorization(projectId, user.id, "write");
-	if (!authorization.allowed && authorization.reason === "no-access") {
-		return c.json({ error: "Project not found or access denied" }, 403);
-	}
-	if (!authorization.allowed) {
-		return c.json({ error: "You do not have write access to this project" }, 403);
-	}
 
 	const folderPath = decodeURIComponent(c.req.param("folderPath"));
 	const result = await deleteProjectContentFolder(projectId, folderPath);
@@ -324,20 +225,8 @@ app.delete("/:projectId/folders/:folderPath{.+}", async (c) => {
 	return c.json({ success: true });
 });
 
-app.delete("/:projectId/files/:fileId{.+}", async (c) => {
-	const user = c.get("user");
-	if (!user) {
-		return c.json({ error: "Unauthorized" }, 401);
-	}
-
+app.delete("/:projectId/files/:fileId{.+}", requireProjectWriteAccess, async (c) => {
 	const { projectId } = c.req.param();
-	const authorization = getProjectAuthorization(projectId, user.id, "write");
-	if (!authorization.allowed && authorization.reason === "no-access") {
-		return c.json({ error: "Project not found or access denied" }, 403);
-	}
-	if (!authorization.allowed) {
-		return c.json({ error: "You do not have write access to this project" }, 403);
-	}
 
 	const fileId = decodeURIComponent(c.req.param("fileId"));
 	const result = await deleteProjectContentFile(projectId, fileId);

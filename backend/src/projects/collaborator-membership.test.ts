@@ -62,18 +62,13 @@ describe("Collaborator Membership", () => {
 		deepEqual(
 			membership.addProjectCollaborator({
 				projectId: "membership-add",
-				actorUserId: "membership-owner",
 				email: "target@example.com",
 				readOnly: false,
 			}),
 			{ ok: true },
 		);
 
-		const result = membership.listProjectCollaborators("membership-add", "membership-owner");
-		equal(result.ok, true);
-		if (result.ok) {
-			equal(result.value[0]?.userId, "membership-target");
-		}
+		equal(membership.listProjectCollaborators("membership-add")[0]?.userId, "membership-target");
 	});
 
 	test("reports missing users and duplicate Membership", () => {
@@ -81,7 +76,6 @@ describe("Collaborator Membership", () => {
 		deepEqual(
 			membership.addProjectCollaborator({
 				projectId: "membership-errors",
-				actorUserId: "membership-owner",
 				email: "missing@example.com",
 				readOnly: false,
 			}),
@@ -91,32 +85,10 @@ describe("Collaborator Membership", () => {
 		deepEqual(
 			membership.addProjectCollaborator({
 				projectId: "membership-errors",
-				actorUserId: "membership-owner",
 				email: "target@example.com",
 				readOnly: false,
 			}),
 			{ ok: false, reason: "already-collaborator" },
-		);
-	});
-
-	test("distinguishes non-owner and outsider management", () => {
-		createProject("membership-access");
-		addMembership("membership-access", "membership-writer", false);
-		deepEqual(
-			membership.removeProjectCollaborator({
-				projectId: "membership-access",
-				actorUserId: "membership-writer",
-				userId: "membership-target",
-			}),
-			{ ok: false, reason: "owner-required" },
-		);
-		deepEqual(
-			membership.removeProjectCollaborator({
-				projectId: "membership-access",
-				actorUserId: "membership-outsider",
-				userId: "membership-target",
-			}),
-			{ ok: false, reason: "access-denied" },
 		);
 	});
 
@@ -134,7 +106,6 @@ describe("Collaborator Membership", () => {
 		deepEqual(
 			membership.updateProjectCollaborator({
 				projectId: "membership-update",
-				actorUserId: "membership-owner",
 				userId: "membership-target",
 				readOnly: true,
 			}),
@@ -157,7 +128,6 @@ describe("Collaborator Membership", () => {
 		deepEqual(
 			membership.updateProjectCollaborator({
 				projectId: "membership-unchanged",
-				actorUserId: "membership-owner",
 				userId: "membership-target",
 				readOnly: false,
 			}),
@@ -181,7 +151,6 @@ describe("Collaborator Membership", () => {
 		deepEqual(
 			membership.removeProjectCollaborator({
 				projectId: "membership-remove",
-				actorUserId: "membership-owner",
 				userId: "membership-target",
 			}),
 			{ ok: true },
