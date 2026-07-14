@@ -8,7 +8,7 @@ import {
 	isAllowedUpload,
 	isEditableExtension,
 } from "../../../helpers/file-allowlist.ts";
-import { authorizeProject } from "../../../projects/access-policy.ts";
+import { getProjectAuthorization } from "../../../projects/access-policy.ts";
 import {
 	createEditableProjectFile,
 	createProjectFolder,
@@ -45,7 +45,7 @@ app.get("/:projectId/files", async (c) => {
 
 	const { projectId } = c.req.param();
 
-	const authorization = authorizeProject(projectId, user.id, "read");
+	const authorization = getProjectAuthorization(projectId, user.id, "read");
 	if (!authorization.allowed) {
 		return c.json({ error: "Project not found or access denied" }, 403);
 	}
@@ -60,7 +60,7 @@ app.post("/:projectId/files", async (c) => {
 	}
 
 	const { projectId } = c.req.param();
-	const authorization = authorizeProject(projectId, user.id, "write");
+	const authorization = getProjectAuthorization(projectId, user.id, "write");
 	if (!authorization.allowed && authorization.reason === "no-access") {
 		return c.json({ error: "Project not found or access denied" }, 403);
 	}
@@ -84,7 +84,7 @@ app.post("/:projectId/folders", async (c) => {
 	}
 
 	const { projectId } = c.req.param();
-	const authorization = authorizeProject(projectId, user.id, "write");
+	const authorization = getProjectAuthorization(projectId, user.id, "write");
 	if (!authorization.allowed && authorization.reason === "no-access") {
 		return c.json({ error: "Project not found or access denied" }, 403);
 	}
@@ -110,7 +110,7 @@ app.post("/:projectId/files/upload", async (c) => {
 	}
 
 	const { projectId } = c.req.param();
-	const authorization = authorizeProject(projectId, user.id, "write");
+	const authorization = getProjectAuthorization(projectId, user.id, "write");
 	if (!authorization.allowed && authorization.reason === "no-access") {
 		return c.json({ error: "Project not found or access denied" }, 403);
 	}
@@ -181,7 +181,7 @@ app.get("/:projectId/files/:fileId{.+}", async (c) => {
 	}
 
 	const { projectId } = c.req.param();
-	const authorization = authorizeProject(projectId, user.id, "read");
+	const authorization = getProjectAuthorization(projectId, user.id, "read");
 	if (!authorization.allowed) {
 		return c.json({ error: "Project not found or access denied" }, 403);
 	}
@@ -216,7 +216,7 @@ app.patch("/:projectId/files/rename/:fileId{.+}", async (c) => {
 	}
 
 	const { projectId } = c.req.param();
-	const authorization = authorizeProject(projectId, user.id, "write");
+	const authorization = getProjectAuthorization(projectId, user.id, "write");
 	if (!authorization.allowed && authorization.reason === "no-access") {
 		return c.json({ error: "Project not found or access denied" }, 403);
 	}
@@ -246,7 +246,7 @@ app.patch("/:projectId/files/:fileId{.+}", async (c) => {
 	}
 
 	const { projectId } = c.req.param();
-	const authorization = authorizeProject(projectId, user.id, "write");
+	const authorization = getProjectAuthorization(projectId, user.id, "write");
 	if (!authorization.allowed && authorization.reason === "no-access") {
 		return c.json({ error: "Project not found or access denied" }, 403);
 	}
@@ -277,7 +277,7 @@ app.patch("/:projectId/folders/:folderPath{.+}/rename", async (c) => {
 	}
 
 	const { projectId } = c.req.param();
-	const authorization = authorizeProject(projectId, user.id, "write");
+	const authorization = getProjectAuthorization(projectId, user.id, "write");
 	if (!authorization.allowed && authorization.reason === "no-access") {
 		return c.json({ error: "Project not found or access denied" }, 403);
 	}
@@ -307,7 +307,7 @@ app.delete("/:projectId/folders/:folderPath{.+}", async (c) => {
 	}
 
 	const { projectId } = c.req.param();
-	const authorization = authorizeProject(projectId, user.id, "write");
+	const authorization = getProjectAuthorization(projectId, user.id, "write");
 	if (!authorization.allowed && authorization.reason === "no-access") {
 		return c.json({ error: "Project not found or access denied" }, 403);
 	}
@@ -331,7 +331,7 @@ app.delete("/:projectId/files/:fileId{.+}", async (c) => {
 	}
 
 	const { projectId } = c.req.param();
-	const authorization = authorizeProject(projectId, user.id, "write");
+	const authorization = getProjectAuthorization(projectId, user.id, "write");
 	if (!authorization.allowed && authorization.reason === "no-access") {
 		return c.json({ error: "Project not found or access denied" }, 403);
 	}

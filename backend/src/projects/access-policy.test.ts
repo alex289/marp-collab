@@ -47,52 +47,46 @@ describe("Project Access Policy", () => {
 	});
 
 	test("allows the owner to manage collaborators", () => {
-		deepEqual(
-			accessPolicy.authorizeProject("access-project", "access-owner", "manage-collaborators"),
-			{
-				allowed: true,
-				access: { isOwner: true, readOnly: false },
-			},
-		);
+		deepEqual(accessPolicy.getProjectAuthorization("access-project", "access-owner", "manage"), {
+			allowed: true,
+			access: { isOwner: true, readOnly: false },
+		});
 	});
 
 	test("allows a read-write collaborator to write", () => {
-		deepEqual(accessPolicy.authorizeProject("access-project", "access-writer", "write"), {
+		deepEqual(accessPolicy.getProjectAuthorization("access-project", "access-writer", "write"), {
 			allowed: true,
 			access: { isOwner: false, readOnly: false },
 		});
 	});
 
 	test("allows a read-only collaborator to read", () => {
-		deepEqual(accessPolicy.authorizeProject("access-project", "access-reader", "read"), {
+		deepEqual(accessPolicy.getProjectAuthorization("access-project", "access-reader", "read"), {
 			allowed: true,
 			access: { isOwner: false, readOnly: true },
 		});
 	});
 
 	test("distinguishes read-only write denial", () => {
-		deepEqual(accessPolicy.authorizeProject("access-project", "access-reader", "write"), {
+		deepEqual(accessPolicy.getProjectAuthorization("access-project", "access-reader", "write"), {
 			allowed: false,
 			reason: "read-only",
 		});
 	});
 
 	test("distinguishes non-owner management denial", () => {
-		deepEqual(
-			accessPolicy.authorizeProject("access-project", "access-writer", "manage-collaborators"),
-			{
-				allowed: false,
-				reason: "not-owner",
-			},
-		);
+		deepEqual(accessPolicy.getProjectAuthorization("access-project", "access-writer", "manage"), {
+			allowed: false,
+			reason: "not-owner",
+		});
 	});
 
 	test("returns no-access for outsiders and missing Projects", () => {
-		deepEqual(accessPolicy.authorizeProject("access-project", "access-outsider", "read"), {
+		deepEqual(accessPolicy.getProjectAuthorization("access-project", "access-outsider", "read"), {
 			allowed: false,
 			reason: "no-access",
 		});
-		deepEqual(accessPolicy.authorizeProject("missing-project", "access-owner", "read"), {
+		deepEqual(accessPolicy.getProjectAuthorization("missing-project", "access-owner", "read"), {
 			allowed: false,
 			reason: "no-access",
 		});

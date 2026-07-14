@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import z from "zod";
-import { authorizeProject } from "../../../projects/access-policy.ts";
+import { getProjectAuthorization } from "../../../projects/access-policy.ts";
 import {
 	addProjectCollaborator,
 	listProjectCollaborators,
@@ -36,7 +36,7 @@ app.post("/:projectId/collaborators", async (c) => {
 
 	const { projectId } = c.req.param();
 
-	const authorization = authorizeProject(projectId, user.id, "manage-collaborators");
+	const authorization = getProjectAuthorization(projectId, user.id, "manage");
 	if (!authorization.allowed && authorization.reason === "no-access") {
 		return c.json({ error: "Project not found or access denied" }, 403);
 	} else if (!authorization.allowed) {
@@ -76,7 +76,7 @@ app.patch("/:projectId/collaborators/:userId", async (c) => {
 
 	const { projectId, userId } = c.req.param();
 
-	const authorization = authorizeProject(projectId, user.id, "manage-collaborators");
+	const authorization = getProjectAuthorization(projectId, user.id, "manage");
 	if (!authorization.allowed && authorization.reason === "no-access") {
 		return c.json({ error: "Project not found or access denied" }, 403);
 	} else if (!authorization.allowed) {

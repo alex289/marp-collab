@@ -9,7 +9,7 @@ import {
 	updateProject,
 } from "../../../db/models/project.ts";
 import { getCollaborationsByUserId } from "../../../db/models/project-collaborator.ts";
-import { authorizeProject } from "../../../projects/access-policy.ts";
+import { getProjectAuthorization } from "../../../projects/access-policy.ts";
 import { toDocumentName } from "../../../projects/document-identity.ts";
 import { saveDocumentContent } from "../../../projects/storage.ts";
 import type { HonoVariables } from "../../../types.ts";
@@ -82,7 +82,7 @@ app.get("/:projectId", (c) => {
 
 	const { projectId } = c.req.param();
 
-	const authorization = authorizeProject(projectId, user.id, "read");
+	const authorization = getProjectAuthorization(projectId, user.id, "read");
 	if (!authorization.allowed) {
 		return c.json({ error: "Project not found or access denied" }, 403);
 	}
@@ -103,7 +103,7 @@ app.patch("/:projectId", async (c) => {
 
 	const { projectId } = c.req.param();
 
-	const authorization = authorizeProject(projectId, user.id, "manage-collaborators");
+	const authorization = getProjectAuthorization(projectId, user.id, "manage");
 	if (!authorization.allowed) {
 		return c.json({ error: "Project not found or access denied" }, 403);
 	}

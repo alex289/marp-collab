@@ -6,13 +6,13 @@ export type ProjectAccess = {
 	readOnly: boolean;
 };
 
-export type ProjectPermission = "read" | "write" | "manage-collaborators";
+export type ProjectPermission = "read" | "write" | "manage";
 
 export type ProjectAuthorization =
 	| { allowed: true; access: ProjectAccess }
 	| { allowed: false; reason: "no-access" | "read-only" | "not-owner" };
 
-export function authorizeProject(
+export function getProjectAuthorization(
 	projectId: string,
 	userId: string,
 	permission: ProjectPermission,
@@ -34,7 +34,7 @@ export function authorizeProject(
 		return { allowed: false, reason: "no-access" };
 	}
 
-	if (permission === "manage-collaborators") {
+	if (permission === "manage") {
 		return { allowed: false, reason: "not-owner" };
 	}
 

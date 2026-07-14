@@ -5,7 +5,7 @@ import { renderMarkdownForPdf } from "../../../collab/marp-render.ts";
 import { getProjectById } from "../../../db/models/project.ts";
 import { renderPdfViaGotenberg } from "../../../helpers/gotenberg.ts";
 import { logger } from "../../../helpers/logger.ts";
-import { authorizeProject } from "../../../projects/access-policy.ts";
+import { getProjectAuthorization } from "../../../projects/access-policy.ts";
 import { createProjectZipStream, isMarkdownFileId } from "../../../projects/storage.ts";
 import type { HonoVariables } from "../../../types.ts";
 
@@ -24,7 +24,7 @@ app.get("/:projectId/export.zip", async (c) => {
 		return c.json({ error: "Project not found" }, 404);
 	}
 
-	const authorization = authorizeProject(projectId, user.id, "read");
+	const authorization = getProjectAuthorization(projectId, user.id, "read");
 	if (!authorization.allowed) {
 		return c.json({ error: "Project not found or access denied" }, 403);
 	}
@@ -60,7 +60,7 @@ app.get("/:projectId/export/pdf/:fileId{.+}", async (c) => {
 		return c.json({ error: "Project not found" }, 404);
 	}
 
-	const authorization = authorizeProject(projectId, user.id, "read");
+	const authorization = getProjectAuthorization(projectId, user.id, "read");
 	if (!authorization.allowed) {
 		return c.json({ error: "Project not found or access denied" }, 403);
 	}

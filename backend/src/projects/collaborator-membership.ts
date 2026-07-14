@@ -8,7 +8,7 @@ import {
 	type ProjectCollaborator,
 } from "../db/models/project-collaborator.ts";
 import { getUserByEmail } from "../db/models/user.ts";
-import { authorizeProject } from "./access-policy.ts";
+import { getProjectAuthorization } from "./access-policy.ts";
 
 export type MembershipFailure =
 	| "access-denied"
@@ -42,11 +42,11 @@ type RemoveProjectCollaboratorInput = MembershipActorInput & {
 	userId: string;
 };
 
-function authorizeManagement({
+function getManagementAuthorization({
 	projectId,
 	actorUserId,
 }: MembershipActorInput): MembershipFailure | undefined {
-	const authorization = authorizeProject(projectId, actorUserId, "manage-collaborators");
+	const authorization = getProjectAuthorization(projectId, actorUserId, "manage");
 	if (authorization.allowed) {
 		return undefined;
 	}
@@ -57,7 +57,7 @@ export function listProjectCollaborators(
 	projectId: string,
 	actorUserId: string,
 ): MembershipResult<ProjectCollaborator[]> {
-	const authorization = authorizeProject(projectId, actorUserId, "read");
+	const authorization = getProjectAuthorization(projectId, actorUserId, "read");
 	if (!authorization.allowed) {
 		return { ok: false, reason: "access-denied" };
 	}
@@ -65,7 +65,7 @@ export function listProjectCollaborators(
 }
 
 export function addProjectCollaborator(input: AddProjectCollaboratorInput): MembershipResult {
-	const authorizationFailure = authorizeManagement(input);
+	const authorizationFailure = getManagementAuthorization(input);
 	if (authorizationFailure) {
 		return { ok: false, reason: authorizationFailure };
 	}
@@ -85,7 +85,7 @@ export function addProjectCollaborator(input: AddProjectCollaboratorInput): Memb
 }
 
 export function updateProjectCollaborator(input: UpdateProjectCollaboratorInput): MembershipResult {
-	const authorizationFailure = authorizeManagement(input);
+	const authorizationFailure = getManagementAuthorization(input);
 	if (authorizationFailure) {
 		return { ok: false, reason: authorizationFailure };
 	}
@@ -103,7 +103,7 @@ export function updateProjectCollaborator(input: UpdateProjectCollaboratorInput)
 }
 
 export function removeProjectCollaborator(input: RemoveProjectCollaboratorInput): MembershipResult {
-	const authorizationFailure = authorizeManagement(input);
+	const authorizationFailure = getManagementAuthorization(input);
 	if (authorizationFailure) {
 		return { ok: false, reason: authorizationFailure };
 	}

@@ -8,7 +8,7 @@ import {
 } from "../projects/storage.ts";
 import { isEditableExtension } from "../helpers/file-allowlist.ts";
 import { auth } from "../auth.ts";
-import { authorizeProject } from "../projects/access-policy.ts";
+import { getProjectAuthorization } from "../projects/access-policy.ts";
 import { registerProjectConnection, unregisterProjectConnection } from "./connections.ts";
 import { parseProjectDocumentName } from "../projects/document-identity.ts";
 
@@ -61,7 +61,7 @@ export const collabServer = new Hocuspocus({
 			throw new Error("Only text files can be opened in the editor");
 		}
 
-		const authorization = authorizeProject(projectId, session.user.id, "read");
+		const authorization = getProjectAuthorization(projectId, session.user.id, "read");
 		if (!authorization.allowed) {
 			throw new Error("Forbidden");
 		}
