@@ -1,3 +1,5 @@
+import { parseProjectDocumentName } from "../projects/document-identity.ts";
+
 type ClosableConnection = {
 	close(): void;
 };
@@ -10,15 +12,6 @@ type ProjectConnection = {
 
 const projectConnectionsBySocketId = new Map<string, ProjectConnection>();
 
-function getProjectId(documentName: string): string | undefined {
-	const parts = documentName.split("/");
-	if (parts[0] !== "project" || !parts[1]) {
-		return undefined;
-	}
-
-	return parts[1];
-}
-
 export function registerProjectConnection({
 	socketId,
 	documentName,
@@ -30,7 +23,7 @@ export function registerProjectConnection({
 	userId: string;
 	connection: ClosableConnection;
 }) {
-	const projectId = getProjectId(documentName);
+	const projectId = parseProjectDocumentName(documentName)?.projectId;
 	if (!projectId) {
 		return;
 	}
@@ -57,7 +50,7 @@ export function unregisterProjectConnection(socketId: string, documentName?: str
 		return;
 	}
 
-	const projectId = getProjectId(documentName);
+	const projectId = parseProjectDocumentName(documentName)?.projectId;
 	const projectConnection = projectConnectionsBySocketId.get(socketId);
 	if (!projectId || !projectConnection) {
 		return;

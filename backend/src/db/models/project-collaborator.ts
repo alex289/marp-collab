@@ -1,32 +1,44 @@
 import { db } from "../db.ts";
 
-export type ProjectCollaborator = {
+export type ProjectMembership = {
 	projectId: string;
-	projectName: string;
 	userId: string;
 	readOnly: boolean;
 	createdAt: Date;
+};
+
+export type ProjectCollaborator = ProjectMembership & {
+	projectName: string;
 	userName: string;
 	ownerName: string;
 };
 
-type ProjectCollaboratorRow = {
+type ProjectMembershipRow = {
 	projectId: string;
-	projectName: string;
 	userId: string;
 	readOnly: number;
 	createdAt: string;
+};
+
+type ProjectCollaboratorRow = ProjectMembershipRow & {
+	projectName: string;
 	userName: string;
 	ownerName: string;
 };
 
-function rowToProjectCollaborator(row: ProjectCollaboratorRow): ProjectCollaborator {
+function rowToProjectMembership(row: ProjectMembershipRow): ProjectMembership {
 	return {
 		projectId: row.projectId,
-		projectName: row.projectName,
 		userId: row.userId,
 		readOnly: row.readOnly === 1,
 		createdAt: new Date(row.createdAt),
+	};
+}
+
+function rowToProjectCollaborator(row: ProjectCollaboratorRow): ProjectCollaborator {
+	return {
+		...rowToProjectMembership(row),
+		projectName: row.projectName,
 		userName: row.userName,
 		ownerName: row.ownerName,
 	};
@@ -83,17 +95,14 @@ export function getCollaborationsByUserId(userId: string): ProjectCollaborator[]
 	return rows.map(rowToProjectCollaborator);
 }
 
-export function getCollaborator(
-	projectId: string,
-	userId: string,
-): ProjectCollaborator | undefined {
+export function getCollaborator(projectId: string, userId: string): ProjectMembership | undefined {
 	const row = preparedStatements.getCollaborator.get(projectId, userId) as
-		| ProjectCollaboratorRow
+		| ProjectMembershipRow
 		| undefined;
 	if (!row) {
 		return undefined;
 	}
-	return rowToProjectCollaborator(row);
+	return rowToProjectMembership(row);
 }
 
 export function addCollaborator(projectId: string, userId: string, readOnly: boolean) {

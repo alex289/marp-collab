@@ -3,30 +3,29 @@ import { ok, equal, deepEqual, rejects } from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import type { Readable } from "node:stream";
 
-describe("collab/files", () => {
+async function readAll(stream: Readable): Promise<Buffer> {
+	const chunks: Buffer[] = [];
+	for await (const chunk of stream) {
+		chunks.push(typeof chunk === "string" ? Buffer.from(chunk) : Buffer.from(chunk));
+	}
+	return Buffer.concat(chunks);
+}
+
+describe("project storage", () => {
 	let tempDir: string;
-	let files: typeof import("./files.ts");
+	let files: typeof import("./storage.ts");
 
 	before(async () => {
 		tempDir = await mkdtemp(join(tmpdir(), "marp-test-files-"));
 		process.env.DATA_PATH = tempDir;
-		files = await import("./files.ts");
+		files = await import("./storage.ts");
 	});
 
 	after(async () => {
 		await rm(tempDir, { recursive: true, force: true });
 		delete process.env.DATA_PATH;
-	});
-
-	describe("toDocumentName", () => {
-		test("combines project id and file id", () => {
-			equal(files.toDocumentName("proj-1", "slides.md"), "project/proj-1/slides.md");
-		});
-
-		test("handles nested file ids", () => {
-			equal(files.toDocumentName("abc", "sub/dir/file.css"), "project/abc/sub/dir/file.css");
-		});
 	});
 
 	describe("isMarkdownFileId", () => {
@@ -45,39 +44,6 @@ describe("collab/files", () => {
 		test("returns false for image and other extensions", () => {
 			equal(files.isMarkdownFileId("photo.jpg"), false);
 			equal(files.isMarkdownFileId("noextension"), false);
-		});
-	});
-
-	describe("resolveProjectFilePath", () => {
-		test("returns a path string for valid inputs", () => {
-			const result = files.resolveProjectFilePath("proj-1", "slides.md");
-			ok(result !== null);
-			ok(result!.includes("proj-1"));
-			ok(result!.includes("slides.md"));
-		});
-
-		test("returns null for invalid project id (spaces)", () => {
-			equal(files.resolveProjectFilePath("invalid id!", "slides.md"), null);
-		});
-
-		test("returns null for empty project id", () => {
-			equal(files.resolveProjectFilePath("", "slides.md"), null);
-		});
-
-		test("returns null for empty file id", () => {
-			equal(files.resolveProjectFilePath("proj-1", ""), null);
-		});
-
-		test("returns null for absolute file path", () => {
-			equal(files.resolveProjectFilePath("proj-1", "/etc/passwd"), null);
-		});
-
-		test("returns null for single-segment path traversal", () => {
-			equal(files.resolveProjectFilePath("proj-1", "../escape.md"), null);
-		});
-
-		test("returns null for nested path traversal", () => {
-			equal(files.resolveProjectFilePath("proj-1", "sub/../../escape.md"), null);
 		});
 	});
 
@@ -195,6 +161,35 @@ describe("collab/files", () => {
 				/Invalid project file path/,
 			);
 		});
+
+		test("reads stored bytes without exposing a filesystem path", async () => {
+			await files.saveProjectFile("ops-proj", "asset.bin", new Uint8Array([1, 2, 3]));
+			deepEqual(Array.from((await files.readProjectFile("ops-proj", "asset.bin"))!), [1, 2, 3]);
+			equal(await files.readProjectFile("ops-proj", "missing.bin"), undefined);
+			equal(await files.readProjectFile("ops-proj", "../escape.bin"), undefined);
+		});
+
+		test("opens a stored file as a readable stream", async () => {
+			await files.saveProjectFile("ops-proj", "stream.txt", new TextEncoder().encode("streamed"));
+			const stream = await files.openProjectFile("ops-proj", "stream.txt");
+			ok(stream);
+			equal((await readAll(stream)).toString("utf8"), "streamed");
+			equal(await files.openProjectFile("ops-proj", "missing.txt"), undefined);
+		});
+	});
+
+	describe("createProjectZipStream", () => {
+		test("includes regular files and excludes Yjs companion files", async () => {
+			await files.saveDocumentContent("project/zip-proj/slides.md", "# Slides");
+			await files.saveDocumentBinary("project/zip-proj/slides.md", new Uint8Array([1, 2, 3]));
+			await files.saveProjectFile("zip-proj", "assets/logo.txt", new TextEncoder().encode("logo"));
+
+			const archive = await readAll(await files.createProjectZipStream("zip-proj"));
+			const contents = archive.toString("latin1");
+			ok(contents.includes("slides.md"));
+			ok(contents.includes("assets/logo.txt"));
+			ok(!contents.includes("slides.md.yjs"));
+		});
 	});
 
 	describe("moveProjectFile", () => {
@@ -210,6 +205,22 @@ describe("collab/files", () => {
 			await files.saveDocumentContent("project/ops-proj/subdir/back.md", "back");
 			const newId = await files.moveProjectFile("ops-proj", "subdir/back.md", "");
 			equal(newId, "back.md");
+		});
+
+		test("moves the Yjs companion file with the document", async () => {
+			await files.saveDocumentContent("project/move-yjs-proj/slides.md", "text");
+			await files.saveDocumentBinary("project/move-yjs-proj/slides.md", new Uint8Array([7, 8]));
+			await files.createProjectDir("move-yjs-proj", "archive");
+
+			equal(
+				await files.moveProjectFile("move-yjs-proj", "slides.md", "archive"),
+				"archive/slides.md",
+			);
+			equal(await files.getDocumentBinary("project/move-yjs-proj/slides.md"), undefined);
+			deepEqual(
+				Array.from((await files.getDocumentBinary("project/move-yjs-proj/archive/slides.md"))!),
+				[7, 8],
+			);
 		});
 
 		test("returns null for a path traversal source", async () => {

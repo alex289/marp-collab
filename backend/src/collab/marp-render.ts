@@ -1,6 +1,7 @@
 import { Marp } from "@marp-team/marp-core";
 import { posix } from "node:path";
-import { getDeckFiles, getDocumentContent, toDocumentName } from "./files.ts";
+import { getDeckFiles, getDocumentContent } from "../projects/storage.ts";
+import { toDocumentName } from "../projects/document-identity.ts";
 
 function resolvePosixPath(dir: string, src: string): string {
 	return posix.normalize(posix.join(dir, src));

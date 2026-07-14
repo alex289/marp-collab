@@ -1,5 +1,4 @@
-import { readFile } from "node:fs/promises";
-import { resolveProjectFilePath } from "../collab/files.ts";
+import { readProjectFile } from "../projects/storage.ts";
 import type { RenderedPdfInput } from "../collab/marp-render.ts";
 import { getMimeType } from "./file-allowlist.ts";
 
@@ -46,13 +45,11 @@ export async function renderPdfViaGotenberg(
 	form.append("files", new Blob([buildIndexHtml(rendered)], { type: "text/html" }), "index.html");
 
 	for (const [fileId, flatName] of rendered.assets) {
-		const filePath = resolveProjectFilePath(projectId, fileId);
-		if (!filePath) {
-			continue;
-		}
-
 		try {
-			const bytes = await readFile(filePath);
+			const bytes = await readProjectFile(projectId, fileId);
+			if (!bytes) {
+				continue;
+			}
 			form.append("files", new Blob([bytes], { type: getMimeType(fileId) }), flatName);
 		} catch {
 			// Skip missing files instead of failing the render
