@@ -38,7 +38,7 @@ import {
 	useSidebar,
 } from "@/components/ui/sidebar";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { CreateFileDialog } from "@/components/dialog/create-file";
 import { CreateFolderDialog } from "@/components/dialog/create-folder";
@@ -171,21 +171,63 @@ const toProjectFileUrl = (projectId: string, fileId: string): string =>
 
 const SidebarHeaderAction = ({
 	onClick,
-	title,
+	label,
 	children,
 }: {
 	onClick: () => void;
-	title: string;
+	label: string;
 	children: React.ReactNode;
 }) => (
-	<button
-		type="button"
-		onClick={onClick}
-		title={title}
-		className="flex h-5 w-5 items-center justify-center rounded-md text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground [&>svg]:size-4"
-	>
-		{children}
-	</button>
+	<Tooltip>
+		<TooltipTrigger
+			render={
+				<button
+					type="button"
+					onClick={onClick}
+					aria-label={label}
+					className="flex h-5 w-5 items-center justify-center rounded-md text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground [&>svg]:size-4"
+				>
+					{children}
+				</button>
+			}
+		/>
+		<TooltipContent>{label}</TooltipContent>
+	</Tooltip>
+);
+
+const FileTreeAction = ({
+	label,
+	onClick,
+	className,
+	children,
+}: {
+	label: string;
+	onClick: () => void;
+	className?: string;
+	children: React.ReactNode;
+}) => (
+	<Tooltip>
+		<TooltipTrigger
+			render={
+				// Nested menu items share the group/menu-item scope, so showOnHover
+				// would reveal the actions of every row in a hovered folder subtree.
+				// Scope the reveal to the row's own group/row wrapper instead. Use
+				// :focus-visible rather than focus-within so a mouse click on the row
+				// (which leaves focus on its button) doesn't pin the actions visible.
+				<SidebarMenuAction
+					onClick={onClick}
+					aria-label={label}
+					className={cn(
+						"peer-data-active/menu-button:text-sidebar-accent-foreground group-has-[:focus-visible]/row:opacity-100 group-hover/row:opacity-100 md:opacity-0",
+						className,
+					)}
+				>
+					{children}
+				</SidebarMenuAction>
+			}
+		/>
+		<TooltipContent>{label}</TooltipContent>
+	</Tooltip>
 );
 
 const MAX_FILE_PRESENCE_DOTS = 3;
@@ -262,7 +304,6 @@ const WorkspaceRailButton = ({
 					<button
 						type="button"
 						onClick={onClick}
-						title={`${label} (${displayHotkey})`}
 						aria-label={`${label} (${displayHotkey})`}
 						className={cn(
 							"flex h-9 w-9 items-center justify-center rounded-md text-sidebar-foreground transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground [&>svg]:size-4",
@@ -518,67 +559,67 @@ const NestedFileItem = ({
 			const isImageFile = isImageDeckFile(file);
 			return (
 				<SidebarMenuItem className={isDragging ? "opacity-40" : undefined}>
-					<SidebarMenuButton
-						className={cn("pr-14", isImageFile && "hover:bg-accent hover:text-accent-foreground")}
-						onClick={isImageFile ? () => onPreviewImage(file) : undefined}
-						tooltip={file.id}
-						{...dragProps}
-					>
-						{isFontFile ? <Type /> : <Image />}
-						<span className="min-w-0 flex-1 truncate">{node.name}</span>
-					</SidebarMenuButton>
-					<SidebarMenuAction
-						showOnHover
-						onClick={() => onRenameFile(file)}
-						title="Rename file"
-						className="right-7 text-muted-foreground"
-					>
-						<Pencil />
-					</SidebarMenuAction>
-					<SidebarMenuAction
-						showOnHover
-						onClick={() => onDeleteFile(file)}
-						title="Delete file"
-						className="text-muted-foreground hover:text-destructive"
-					>
-						<Trash2 />
-					</SidebarMenuAction>
+					<div className="group/row relative">
+						<SidebarMenuButton
+							className={cn("pr-14", isImageFile && "hover:bg-accent hover:text-accent-foreground")}
+							onClick={isImageFile ? () => onPreviewImage(file) : undefined}
+							tooltip={file.id}
+							{...dragProps}
+						>
+							{isFontFile ? <Type /> : <Image />}
+							<span className="min-w-0 flex-1 truncate">{node.name}</span>
+						</SidebarMenuButton>
+						<FileTreeAction
+							label="Rename file"
+							onClick={() => onRenameFile(file)}
+							className="right-7 text-muted-foreground"
+						>
+							<Pencil />
+						</FileTreeAction>
+						<FileTreeAction
+							label="Delete file"
+							onClick={() => onDeleteFile(file)}
+							className="text-muted-foreground hover:text-destructive"
+						>
+							<Trash2 />
+						</FileTreeAction>
+					</div>
 				</SidebarMenuItem>
 			);
 		}
 
 		return (
 			<SidebarMenuItem className={isDragging ? "opacity-40" : undefined}>
-				<SidebarMenuButton
-					isActive={selectedFileId === file.id}
-					className={cn(
-						"pr-14 data-[active=true]:bg-primary data-[active=true]:text-primary-foreground hover:bg-accent hover:text-accent-foreground",
-						filePresence.length > 0 && "pr-24",
-					)}
-					onClick={() => onSelectFile(file)}
-					tooltip={file.id}
-					{...dragProps}
-				>
-					<File />
-					<span className="min-w-0 flex-1 truncate">{node.name}</span>
-				</SidebarMenuButton>
-				<FilePresenceDots participants={filePresence} fileName={file.id} />
-				<SidebarMenuAction
-					showOnHover
-					onClick={() => onRenameFile(file)}
-					title="Rename file"
-					className="right-7 text-muted-foreground"
-				>
-					<Pencil />
-				</SidebarMenuAction>
-				<SidebarMenuAction
-					showOnHover
-					onClick={() => onDeleteFile(file)}
-					title="Delete file"
-					className="text-muted-foreground hover:text-destructive"
-				>
-					<Trash2 />
-				</SidebarMenuAction>
+				<div className="group/row relative">
+					<SidebarMenuButton
+						isActive={selectedFileId === file.id}
+						className={cn(
+							"pr-14 data-[active=true]:bg-primary data-[active=true]:text-primary-foreground hover:bg-accent hover:text-accent-foreground",
+							filePresence.length > 0 && "pr-24",
+						)}
+						onClick={() => onSelectFile(file)}
+						tooltip={file.id}
+						{...dragProps}
+					>
+						<File />
+						<span className="min-w-0 flex-1 truncate">{node.name}</span>
+					</SidebarMenuButton>
+					<FilePresenceDots participants={filePresence} fileName={file.id} />
+					<FileTreeAction
+						label="Rename file"
+						onClick={() => onRenameFile(file)}
+						className="right-7 text-muted-foreground"
+					>
+						<Pencil />
+					</FileTreeAction>
+					<FileTreeAction
+						label="Delete file"
+						onClick={() => onDeleteFile(file)}
+						className="text-muted-foreground hover:text-destructive"
+					>
+						<Trash2 />
+					</FileTreeAction>
+				</div>
 			</SidebarMenuItem>
 		);
 	}
@@ -597,67 +638,67 @@ const NestedFileItem = ({
 			<Collapsible
 				open={isOpen}
 				onOpenChange={(open) => setFolderOpen(node.path, open)}
-				className="group/collapsible [&[data-open]>[data-sidebar=menu-button]>svg:first-child]:rotate-90"
+				className="group/collapsible [&[data-open]>div>[data-sidebar=menu-button]>svg:first-child]:rotate-90"
 			>
-				<CollapsibleTrigger
-					render={
-						<SidebarMenuButton
-							isActive={isActiveBranch}
-							tooltip={node.path}
-							className={cn("pr-14", isDragOver && "ring-2 ring-primary ring-inset")}
-							onDragOver={(e) => {
-								if (onExternalFileDragOverPath(e, node.path)) {
-									return;
-								}
-								if (!dragState.draggingFileId) {
-									return;
-								}
-								e.preventDefault();
-								e.stopPropagation();
-								e.dataTransfer.dropEffect = "move";
-								onDragOverPath(node.path);
-							}}
-							onDragLeave={(e) => {
-								if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-									onExternalFileDragLeave(e);
-									onDragOverPath(null);
-								}
-							}}
-							onDrop={(e) => {
-								if (onExternalFileDropOnPath(e, node.path)) {
-									return;
-								}
-								e.preventDefault();
-								e.stopPropagation();
-								onDropOnPath(node.path);
-							}}
-						>
-							<ChevronRight className="transition-transform" />
-							<Folder />
-							{node.name}
-						</SidebarMenuButton>
-					}
-				/>
-				{folderFile && (
-					<>
-						<SidebarMenuAction
-							showOnHover
-							onClick={() => onRenameFile(folderFile)}
-							title="Rename folder"
-							className="right-7 text-muted-foreground"
-						>
-							<Pencil />
-						</SidebarMenuAction>
-						<SidebarMenuAction
-							showOnHover
-							onClick={() => onDeleteFile(folderFile)}
-							title="Delete folder"
-							className="text-muted-foreground hover:text-destructive"
-						>
-							<Trash2 />
-						</SidebarMenuAction>
-					</>
-				)}
+				<div className="group/row relative">
+					<CollapsibleTrigger
+						render={
+							<SidebarMenuButton
+								isActive={isActiveBranch}
+								tooltip={node.path}
+								className={cn("pr-14", isDragOver && "ring-2 ring-primary ring-inset")}
+								onDragOver={(e) => {
+									if (onExternalFileDragOverPath(e, node.path)) {
+										return;
+									}
+									if (!dragState.draggingFileId) {
+										return;
+									}
+									e.preventDefault();
+									e.stopPropagation();
+									e.dataTransfer.dropEffect = "move";
+									onDragOverPath(node.path);
+								}}
+								onDragLeave={(e) => {
+									if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+										onExternalFileDragLeave(e);
+										onDragOverPath(null);
+									}
+								}}
+								onDrop={(e) => {
+									if (onExternalFileDropOnPath(e, node.path)) {
+										return;
+									}
+									e.preventDefault();
+									e.stopPropagation();
+									onDropOnPath(node.path);
+								}}
+							>
+								<ChevronRight className="transition-transform" />
+								<Folder />
+								{node.name}
+							</SidebarMenuButton>
+						}
+					/>
+					{folderFile && (
+						<>
+							<FileTreeAction
+								label="Rename folder"
+								onClick={() => onRenameFile(folderFile)}
+								className="right-7 text-muted-foreground"
+							>
+								<Pencil />
+							</FileTreeAction>
+							<FileTreeAction
+								label="Delete folder"
+								onClick={() => onDeleteFile(folderFile)}
+								className="text-muted-foreground hover:text-destructive"
+							>
+								<Trash2 />
+							</FileTreeAction>
+						</>
+					)}
+				</div>
 				<CollapsibleContent
 					onDragOver={(e) => {
 						if (onExternalFileDragOverPath(e, node.path)) {
@@ -1194,16 +1235,16 @@ export const FileSidebar = ({
 				</div>
 
 				<div className="flex items-center gap-0.5 group-data-[collapsible=icon]:hidden">
-					<SidebarHeaderAction onClick={() => setCreateFileOpen(true)} title="New file">
+					<SidebarHeaderAction onClick={() => setCreateFileOpen(true)} label="New file">
 						<FilePlus />
 					</SidebarHeaderAction>
-					<SidebarHeaderAction onClick={() => setCreateFolderOpen(true)} title="New folder">
+					<SidebarHeaderAction onClick={() => setCreateFolderOpen(true)} label="New folder">
 						<FolderPlus />
 					</SidebarHeaderAction>
-					<SidebarHeaderAction onClick={() => setUploadFileOpen(true)} title="Upload file">
+					<SidebarHeaderAction onClick={() => setUploadFileOpen(true)} label="Upload file">
 						<Upload />
 					</SidebarHeaderAction>
-					<SidebarHeaderAction onClick={handleExportProject} title="Export project as ZIP">
+					<SidebarHeaderAction onClick={handleExportProject} label="Export project as ZIP">
 						<Download />
 					</SidebarHeaderAction>
 				</div>
@@ -1349,31 +1390,29 @@ export const FileSidebar = ({
 					} as React.CSSProperties
 				}
 			>
-				<TooltipProvider>
-					<MobileWorkspaceRail activePanel={activePanel} setActivePanel={setActivePanel} />
-					<Sidebar
-						variant="sidebar"
-						collapsible="icon"
-						className="static h-full border-0 pt-0 group-data-[side=left]:border-r-0"
-					>
-						<SidebarContent className="h-full overflow-hidden border-r border-sidebar-border bg-sidebar">
-							<div className="flex h-full min-h-0 flex-1">
-								<div className="flex w-12 shrink-0 flex-col items-center gap-2 border-r border-sidebar-border px-1.5 py-2 group-data-[collapsible=icon]:rounded-lg group-data-[collapsible=icon]:border-r-0">
-									<WorkspaceRailButtons
-										activePanel={activePanel}
-										onPanelClick={handlePanelButtonClick}
-									/>
-								</div>
-								<div className="min-h-0 min-w-0 flex-1 overflow-auto group-data-[collapsible=icon]:hidden">
-									{activePanel === "files" ? filesPanel : null}
-									{activePanel === "search" ? (searchPanel ?? emptyPanel) : null}
-									{activePanel === "outline" ? (outlinePanel ?? emptyPanel) : null}
-									{activePanel === "settings" ? settingsPanel : null}
-								</div>
+				<MobileWorkspaceRail activePanel={activePanel} setActivePanel={setActivePanel} />
+				<Sidebar
+					variant="sidebar"
+					collapsible="icon"
+					className="static h-full border-0 pt-0 group-data-[side=left]:border-r-0"
+				>
+					<SidebarContent className="h-full overflow-hidden border-r border-sidebar-border bg-sidebar">
+						<div className="flex h-full min-h-0 flex-1">
+							<div className="flex w-12 shrink-0 flex-col items-center gap-2 border-r border-sidebar-border px-1.5 py-2 group-data-[collapsible=icon]:rounded-lg group-data-[collapsible=icon]:border-r-0">
+								<WorkspaceRailButtons
+									activePanel={activePanel}
+									onPanelClick={handlePanelButtonClick}
+								/>
 							</div>
-						</SidebarContent>
-					</Sidebar>
-				</TooltipProvider>
+							<div className="min-h-0 min-w-0 flex-1 overflow-auto group-data-[collapsible=icon]:hidden">
+								{activePanel === "files" ? filesPanel : null}
+								{activePanel === "search" ? (searchPanel ?? emptyPanel) : null}
+								{activePanel === "outline" ? (outlinePanel ?? emptyPanel) : null}
+								{activePanel === "settings" ? settingsPanel : null}
+							</div>
+						</div>
+					</SidebarContent>
+				</Sidebar>
 			</SidebarProvider>
 		</>
 	);

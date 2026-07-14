@@ -7,7 +7,7 @@ import {
 	AvatarGroupCount,
 	AvatarImage,
 } from "@/components/ui/avatar";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { getInitials } from "@/lib/utils";
 
 type Participant = {
@@ -66,28 +66,26 @@ export const PresenceAvatars = ({ awareness }: { awareness: Awareness | null }) 
 	const label = `${participants.length} online`;
 
 	return (
-		<AvatarGroup className="mr-1" aria-label={label} title={label}>
+		<AvatarGroup className="mr-1" aria-label={label}>
 			{visibleParticipants.map((participant) => (
-				<TooltipProvider key={participant.id}>
-					<Tooltip>
-						<TooltipTrigger
-							render={
-								<Avatar size="sm" className="ring-1 ring-background after:border-0">
-									{participant.image ? (
-										<AvatarImage src={participant.image} alt={participant.name} />
-									) : null}
-									<AvatarFallback
-										className="text-white"
-										style={{ backgroundColor: participant.color }}
-									>
-										{getInitials(participant.name)}
-									</AvatarFallback>
-								</Avatar>
-							}
-						/>
-						<TooltipContent>{participant.name}</TooltipContent>
-					</Tooltip>
-				</TooltipProvider>
+				<Tooltip key={participant.id}>
+					<TooltipTrigger
+						render={
+							<Avatar size="sm" className="ring-1 ring-background after:border-0">
+								{participant.image ? (
+									<AvatarImage src={participant.image} alt={participant.name} />
+								) : null}
+								<AvatarFallback
+									className="text-white"
+									style={{ backgroundColor: participant.color }}
+								>
+									{getInitials(participant.name)}
+								</AvatarFallback>
+							</Avatar>
+						}
+					/>
+					<TooltipContent>{participant.name}</TooltipContent>
+				</Tooltip>
 			))}
 			{hiddenParticipants > 0 ? <AvatarGroupCount>+{hiddenParticipants}</AvatarGroupCount> : null}
 		</AvatarGroup>

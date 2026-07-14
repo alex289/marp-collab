@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MinusIcon, PlusIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { renderMarp } from "@/lib/marp";
 import { useTheme } from "./theme-provider";
 import marpitSvgPolyfillScript from "@marp-team/marpit-svg-polyfill/lib/polyfill.browser.js?raw";
@@ -148,7 +149,7 @@ export const PreviewPane = ({
 			return renderMarp(markdown, projectId, selectedFileId);
 		} catch (error) {
 			return {
-				html: `<section><h1>Marp Render Fehler</h1><p>${error instanceof Error ? error.message : "Unbekannter Fehler"}</p></section>`,
+				html: `<section><h1>Marp Render Error</h1><p>${error instanceof Error ? error.message : "Unknown error"}</p></section>`,
 				css: "",
 			};
 		}
@@ -252,34 +253,55 @@ export const PreviewPane = ({
 					{label ? `Active file: ${label}` : "No file selected"}
 				</span>
 				<div className="flex shrink-0 items-center gap-0.5">
-					<Button
-						type="button"
-						variant="ghost"
-						size="icon-xs"
-						aria-label="Zoom out"
-						onClick={() => sendZoom("out")}
-					>
-						<MinusIcon />
-					</Button>
-					<Button
-						type="button"
-						variant="ghost"
-						size="xs"
-						title="Reset zoom"
-						onClick={() => sendZoom("reset")}
-						className="font-mono"
-					>
-						{zoomPercent}%
-					</Button>
-					<Button
-						type="button"
-						variant="ghost"
-						size="icon-xs"
-						aria-label="Zoom in"
-						onClick={() => sendZoom("in")}
-					>
-						<PlusIcon />
-					</Button>
+					<Tooltip>
+						<TooltipTrigger
+							render={
+								<Button
+									type="button"
+									variant="ghost"
+									size="icon-xs"
+									aria-label="Zoom out"
+									onClick={() => sendZoom("out")}
+								>
+									<MinusIcon />
+								</Button>
+							}
+						/>
+						<TooltipContent>Zoom out</TooltipContent>
+					</Tooltip>
+					<Tooltip>
+						<TooltipTrigger
+							render={
+								<Button
+									type="button"
+									variant="ghost"
+									size="xs"
+									aria-label="Reset zoom"
+									onClick={() => sendZoom("reset")}
+									className="font-mono"
+								>
+									{zoomPercent}%
+								</Button>
+							}
+						/>
+						<TooltipContent>Reset zoom</TooltipContent>
+					</Tooltip>
+					<Tooltip>
+						<TooltipTrigger
+							render={
+								<Button
+									type="button"
+									variant="ghost"
+									size="icon-xs"
+									aria-label="Zoom in"
+									onClick={() => sendZoom("in")}
+								>
+									<PlusIcon />
+								</Button>
+							}
+						/>
+						<TooltipContent>Zoom in</TooltipContent>
+					</Tooltip>
 				</div>
 			</div>
 

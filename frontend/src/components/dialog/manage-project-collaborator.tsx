@@ -25,6 +25,7 @@ import {
 	TableRow,
 } from "../ui/table";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 
 export function ManageProjectCollaborator({ projectId }: { projectId: string }) {
 	const { mutate } = useSWRConfig();
@@ -135,19 +136,20 @@ export function ManageProjectCollaborator({ projectId }: { projectId: string }) 
 
 	return (
 		<Dialog open={open} onOpenChange={handleOpenChange}>
-			<DialogTrigger
-				render={
-					<Button
-						type="button"
-						variant="outline"
-						size="icon-sm"
-						title="Share the document with others"
-						aria-label="Share document"
-					>
-						<Share />
-					</Button>
-				}
-			/>
+			<Tooltip>
+				<TooltipTrigger
+					render={
+						<DialogTrigger
+							render={
+								<Button type="button" variant="outline" size="icon-sm" aria-label="Share document">
+									<Share />
+								</Button>
+							}
+						/>
+					}
+				/>
+				<TooltipContent>Share document</TooltipContent>
+			</Tooltip>
 			<DialogContent className="sm:max-w-xl">
 				<DialogHeader>
 					<DialogTitle>Manage Collaboration</DialogTitle>
@@ -184,20 +186,22 @@ export function ManageProjectCollaborator({ projectId }: { projectId: string }) 
 										</Select>
 									</TableCell>
 									<TableCell className="text-right">
-										<Button
-											variant="destructive"
-											size="sm"
-											title={
-												isOwner
-													? "Remove collaborator"
-													: "Only the project owner can remove collaborators"
-											}
-											aria-label="Remove collaborator"
-											disabled={!isOwner || isRemoving}
-											onClick={() => handleRemoveCollaborator(collaborator.userId)}
-										>
-											<Trash />
-										</Button>
+										<Tooltip>
+											<TooltipTrigger
+												render={
+													<Button
+														variant="destructive"
+														size="icon"
+														aria-label="Remove collaborator"
+														disabled={!isOwner || isRemoving}
+														onClick={() => handleRemoveCollaborator(collaborator.userId)}
+													>
+														<Trash />
+													</Button>
+												}
+											/>
+											<TooltipContent>Remove collaborator</TooltipContent>
+										</Tooltip>
 									</TableCell>
 								</TableRow>
 							))}
@@ -239,9 +243,6 @@ export function ManageProjectCollaborator({ projectId }: { projectId: string }) 
 								<Button
 									type="button"
 									variant="outline"
-									title={
-										isOwner ? "Add collaborator" : "Only the project owner can add collaborators"
-									}
 									disabled={!isOwner || isSubmitting || !isEmailValid}
 									onClick={handleAddCollaborator}
 								>
@@ -252,7 +253,7 @@ export function ManageProjectCollaborator({ projectId }: { projectId: string }) 
 						</TableRow>
 					</TableFooter>
 				</Table>
-				{error && <ErrorAlert title="Failed to create presentation" description={error} />}
+				{error && <ErrorAlert title="Failed to update collaborators" description={error} />}
 				{!isOwner && (
 					<p className="text-xs text-muted-foreground">
 						Only the project owner can invite or manage collaborators.

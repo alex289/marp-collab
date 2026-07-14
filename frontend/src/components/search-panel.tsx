@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SidebarGroup, SidebarGroupContent, SidebarGroupLabel } from "@/components/ui/sidebar";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { TextSearchMatch } from "@/lib/text-search";
 
 type SearchPanelProps = {
@@ -111,17 +112,22 @@ export const SearchPanel = ({
 											</span>
 											<span className="block truncate font-mono">{match.linePreview}</span>
 										</div>
-										<Button
-											type="button"
-											size="icon"
-											variant="ghost"
-											className="size-8"
-											title="Replace this match"
-											aria-label="Replace this match"
-											onClick={() => onReplaceOne(match, replacement)}
-										>
-											<Replace />
-										</Button>
+										<Tooltip>
+											<TooltipTrigger
+												render={
+													<Button
+														type="button"
+														size="icon"
+														variant="ghost"
+														aria-label="Replace this match"
+														onClick={() => onReplaceOne(match, replacement)}
+													>
+														<Replace />
+													</Button>
+												}
+											/>
+											<TooltipContent>Replace this match</TooltipContent>
+										</Tooltip>
 									</div>
 								))}
 							</div>

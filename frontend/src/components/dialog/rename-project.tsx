@@ -18,6 +18,7 @@ import { Button } from "../ui/button";
 import type { Project } from "@/lib/types";
 import { PencilIcon } from "lucide-react";
 import { mutate } from "swr";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 
 export function RenameProjectDialog({ project }: { project: Project }) {
 	const [open, setOpen] = useState(false);
@@ -73,25 +74,32 @@ export function RenameProjectDialog({ project }: { project: Project }) {
 
 	return (
 		<Dialog open={open} onOpenChange={handleOpenChange}>
-			<DialogTrigger
-				render={
-					<Button
-						type="button"
-						size="icon-sm"
-						variant="ghost"
-						onClick={(e) => {
-							e.preventDefault();
-							e.stopPropagation();
-							setOpen(true);
-						}}
-						aria-label={`Rename ${project.name}`}
-						className="mr-1"
-					>
-						<PencilIcon />
-					</Button>
-				}
-			/>
-			<DialogContent className="sm:max-w-md" showCloseButton={false}>
+			<Tooltip>
+				<TooltipTrigger
+					render={
+						<DialogTrigger
+							render={
+								<Button
+									type="button"
+									size="icon-sm"
+									variant="ghost"
+									onClick={(e) => {
+										e.preventDefault();
+										e.stopPropagation();
+										setOpen(true);
+									}}
+									aria-label={`Rename ${project.name}`}
+									className="mr-1"
+								>
+									<PencilIcon />
+								</Button>
+							}
+						/>
+					}
+				/>
+				<TooltipContent>Rename presentation</TooltipContent>
+			</Tooltip>
+			<DialogContent className="sm:max-w-md">
 				<form
 					onSubmit={async (e) => {
 						e.preventDefault();

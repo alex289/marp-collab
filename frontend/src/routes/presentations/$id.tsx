@@ -19,6 +19,7 @@ import { PresentationFrame } from "@/components/presentation-frame";
 import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { Separator } from "@/components/ui/separator";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import type { EditorPaneHandle } from "@/components/editor-pane";
 import { SearchPanel } from "@/components/search-panel";
 import { findTextMatches, replaceTextRange, type TextSearchMatch } from "@/lib/text-search";
@@ -751,21 +752,48 @@ function RouteComponent() {
 		return (
 			<div className="grid h-svh w-svw grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden">
 				<div className="flex items-center justify-between gap-2 overflow-x-auto px-4 py-3 md:gap-3">
-					<Button variant="secondary" size="sm" onClick={() => setSlideIndex(0)}>
-						Slide {slideIndex + 1}/{Math.max(slideCount, 1)}
-					</Button>
+					<Tooltip>
+						<TooltipTrigger
+							render={
+								<Button variant="secondary" size="sm" onClick={() => setSlideIndex(0)}>
+									Slide {slideIndex + 1}/{Math.max(slideCount, 1)}
+								</Button>
+							}
+						/>
+						<TooltipContent>Back to first slide</TooltipContent>
+					</Tooltip>
 					<div className="flex items-center gap-1 md:gap-2">
 						<ButtonGroup>
-							<Button
-								type="button"
-								variant="secondary"
-								onClick={isTimerPaused ? resumeTimer : pauseTimer}
-							>
-								{isTimerPaused ? <PlayIcon /> : <PauseIcon />}
-							</Button>
-							<Button type="button" variant="secondary" onClick={resetTimer}>
-								{formatElapsed(elapsedMs)}
-							</Button>
+							<Tooltip>
+								<TooltipTrigger
+									render={
+										<Button
+											type="button"
+											variant="secondary"
+											aria-label={isTimerPaused ? "Resume timer" : "Pause timer"}
+											onClick={isTimerPaused ? resumeTimer : pauseTimer}
+										>
+											{isTimerPaused ? <PlayIcon /> : <PauseIcon />}
+										</Button>
+									}
+								/>
+								<TooltipContent>{isTimerPaused ? "Resume timer" : "Pause timer"}</TooltipContent>
+							</Tooltip>
+							<Tooltip>
+								<TooltipTrigger
+									render={
+										<Button
+											type="button"
+											variant="secondary"
+											aria-label="Reset timer"
+											onClick={resetTimer}
+										>
+											{formatElapsed(elapsedMs)}
+										</Button>
+									}
+								/>
+								<TooltipContent>Reset timer</TooltipContent>
+							</Tooltip>
 						</ButtonGroup>
 						<Separator orientation="vertical" />
 						<Button
@@ -773,6 +801,7 @@ function RouteComponent() {
 							variant="secondary"
 							size="icon"
 							className="md:h-7 md:w-auto md:gap-1 md:px-2 md:text-xs/relaxed"
+							aria-label="Open clean screen"
 							onClick={() => window.open(viewerUrl, "_blank", "noopener,noreferrer")}
 						>
 							<MonitorPlayIcon />
@@ -783,6 +812,7 @@ function RouteComponent() {
 							variant="secondary"
 							size="icon"
 							className="md:h-7 md:w-auto md:gap-1 md:px-2 md:text-xs/relaxed"
+							aria-label="End presentation"
 							onClick={() =>
 								void navigate({
 									to: "/presentations/$id",

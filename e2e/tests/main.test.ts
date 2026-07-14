@@ -57,8 +57,7 @@ async function clickSidebarDelete(
 	});
 	// Hover the item button directly so both group-hover and peer-hover CSS fire
 	await menuItem.getByRole("button", { name: itemName }).hover();
-	// CSS [title=] exact match is more reliable than getByTitle (partial match)
-	await menuItem.locator(`[title="${kind}"]`).click();
+	await menuItem.getByRole("button", { name: kind, exact: true }).click();
 }
 
 async function clickSidebarRename(
@@ -70,7 +69,7 @@ async function clickSidebarRename(
 		has: page.getByRole("button", { name: itemName }),
 	});
 	await menuItem.getByRole("button", { name: itemName }).hover();
-	await menuItem.locator(`[title="${kind}"]`).click();
+	await menuItem.getByRole("button", { name: kind, exact: true }).click();
 }
 
 async function getPreviewImageReference(page: Page) {

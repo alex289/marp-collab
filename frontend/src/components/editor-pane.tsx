@@ -18,7 +18,7 @@ import {
 	CardTitle,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Check, Copy, FileText, Maximize2, WrapText } from "lucide-react";
 import { useTheme } from "./theme-provider";
 import { vsCodeLight } from "@fsegurai/codemirror-theme-vscode-light";
@@ -316,17 +316,24 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 							<Badge variant="outline">{fileKind}</Badge>
 						</CardTitle>
 						<CardDescription className="mt-1 flex min-w-0 items-center gap-2 font-mono text-[11px]">
-							<span className="truncate">{label ?? "Bitte Datei wählen"}</span>
+							<span className="truncate">{label ?? "No file selected"}</span>
 							{label ? (
-								<Button
-									type="button"
-									variant="ghost"
-									size="icon-xs"
-									aria-label="Copy file name"
-									onClick={copyLabel}
-								>
-									{copiedLabel ? <Check /> : <Copy />}
-								</Button>
+								<Tooltip>
+									<TooltipTrigger
+										render={
+											<Button
+												type="button"
+												variant="ghost"
+												size="icon-xs"
+												aria-label="Copy file name"
+												onClick={copyLabel}
+											>
+												{copiedLabel ? <Check /> : <Copy />}
+											</Button>
+										}
+									/>
+									<TooltipContent>{copiedLabel ? "Copied!" : "Copy file name"}</TooltipContent>
+								</Tooltip>
 							) : null}
 						</CardDescription>
 					</div>
@@ -335,44 +342,42 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 					<div className="flex items-center gap-2">
 						{readOnly ? <Badge variant="outline">Read-only</Badge> : null}
 						<ManageProjectCollaborator projectId={projectId} />
-						<TooltipProvider>
-							<Tooltip>
-								<TooltipTrigger
-									render={
-										<Button
-											type="button"
-											variant={wrapEnabled ? "secondary" : "outline"}
-											size="icon-sm"
-											aria-label={wrapEnabled ? "Disable line wrapping" : "Enable line wrapping"}
-											onClick={() => setWrapEnabled((current) => !current)}
-										>
-											<WrapText />
-										</Button>
-									}
-								/>
-								<TooltipContent>
-									<span>{wrapEnabled ? "Disable line wrapping" : "Enable line wrapping"}</span>
-								</TooltipContent>
-							</Tooltip>
-							<Tooltip>
-								<TooltipTrigger
-									render={
-										<Button
-											type="button"
-											variant={isFocused ? "secondary" : "outline"}
-											size="icon-sm"
-											aria-label={isFocused ? "Exit focus mode" : "Enter focus mode"}
-											onClick={() => setIsFocused((current) => !current)}
-										>
-											<Maximize2 />
-										</Button>
-									}
-								/>
-								<TooltipContent>
-									<span>{isFocused ? "Exit focus mode" : "Enter focus mode"}</span>
-								</TooltipContent>
-							</Tooltip>
-						</TooltipProvider>
+						<Tooltip>
+							<TooltipTrigger
+								render={
+									<Button
+										type="button"
+										variant={wrapEnabled ? "secondary" : "outline"}
+										size="icon-sm"
+										aria-label={wrapEnabled ? "Disable line wrapping" : "Enable line wrapping"}
+										onClick={() => setWrapEnabled((current) => !current)}
+									>
+										<WrapText />
+									</Button>
+								}
+							/>
+							<TooltipContent>
+								<span>{wrapEnabled ? "Disable line wrapping" : "Enable line wrapping"}</span>
+							</TooltipContent>
+						</Tooltip>
+						<Tooltip>
+							<TooltipTrigger
+								render={
+									<Button
+										type="button"
+										variant={isFocused ? "secondary" : "outline"}
+										size="icon-sm"
+										aria-label={isFocused ? "Exit focus mode" : "Enter focus mode"}
+										onClick={() => setIsFocused((current) => !current)}
+									>
+										<Maximize2 />
+									</Button>
+								}
+							/>
+							<TooltipContent>
+								<span>{isFocused ? "Exit focus mode" : "Enter focus mode"}</span>
+							</TooltipContent>
+						</Tooltip>
 					</div>
 				</CardAction>
 			</CardHeader>

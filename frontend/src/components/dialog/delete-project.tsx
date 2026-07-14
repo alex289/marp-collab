@@ -15,6 +15,7 @@ import { Button } from "../ui/button";
 import { API_URL } from "@/lib/config";
 import { Trash2Icon } from "lucide-react";
 import { mutate } from "swr";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
 
 type DeleteProjectDialogProps = {
 	project: Project;
@@ -63,27 +64,36 @@ export function DeleteProjectDialog({ project, trigger, onDeleted }: DeleteProje
 
 	return (
 		<Dialog open={open} onOpenChange={handleOpenChange}>
-			<DialogTrigger
-				render={
-					trigger ?? (
-						<Button
-							type="button"
-							size="icon-sm"
-							variant="ghost"
-							onClick={(e) => {
-								e.preventDefault();
-								e.stopPropagation();
-								setOpen(true);
-							}}
-							aria-label={`Delete ${project.name}`}
-							className="ml-1"
-						>
-							<Trash2Icon />
-						</Button>
-					)
-				}
-			/>
-			<DialogContent className="sm:max-w-md" showCloseButton={false}>
+			{trigger ? (
+				<DialogTrigger render={trigger} />
+			) : (
+				<Tooltip>
+					<TooltipTrigger
+						render={
+							<DialogTrigger
+								render={
+									<Button
+										type="button"
+										size="icon-sm"
+										variant="ghost"
+										onClick={(e) => {
+											e.preventDefault();
+											e.stopPropagation();
+											setOpen(true);
+										}}
+										aria-label={`Delete ${project.name}`}
+										className="ml-1"
+									>
+										<Trash2Icon />
+									</Button>
+								}
+							/>
+						}
+					/>
+					<TooltipContent>Delete presentation</TooltipContent>
+				</Tooltip>
+			)}
+			<DialogContent className="sm:max-w-md">
 				<DialogHeader>
 					<DialogTitle>Delete Presentation</DialogTitle>
 					<DialogDescription>

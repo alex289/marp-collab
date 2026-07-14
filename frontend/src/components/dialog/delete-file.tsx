@@ -76,7 +76,12 @@ export function DeleteFileDialog({ projectId, file, open, onOpenChange, onDelete
 						be undone.
 					</DialogDescription>
 				</DialogHeader>
-				{error && <ErrorAlert title="Failed to delete file" description={error} />}
+				{error && (
+					<ErrorAlert
+						title={isFolder ? "Failed to delete folder" : "Failed to delete file"}
+						description={error}
+					/>
+				)}
 				<DialogFooter>
 					<DialogClose
 						render={

@@ -91,7 +91,7 @@ export function CreateFolderDialog({ projectId, open, onOpenChange, onCreated }:
 					<DialogFooter>
 						<DialogClose
 							render={
-								<Button variant="outline" type="button">
+								<Button variant="outline" type="button" disabled={isSubmitting}>
 									Cancel
 								</Button>
 							}

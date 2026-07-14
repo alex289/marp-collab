@@ -56,7 +56,7 @@ function LoginRoute() {
 								size="lg"
 								onClick={() => handleSignIn(provider.id)}
 							>
-								<LogIn className="mr-2 h-4 w-4" />
+								<LogIn />
 								Sign in with {provider.name}
 							</Button>
 						))

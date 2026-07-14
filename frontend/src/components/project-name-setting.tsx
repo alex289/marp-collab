@@ -65,11 +65,9 @@ export const ProjectNameSetting = ({ projectId }: ProjectNameSettingProps) => {
 				/>
 				<Button
 					type="button"
-					size="sm"
 					variant="default"
 					onClick={() => void handleSave()}
 					disabled={!canSave}
-					className="h-7 px-2"
 				>
 					Save
 				</Button>

@@ -98,7 +98,7 @@ export function CreatePresentationDialog() {
 					<DialogFooter>
 						<DialogClose
 							render={
-								<Button variant="outline" type="button">
+								<Button variant="outline" type="button" disabled={isSubmitting}>
 									Cancel
 								</Button>
 							}

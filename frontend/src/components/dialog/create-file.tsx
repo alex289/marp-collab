@@ -92,7 +92,7 @@ export function CreateFileDialog({ projectId, open, onOpenChange, onCreated }: P
 					<DialogFooter>
 						<DialogClose
 							render={
-								<Button variant="outline" type="button">
+								<Button variant="outline" type="button" disabled={isSubmitting}>
 									Cancel
 								</Button>
 							}

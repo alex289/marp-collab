@@ -29,9 +29,9 @@ export const OutlinePanel = ({ items, isMarkdown, onSelectLine }: OutlinePanelPr
 							<Button
 								key={`${item.line}:${item.text}`}
 								type="button"
-								variant="default"
+								variant="ghost"
 								onClick={() => onSelectLine(item.line)}
-								className="flex min-w-0 items-left gap-2 rounded-md px-2 py-1.5 justify-start text-xs bg-transparent"
+								className="flex min-w-0 justify-start gap-2 px-2 py-1.5 text-xs"
 								style={{
 									paddingLeft: `${1 + (item.level - 1) * 0.75}rem`,
 								}}

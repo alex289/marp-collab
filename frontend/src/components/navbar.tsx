@@ -15,7 +15,7 @@ import {
 import { cn } from "@/lib/utils";
 import { ModeToggle } from "./mode-toggle";
 import { useTheme } from "./theme-provider";
-import { TooltipProvider } from "./ui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
 type CollabStatus = "connecting" | "connected" | "disconnected";
 
@@ -104,11 +104,20 @@ export default function Navbar({ breadcrumb, actions }: NavbarProps) {
 						</>
 					) : null}
 					{breadcrumb.status ? (
-						<span
-							aria-label={`Connection: ${breadcrumb.status}`}
-							title={`Connection: ${breadcrumb.status}`}
-							className={cn("ml-1 size-2 shrink-0 rounded-full", STATUS_DOT[breadcrumb.status])}
-						/>
+						<Tooltip>
+							<TooltipTrigger
+								render={
+									<span
+										aria-label={`Connection: ${breadcrumb.status}`}
+										className={cn(
+											"ml-1 size-2 shrink-0 rounded-full",
+											STATUS_DOT[breadcrumb.status],
+										)}
+									/>
+								}
+							/>
+							<TooltipContent>Connection: {breadcrumb.status}</TooltipContent>
+						</Tooltip>
 					) : null}
 				</nav>
 			) : (
@@ -118,21 +127,25 @@ export default function Navbar({ breadcrumb, actions }: NavbarProps) {
 			<div className="flex items-center gap-1 justify-self-end">
 				{actions}
 				<div className="hidden items-center gap-1 sm:flex">
-					<TooltipProvider>
-						<ModeToggle />
-					</TooltipProvider>
+					<ModeToggle />
 
-					<Button
-						type="button"
-						variant="ghost"
-						size="icon"
-						onClick={onLogout}
-						disabled={busy}
-						title="Logout"
-						aria-label="Logout"
-					>
-						<LogOut className="h-4 w-4" />
-					</Button>
+					<Tooltip>
+						<TooltipTrigger
+							render={
+								<Button
+									type="button"
+									variant="ghost"
+									size="icon"
+									onClick={onLogout}
+									disabled={busy}
+									aria-label="Logout"
+								>
+									<LogOut />
+								</Button>
+							}
+						/>
+						<TooltipContent>Logout</TooltipContent>
+					</Tooltip>
 				</div>
 
 				<DropdownMenu>
@@ -145,7 +158,7 @@ export default function Navbar({ breadcrumb, actions }: NavbarProps) {
 								className="sm:hidden"
 								aria-label="More options"
 							>
-								<EllipsisVertical className="h-4 w-4" />
+								<EllipsisVertical />
 							</Button>
 						}
 					/>
