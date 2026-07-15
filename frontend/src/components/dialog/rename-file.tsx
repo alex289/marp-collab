@@ -12,25 +12,20 @@ import {
 import { Field, FieldGroup } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { API_URL } from "@/lib/config";
+import { getProjectFilesErrorMessage } from "@/features/project-files/project-files-client";
 import type { DeckFile } from "@/lib/types";
 import { useEffect, useMemo, useState } from "react";
 
-export type RenameResult =
-	| { type: "file"; oldFileId: string; newFileId: string }
-	| { type: "folder"; oldFolderPath: string; newFolderPath: string };
-
 type Props = {
-	projectId: string;
 	file: DeckFile | null;
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
-	onRenamed: (result: RenameResult) => void;
+	onRename: (file: DeckFile, name: string) => Promise<void>;
 };
 
 const getBasename = (path: string): string => path.split("/").pop() ?? path;
 
-export function RenameFileDialog({ projectId, file, open, onOpenChange, onRenamed }: Props) {
+export function RenameFileDialog({ file, open, onOpenChange, onRename }: Props) {
 	const [name, setName] = useState("");
 	const [error, setError] = useState<string | null>(null);
 	const [isSubmitting, setIsSubmitting] = useState(false);
@@ -63,42 +58,15 @@ export function RenameFileDialog({ projectId, file, open, onOpenChange, onRename
 		setError(null);
 
 		try {
-			const endpoint =
-				file.type === "folder"
-					? `${API_URL}/projects/${projectId}/folders/${encodeURIComponent(file.id)}/rename`
-					: `${API_URL}/projects/${projectId}/files/rename/${encodeURIComponent(file.id)}`;
-			const res = await fetch(endpoint, {
-				method: "PATCH",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ name: name.trim() }),
-			});
-
-			const data = (await res.json()) as {
-				error?: string;
-				newFileId?: string;
-				newFolderPath?: string;
-			};
-
-			if (!res.ok) {
-				setError(data.error ?? "Failed to rename item");
-				return;
-			}
-
-			if (file.type === "folder" && data.newFolderPath) {
-				onRenamed({ type: "folder", oldFolderPath: file.id, newFolderPath: data.newFolderPath });
-				handleOpenChange(false);
-				return;
-			}
-
-			if (data.newFileId) {
-				onRenamed({ type: "file", oldFileId: file.id, newFileId: data.newFileId });
-				handleOpenChange(false);
-				return;
-			}
-
-			setError("Rename response was missing the new name.");
-		} catch {
-			setError("An unexpected error occurred. Please try again.");
+			await onRename(file, name.trim());
+			handleOpenChange(false);
+		} catch (requestError) {
+			setError(
+				getProjectFilesErrorMessage(
+					requestError,
+					"An unexpected error occurred. Please try again.",
+				),
+			);
 		} finally {
 			setIsSubmitting(false);
 		}

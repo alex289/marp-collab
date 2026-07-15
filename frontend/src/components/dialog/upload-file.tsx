@@ -10,17 +10,16 @@ import {
 	DialogTitle,
 } from "@/components/ui/dialog";
 import { FileDropZone } from "@/components/ui/file-drop-zone";
-import { uploadProjectFiles } from "@/lib/upload-files";
+import type { UploadProjectFilesResult } from "@/features/project-files/project-files-client";
 import { useState } from "react";
 
 type Props = {
-	projectId: string;
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
-	onUploaded: () => void;
+	onUpload: (files: File[]) => Promise<UploadProjectFilesResult>;
 };
 
-export function UploadFileDialog({ projectId, open, onOpenChange, onUploaded }: Props) {
+export function UploadFileDialog({ open, onOpenChange, onUpload }: Props) {
 	const [error, setError] = useState<string | null>(null);
 	const [isSubmitting, setIsSubmitting] = useState(false);
 	const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
@@ -43,14 +42,7 @@ export function UploadFileDialog({ projectId, open, onOpenChange, onUploaded }: 
 		setIsSubmitting(true);
 		setError(null);
 
-		const { uploadedAny, failures } = await uploadProjectFiles({
-			projectId,
-			files: selectedFiles,
-		});
-
-		if (uploadedAny) {
-			onUploaded();
-		}
+		const { failures } = await onUpload(selectedFiles);
 
 		if (failures.length > 0) {
 			setError(failures.join("\n"));
