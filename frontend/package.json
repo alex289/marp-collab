@@ -6,8 +6,8 @@
 	"scripts": {
 		"dev": "vite",
 		"build": "tsc -b && vite build",
-		"test": "node --test src/features/project-files/*.test.ts",
-		"typecheck": "tsc -b",
+		"test": "node --test src/**/*.test.ts",
+		"typecheck": "tsc --noEmit",
 		"preview": "vite preview"
 	},
 	"dependencies": {
