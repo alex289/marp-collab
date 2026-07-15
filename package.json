@@ -13,7 +13,7 @@
 		"format:check": "oxfmt --check",
 		"build": "pnpm -r build",
 		"typecheck": "pnpm -r typecheck",
-		"test": "pnpm -r test"
+		"test": "pnpm --filter ./frontend test && pnpm --filter ./backend test"
 	},
 	"dependencies": {
 		"oxfmt": "^0.58.0",
