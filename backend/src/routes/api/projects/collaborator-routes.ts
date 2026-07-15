@@ -6,10 +6,7 @@ import {
 	removeProjectCollaborator,
 	updateProjectCollaborator,
 } from "../../../projects/collaborator-membership.ts";
-import {
-	requireProjectOwner,
-	type ProjectRouteVariables,
-} from "./project-access-middleware.ts";
+import { requireProjectOwner, type ProjectRouteVariables } from "./project-access-middleware.ts";
 import { addCollaboratorSchema, updateCollaboratorSchema } from "./schemas.ts";
 
 const app = new Hono<{ Variables: ProjectRouteVariables }>();
