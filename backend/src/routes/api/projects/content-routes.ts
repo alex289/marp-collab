@@ -26,7 +26,6 @@ import {
 	openProjectFile,
 } from "../../../projects/storage.ts";
 import {
-	requireProjectAccess,
 	requireProjectWriteAccess,
 	type ProjectRouteVariables,
 } from "./project-access-middleware.ts";
@@ -39,8 +38,6 @@ import {
 } from "./schemas.ts";
 
 const app = new Hono<{ Variables: ProjectRouteVariables }>();
-
-app.use("/:projectId/*", requireProjectAccess);
 
 app.get("/:projectId/files", async (c) => {
 	const { projectId } = c.req.param();

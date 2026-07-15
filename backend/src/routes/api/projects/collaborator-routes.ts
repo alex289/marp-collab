@@ -7,15 +7,12 @@ import {
 	updateProjectCollaborator,
 } from "../../../projects/collaborator-membership.ts";
 import {
-	requireProjectAccess,
 	requireProjectOwner,
 	type ProjectRouteVariables,
 } from "./project-access-middleware.ts";
 import { addCollaboratorSchema, updateCollaboratorSchema } from "./schemas.ts";
 
 const app = new Hono<{ Variables: ProjectRouteVariables }>();
-
-app.use("/:projectId/*", requireProjectAccess);
 
 app.get("/:projectId/collaborators", (c) => {
 	const { projectId } = c.req.param();
