@@ -56,6 +56,11 @@ describe("project-collaborator model", () => {
 		ok(collab!.createdAt instanceof Date);
 	});
 
+	test("getCollaborator returns only Membership detail fields", () => {
+		const collab = models.getCollaborator("proj-1", "collab-1");
+		deepEqual(Object.keys(collab!).sort(), ["createdAt", "projectId", "readOnly", "userId"]);
+	});
+
 	test("getCollaborator returns undefined for unknown pair", () => {
 		equal(models.getCollaborator("proj-1", "nobody"), undefined);
 		equal(models.getCollaborator("nobody", "collab-1"), undefined);

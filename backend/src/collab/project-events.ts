@@ -1,8 +1,9 @@
 import { collabServer } from "./hocuspocus.ts";
+import { documentBelongsToProject } from "../projects/document-identity.ts";
 
 export function broadcastFilesChanged(projectId: string): void {
 	for (const [documentName, document] of collabServer.documents) {
-		if (documentName.startsWith(`project/${projectId}/`)) {
+		if (documentBelongsToProject(documentName, projectId)) {
 			document.broadcastStateless("files-changed");
 		}
 	}
