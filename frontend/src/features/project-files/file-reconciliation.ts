@@ -43,22 +43,22 @@ export function reconcileSelectedFileAfterRename(
 }
 
 export function reconcileOpenFoldersAfterRename(
-	openFolders: Record<string, boolean>,
+	openFolders: ReadonlyMap<string, boolean>,
 	result: RenameResult,
-): Record<string, boolean> {
+): ReadonlyMap<string, boolean> {
 	if (result.type === "file") {
 		return openFolders;
 	}
 
-	const next: Record<string, boolean> = {};
+	const next = new Map<string, boolean>();
 	let changed = false;
 
-	for (const [path, open] of Object.entries(openFolders)) {
+	for (const [path, open] of openFolders) {
 		if (path === result.oldFolderPath || path.startsWith(`${result.oldFolderPath}/`)) {
-			next[`${result.newFolderPath}${path.slice(result.oldFolderPath.length)}`] = open;
+			next.set(`${result.newFolderPath}${path.slice(result.oldFolderPath.length)}`, open);
 			changed = true;
 		} else {
-			next[path] = open;
+			next.set(path, open);
 		}
 	}
 
@@ -66,20 +66,20 @@ export function reconcileOpenFoldersAfterRename(
 }
 
 export function expandOpenFoldersForSelection(
-	openFolders: Record<string, boolean>,
+	openFolders: ReadonlyMap<string, boolean>,
 	selectedFileId: string | null,
-): Record<string, boolean> {
+): ReadonlyMap<string, boolean> {
 	if (!selectedFileId) {
 		return openFolders;
 	}
 
 	const ancestors = getAncestorFolderPaths(selectedFileId);
 	let changed = false;
-	const next = { ...openFolders };
+	const next = new Map(openFolders);
 
 	for (const folderPath of ancestors) {
-		if (!next[folderPath]) {
-			next[folderPath] = true;
+		if (!next.get(folderPath)) {
+			next.set(folderPath, true);
 			changed = true;
 		}
 	}

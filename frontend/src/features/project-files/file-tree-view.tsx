@@ -182,7 +182,7 @@ function FileTreeItem({ node }: { node: FileTreeNode }) {
 
 		const file = node.file;
 		const isDragging = dragState.draggingFileId === file.id;
-		const filePresence = presenceByFileId[file.id] ?? [];
+		const filePresence = presenceByFileId.get(file.id) ?? [];
 		const dragProps = {
 			draggable: true,
 			onDragStart: (event: React.DragEvent) => {
@@ -265,7 +265,7 @@ function FileTreeItem({ node }: { node: FileTreeNode }) {
 	const isActiveBranch = Boolean(
 		selectedFileId && (selectedFileId === node.path || selectedFileId.startsWith(`${node.path}/`)),
 	);
-	const isOpen = openFolders[node.path] ?? false;
+	const isOpen = openFolders.get(node.path) ?? false;
 	const folderFile = node.file?.type === "folder" ? node.file : null;
 	const isDragOver =
 		(dragState.dragOverPath === node.path && dragState.draggingFileId !== null) ||

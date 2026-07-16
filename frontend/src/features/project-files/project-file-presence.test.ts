@@ -13,7 +13,9 @@ test("groups, deduplicates and sorts valid participants by file", () => {
 	];
 
 	assert.deepEqual(
-		getProjectFilePresenceById(states, null)["a.md"]?.map(({ id }) => id),
+		getProjectFilePresenceById(states, null)
+			.get("a.md")
+			?.map(({ id }) => id),
 		["1", "2"],
 	);
 });
@@ -24,5 +26,5 @@ test("excludes the current user and malformed states", () => {
 		{ user: {}, activeFile: { fileId: "a.md" } },
 		{ user: { id: "other", name: "Other" }, activeFile: {} },
 	];
-	assert.deepEqual(getProjectFilePresenceById(states, "self"), {});
+	assert.deepEqual(getProjectFilePresenceById(states, "self"), new Map());
 });

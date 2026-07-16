@@ -6,11 +6,11 @@ export function useProjectFilePresence(
 	awareness: Awareness | null,
 	currentUserId: string | null,
 ): ProjectFilePresenceById {
-	const [presence, setPresence] = useState<ProjectFilePresenceById>({});
+	const [presence, setPresence] = useState<ProjectFilePresenceById>(new Map());
 
 	useEffect(() => {
 		if (!awareness) {
-			setPresence({});
+			setPresence(new Map());
 			return;
 		}
 

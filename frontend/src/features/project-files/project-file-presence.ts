@@ -5,7 +5,7 @@ export type ProjectFilePresenceParticipant = {
 	image: string | null;
 };
 
-export type ProjectFilePresenceById = Record<string, ProjectFilePresenceParticipant[]>;
+export type ProjectFilePresenceById = ReadonlyMap<string, ProjectFilePresenceParticipant[]>;
 
 export function getProjectFilePresenceById(
 	states: Iterable<unknown>,
@@ -29,12 +29,15 @@ export function getProjectFilePresenceById(
 		fileParticipants.set(participant.id, participant);
 	}
 
-	const presenceByFileId: ProjectFilePresenceById = {};
+	const presenceByFileId = new Map<string, ProjectFilePresenceParticipant[]>();
 	for (const [fileId, participants] of participantsByFile.entries()) {
-		presenceByFileId[fileId] = Array.from(participants.values()).sort((left, right) =>
-			left.name === right.name
-				? left.id.localeCompare(right.id)
-				: left.name.localeCompare(right.name),
+		presenceByFileId.set(
+			fileId,
+			Array.from(participants.values()).sort((left, right) =>
+				left.name === right.name
+					? left.id.localeCompare(right.id)
+					: left.name.localeCompare(right.name),
+			),
 		);
 	}
 

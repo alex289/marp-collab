@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 import type { Awareness } from "y-protocols/awareness.js";
 import type { DeckFile } from "../../lib/types";
 import { buildFileTree, getParentFolderPath, type FileTreeNode } from "./file-tree";
@@ -10,6 +11,7 @@ import {
 } from "./file-reconciliation";
 import type { ProjectFilePresenceById } from "./project-file-presence";
 import {
+	getProjectFilesErrorMessage,
 	projectFilesClient,
 	type ProjectFilesClient,
 	type UploadProjectFilesResult,
@@ -41,7 +43,7 @@ export type ProjectFilesWorkspace = {
 	reload: () => Promise<void>;
 	selectedFileId: string | null;
 	selectFile: (file: DeckFile) => void;
-	openFolders: Record<string, boolean>;
+	openFolders: ReadonlyMap<string, boolean>;
 	setFolderOpen: (path: string, open: boolean) => void;
 	presenceByFileId: ProjectFilePresenceById;
 	dragState: ProjectFilesDragState;
@@ -74,7 +76,7 @@ export function useProjectFilesWorkspace({
 	const [files, setFiles] = useState<DeckFile[]>([]);
 	const [isLoading, setIsLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
-	const [openFolders, setOpenFolders] = useState<Record<string, boolean>>({});
+	const [openFolders, setOpenFolders] = useState<ReadonlyMap<string, boolean>>(new Map());
 	const [dragState, setDragState] = useState<ProjectFilesDragState>(emptyProjectFilesDragState);
 	const [dropUploadDragOverPath, setDropUploadDragOverPath] = useState<string | null>(null);
 	const [isUploadingDrop, setIsUploadingDrop] = useState(false);
@@ -112,11 +114,11 @@ export function useProjectFilesWorkspace({
 
 	const setFolderOpen = useCallback((path: string, open: boolean) => {
 		setOpenFolders((previous) => {
-			if ((previous[path] ?? false) === open) {
+			if ((previous.get(path) ?? false) === open) {
 				return previous;
 			}
 
-			return { ...previous, [path]: open };
+			return new Map(previous).set(path, open);
 		});
 	}, []);
 
@@ -217,8 +219,8 @@ export function useProjectFilesWorkspace({
 					onSelectFile(reconciledFile);
 				}
 				await reload();
-			} catch {
-				return;
+			} catch (moveError) {
+				toast.error(getProjectFilesErrorMessage(moveError, "Failed to move file"));
 			}
 		},
 		[client, onSelectFile, projectId, reload, selectedFile],

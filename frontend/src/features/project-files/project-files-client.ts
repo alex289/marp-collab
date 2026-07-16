@@ -37,7 +37,9 @@ export function createProjectFilesClient(fetcher: FetchLike = fetch): ProjectFil
 		async list(projectId) {
 			const response = await fetcher(`${API_URL}/projects/${projectId}/files`, {});
 			if (!response.ok) {
-				throw new ProjectFilesRequestError(`Could not load files (${response.status})`);
+				throw new ProjectFilesRequestError(
+					await readErrorMessage(response, "Could not load files"),
+				);
 			}
 
 			const payload = (await response.json()) as { files: DeckFile[] };
@@ -80,8 +82,9 @@ export function createProjectFilesClient(fetcher: FetchLike = fetch): ProjectFil
 					});
 
 					if (!response.ok) {
-						const data = (await response.json()) as { error?: string };
-						failures.push(`${file.name}: ${data.error ?? "Failed to upload file"}`);
+						failures.push(
+							`${file.name}: ${await readErrorMessage(response, "Failed to upload file")}`,
+						);
 						continue;
 					}
 
@@ -113,15 +116,16 @@ export function createProjectFilesClient(fetcher: FetchLike = fetch): ProjectFil
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({ name }),
 			});
+			if (!response.ok) {
+				throw new ProjectFilesRequestError(
+					await readErrorMessage(response, "Failed to rename item"),
+				);
+			}
+
 			const data = (await response.json()) as {
-				error?: string;
 				newFileId?: string;
 				newFolderPath?: string;
 			};
-
-			if (!response.ok) {
-				throw new ProjectFilesRequestError(data.error ?? "Failed to rename item");
-			}
 
 			if (file.type === "folder" && data.newFolderPath) {
 				return {
@@ -171,6 +175,27 @@ async function ensureSuccessful(response: Response, fallbackMessage: string): Pr
 		return;
 	}
 
-	const data = (await response.json()) as { error?: string };
-	throw new ProjectFilesRequestError(data.error ?? fallbackMessage);
+	throw new ProjectFilesRequestError(await readErrorMessage(response, fallbackMessage));
+}
+
+const MAX_ERROR_TEXT_LENGTH = 300;
+
+async function readErrorMessage(response: Response, fallbackMessage: string): Promise<string> {
+	const body = await response.text().catch(() => "");
+
+	try {
+		const data = JSON.parse(body) as { error?: unknown };
+		if (typeof data.error === "string" && data.error.length > 0) {
+			return data.error;
+		}
+	} catch {
+		// Body is not JSON — fall through to the raw response text.
+	}
+
+	const text = body.trim();
+	if (text.length === 0) {
+		return `${fallbackMessage} (HTTP ${response.status})`;
+	}
+
+	return text.length > MAX_ERROR_TEXT_LENGTH ? `${text.slice(0, MAX_ERROR_TEXT_LENGTH)}…` : text;
 }

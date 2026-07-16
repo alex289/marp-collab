@@ -55,17 +55,28 @@ test("leaves an unrelated selection unchanged by identity", () => {
 test("rebases open descendants after folder rename", () => {
 	assert.deepEqual(
 		reconcileOpenFoldersAfterRename(
-			{ old: true, "old/nested": true, other: false },
+			new Map([
+				["old", true],
+				["old/nested", true],
+				["other", false],
+			]),
 			{ type: "folder", oldFolderPath: "old", newFolderPath: "new" },
 		),
-		{ new: true, "new/nested": true, other: false },
+		new Map([
+			["new", true],
+			["new/nested", true],
+			["other", false],
+		]),
 	);
 });
 
 test("opens every ancestor of the selected file", () => {
-	assert.deepEqual(expandOpenFoldersForSelection({ closed: false }, "a/b/slides.md"), {
-		closed: false,
-		a: true,
-		"a/b": true,
-	});
+	assert.deepEqual(
+		expandOpenFoldersForSelection(new Map([["closed", false]]), "a/b/slides.md"),
+		new Map([
+			["closed", false],
+			["a", true],
+			["a/b", true],
+		]),
+	);
 });

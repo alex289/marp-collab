@@ -173,6 +173,26 @@ test("preserves a backend error message", async () => {
 	});
 });
 
+test("falls back to the response text for non-JSON error bodies", async () => {
+	const client = createProjectFilesClient(() =>
+		Promise.resolve(new Response("Bad Gateway", { status: 502 })),
+	);
+	await assert.rejects(() => client.createFile("p1", "slides.md"), {
+		name: "ProjectFilesRequestError",
+		message: "Bad Gateway",
+	});
+});
+
+test("falls back to the status code for empty error bodies", async () => {
+	const client = createProjectFilesClient(() =>
+		Promise.resolve(new Response(null, { status: 500 })),
+	);
+	await assert.rejects(() => client.createFile("p1", "slides.md"), {
+		name: "ProjectFilesRequestError",
+		message: "Failed to create file (HTTP 500)",
+	});
+});
+
 test("encodes file URL segments without encoding path separators", () => {
 	const client = createProjectFilesClient();
 	assert.equal(
