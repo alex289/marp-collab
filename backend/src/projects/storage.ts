@@ -1,10 +1,10 @@
 import { glob, mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
-import type { Stats } from "node:fs";
+import { createReadStream, type Stats } from "node:fs";
 import { dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { Readable } from "node:stream";
 import { ZipArchive } from "archiver";
 import { getFileType, MARKDOWN_EXTENSIONS } from "../helpers/file-allowlist.ts";
-import { fileExists } from "../helpers/file-exists.ts";
+import { parseProjectDocumentName } from "./document-identity.ts";
 
 export type DeckFile = {
 	id: string;
@@ -21,17 +21,16 @@ function isValidProjectId(projectId: string): boolean {
 }
 
 function resolveDocumentPath(documentName: string): string | null {
-	const parts = documentName.split("/");
-	if (parts.length < 3 || parts[0] !== "project") {
+	const identity = parseProjectDocumentName(documentName);
+	if (!identity) {
 		return null;
 	}
 
-	const projectId = parts[1];
-	if (!projectId || !isValidProjectId(projectId)) {
+	const { projectId, fileId } = identity;
+	if (!isValidProjectId(projectId)) {
 		return null;
 	}
 
-	const fileId = parts.slice(2).join("/");
 	if (!fileId) {
 		return null;
 	}
@@ -59,10 +58,6 @@ async function ensurePresentationsDir(projectId: string): Promise<void> {
 		throw new Error(`Invalid project id: ${projectId}`);
 	}
 	await mkdir(resolve(presentationsDir, projectId), { recursive: true });
-}
-
-export function toDocumentName(projectId: string, fileId: string): string {
-	return `project/${projectId}/${fileId}`;
 }
 
 export async function getDeckFiles(projectId: string): Promise<DeckFile[]> {
@@ -224,7 +219,7 @@ export async function saveDocumentBinary(documentName: string, data: Uint8Array)
 	await writeFile(`${filePath}.yjs`, data);
 }
 
-export function resolveProjectFilePath(projectId: string, fileId: string): string | null {
+function resolveProjectFilePath(projectId: string, fileId: string): string | null {
 	if (!isValidProjectId(projectId)) {
 		return null;
 	}
@@ -239,6 +234,48 @@ export function resolveProjectFilePath(projectId: string, fileId: string): strin
 	}
 
 	return filePath;
+}
+
+export function isValidProjectFileLocation(projectId: string, fileId: string): boolean {
+	return resolveProjectFilePath(projectId, fileId) !== null;
+}
+
+export async function readProjectFile(
+	projectId: string,
+	fileId: string,
+): Promise<Uint8Array<ArrayBuffer> | undefined> {
+	const filePath = resolveProjectFilePath(projectId, fileId);
+	if (!filePath) {
+		return undefined;
+	}
+
+	try {
+		return new Uint8Array(await readFile(filePath));
+	} catch (error) {
+		if (isMissingFileError(error)) {
+			return undefined;
+		}
+
+		throw error;
+	}
+}
+
+export async function openProjectFile(
+	projectId: string,
+	fileId: string,
+): Promise<Readable | undefined> {
+	const filePath = resolveProjectFilePath(projectId, fileId);
+	if (!filePath) {
+		return undefined;
+	}
+
+	try {
+		await stat(filePath);
+	} catch {
+		return undefined;
+	}
+
+	return createReadStream(filePath);
 }
 
 function isValidProjectBasename(name: string): boolean {
@@ -382,7 +419,7 @@ export async function renameProjectFile(
 
 	const sourceYjsPath = `${sourcePath}.yjs`;
 	const destYjsPath = `${destPath}.yjs`;
-	const hasSourceYjs = await fileExists(sourceYjsPath);
+	const hasSourceYjs = (await getFileStatsSafe(sourceYjsPath)) !== undefined;
 
 	const canRenameYjs = await isRenamePossible(sourceYjsPath, destYjsPath, "file");
 	if (hasSourceYjs && !canRenameYjs) {

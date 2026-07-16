@@ -5,11 +5,12 @@ import {
 	getDocumentContent,
 	saveDocumentBinary,
 	saveDocumentContent,
-} from "./files.ts";
+} from "../projects/storage.ts";
 import { isEditableExtension } from "../helpers/file-allowlist.ts";
 import { auth } from "../auth.ts";
-import { getUserProjectAccess } from "../helpers/project-auth.ts";
+import { getProjectAuthorization } from "../projects/access-policy.ts";
 import { registerProjectConnection, unregisterProjectConnection } from "./connections.ts";
+import { parseProjectDocumentName } from "../projects/document-identity.ts";
 
 type CollabContext = {
 	userId: string;
@@ -29,20 +30,6 @@ const hashString = (value: string): number => {
 	}
 	return Math.abs(hash);
 };
-
-function parseProjectDocumentName(
-	documentName: string,
-): { projectId: string; fileId: string } | null {
-	const parts = documentName.split("/");
-	if (parts[0] !== "project" || !parts[1]) {
-		return null;
-	}
-
-	return {
-		projectId: parts[1],
-		fileId: parts.slice(2).join("/"),
-	};
-}
 
 function isProjectPresenceDocument(documentName: string): boolean {
 	const parsed = parseProjectDocumentName(documentName);
@@ -74,18 +61,18 @@ export const collabServer = new Hocuspocus({
 			throw new Error("Only text files can be opened in the editor");
 		}
 
-		const access = getUserProjectAccess(projectId, session.user.id);
-		if (!access) {
+		const authorization = getProjectAuthorization(projectId, session.user.id, "read");
+		if (!authorization.allowed) {
 			throw new Error("Forbidden");
 		}
 
-		connectionConfig.readOnly = access.readOnly;
+		connectionConfig.readOnly = authorization.access.readOnly;
 
 		return {
 			userId: session.user.id,
 			userName: session.user.name || session.user.email,
 			color: fallbackColors[hashString(session.user.id) % fallbackColors.length] ?? "#0ea5e9",
-			readOnly: access.readOnly,
+			readOnly: authorization.access.readOnly,
 		} satisfies CollabContext;
 	},
 	// oxlint-disable-next-line require-await
