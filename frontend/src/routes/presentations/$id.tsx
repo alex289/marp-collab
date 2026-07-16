@@ -9,6 +9,7 @@ import {
 	useProjectPresence,
 } from "@/hooks/use-collab-document";
 import { useFiles } from "@/hooks/use-files";
+import { useIncludedMarkdown } from "@/hooks/use-included-markdown";
 import type { DeckFile } from "@/lib/types";
 import Navbar from "@/components/navbar";
 import { PresenceAvatars } from "@/components/presence-avatars";
@@ -172,7 +173,10 @@ function RouteComponent() {
 	const isViewer = search.mode === "viewer";
 	const autoFullscreen = search.fullscreen === true;
 	const outlineItems = useMemo(() => parseMarkdownOutline(markdown), [markdown]);
-	const slideCount = useMemo(() => countMarpSlides(markdown), [markdown]);
+	// Rendering (preview, presentation, slide count) works on the markdown with
+	// <!-- @include: file.md --> comments expanded; the editor keeps the raw text.
+	const renderedMarkdown = useIncludedMarkdown(markdown, id, previewFile?.id ?? null);
+	const slideCount = useMemo(() => countMarpSlides(renderedMarkdown), [renderedMarkdown]);
 
 	useEffect(() => {
 		if (files.length === 0) {
@@ -714,7 +718,7 @@ function RouteComponent() {
 		};
 		const frame = (
 			<PresentationFrame
-				markdown={markdown}
+				markdown={renderedMarkdown}
 				slideIndex={slideIndex}
 				projectId={id}
 				selectedFileId={selectedFile?.id ?? null}
@@ -940,7 +944,7 @@ function RouteComponent() {
 
 				<Suspense>
 					<PreviewPane
-						markdown={markdown}
+						markdown={renderedMarkdown}
 						label={previewFile?.label ?? null}
 						projectId={id}
 						themeRevision={themeRevision}
