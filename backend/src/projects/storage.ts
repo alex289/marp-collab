@@ -199,6 +199,15 @@ export async function getDocumentBinary(documentName: string): Promise<Uint8Arra
 	}
 }
 
+export async function documentFileExists(documentName: string): Promise<boolean> {
+	const filePath = resolveDocumentPath(documentName);
+	if (!filePath) {
+		return false;
+	}
+
+	return (await getFileStatsSafe(filePath)) !== undefined;
+}
+
 export async function saveDocumentContent(documentName: string, content: string): Promise<void> {
 	const filePath = resolveDocumentPath(documentName);
 	if (!filePath) {

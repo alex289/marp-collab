@@ -11,6 +11,13 @@ type CollabState = {
 	undoManager: Y.UndoManager | null;
 	status: "connecting" | "connected" | "disconnected";
 	readOnly: boolean;
+	synced: boolean;
+	/**
+	 * Name of the document this state belongs to. The state lags one render
+	 * behind a document switch; consumers must compare this against the
+	 * document they expect instead of assuming yText is the current file's.
+	 */
+	documentName: string | null;
 };
 
 const defaultState: CollabState = {
@@ -19,6 +26,8 @@ const defaultState: CollabState = {
 	undoManager: null,
 	status: "disconnected",
 	readOnly: false,
+	synced: false,
+	documentName: null,
 };
 
 const palette = ["#f97316", "#16a34a", "#0ea5e9", "#e11d48", "#0891b2", "#ca8a04"];
@@ -81,6 +90,12 @@ export const useCollabDocument = (
 			onStateless: ({ payload }: { payload: string }) => {
 				onStatelessMessageRef.current?.(payload);
 			},
+			onSynced: () => {
+				setState((current) => ({
+					...current,
+					synced: true,
+				}));
+			},
 			onAuthenticated: ({ scope }) => {
 				setState((current) => ({
 					...current,
@@ -102,6 +117,8 @@ export const useCollabDocument = (
 			undoManager,
 			status: "connecting",
 			readOnly: false,
+			synced: false,
+			documentName,
 		});
 
 		return () => {

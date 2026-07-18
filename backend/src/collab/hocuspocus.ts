@@ -1,6 +1,7 @@
 import { type ConnectionConfiguration, Hocuspocus } from "@hocuspocus/server";
 import * as Y from "yjs";
 import {
+	documentFileExists,
 	getDocumentBinary,
 	getDocumentContent,
 	saveDocumentBinary,
@@ -100,14 +101,26 @@ export const collabServer = new Hocuspocus({
 			return doc;
 		}
 
-		const doc = new Y.Doc();
-		const text = doc.getText("content");
 		const initialContent = await getDocumentContent(documentName);
-		text.insert(0, initialContent ?? "");
+		if (initialContent === undefined) {
+			// Files are always created through the REST API before they are opened
+			// for collaboration. A missing file means it was renamed, moved, or
+			// deleted — refuse to load so a reconnecting client can't recreate it.
+			throw new Error(`Document not found: ${documentName}`);
+		}
+
+		const doc = new Y.Doc();
+		doc.getText("content").insert(0, initialContent);
 		return doc;
 	},
 	async onStoreDocument({ documentName, document }: { documentName: string; document: Y.Doc }) {
 		if (isProjectPresenceDocument(documentName)) {
+			return;
+		}
+
+		if (!(await documentFileExists(documentName))) {
+			// The backing file was renamed, moved, or deleted while this document
+			// was still loaded — don't resurrect it at the old location.
 			return;
 		}
 

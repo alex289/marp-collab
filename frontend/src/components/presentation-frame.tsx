@@ -10,6 +10,7 @@ type PresentationFrameProps = {
 	projectId?: string;
 	selectedFileId?: string | null;
 	themeRevision: number;
+	assetRevision?: number;
 	onMetaChange?: (meta: { active: number; total: number }) => void;
 	showSpeakerNotes?: boolean;
 	className?: string;
@@ -21,6 +22,7 @@ export function PresentationFrame({
 	projectId,
 	selectedFileId,
 	themeRevision,
+	assetRevision = 0,
 	onMetaChange,
 	showSpeakerNotes = false,
 	className,
@@ -34,7 +36,7 @@ export function PresentationFrame({
 		// Project themes are registered on the shared Marp instance; this invalidates stale renders.
 		void themeRevision;
 		try {
-			return renderMarp(markdown, projectId, selectedFileId);
+			return renderMarp(markdown, projectId, selectedFileId, assetRevision);
 		} catch (error) {
 			return {
 				html: `<section><h1>Marp Render Error</h1><p>${error instanceof Error ? error.message : "Unknown error"}</p></section>`,
@@ -42,7 +44,7 @@ export function PresentationFrame({
 				comments: [[]],
 			};
 		}
-	}, [markdown, projectId, selectedFileId, themeRevision]);
+	}, [markdown, projectId, selectedFileId, themeRevision, assetRevision]);
 
 	const activeComments = rendered.comments[slideIndex] ?? [];
 	const hasSpeakerNotes = activeComments.some((comment) => comment.trim().length > 0);

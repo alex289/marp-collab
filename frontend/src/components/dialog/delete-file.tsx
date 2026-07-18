@@ -8,20 +8,19 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
-import { API_URL } from "@/lib/config";
 import type { DeckFile } from "@/lib/types";
 import { useState } from "react";
 import ErrorAlert from "@/components/alerts/error-alert";
+import { getProjectFilesErrorMessage } from "@/features/project-files/project-files-client";
 
 type Props = {
-	projectId: string;
 	file: DeckFile | null;
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
-	onDeleted: () => void;
+	onDelete: (file: DeckFile) => Promise<void>;
 };
 
-export function DeleteFileDialog({ projectId, file, open, onOpenChange, onDeleted }: Props) {
+export function DeleteFileDialog({ file, open, onOpenChange, onDelete }: Props) {
 	const [error, setError] = useState<string | null>(null);
 	const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -41,22 +40,15 @@ export function DeleteFileDialog({ projectId, file, open, onOpenChange, onDelete
 		setError(null);
 
 		try {
-			const endpoint =
-				file.type === "folder"
-					? `${API_URL}/projects/${projectId}/folders/${encodeURIComponent(file.id)}`
-					: `${API_URL}/projects/${projectId}/files/${encodeURIComponent(file.id)}`;
-			const res = await fetch(endpoint, { method: "DELETE" });
-
-			if (!res.ok) {
-				const data = (await res.json()) as { error?: string };
-				setError(data.error ?? "Failed to delete file");
-				return;
-			}
-
-			onDeleted();
+			await onDelete(file);
 			handleOpenChange(false);
-		} catch {
-			setError("An unexpected error occurred. Please try again.");
+		} catch (requestError) {
+			setError(
+				getProjectFilesErrorMessage(
+					requestError,
+					"An unexpected error occurred. Please try again.",
+				),
+			);
 		} finally {
 			setIsSubmitting(false);
 		}
