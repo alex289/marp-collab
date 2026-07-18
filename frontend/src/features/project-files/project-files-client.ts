@@ -4,15 +4,8 @@ import type { RenameResult } from "./file-reconciliation.ts";
 
 export type FetchLike = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
-export class ProjectFilesRequestError extends Error {
-	constructor(message: string) {
-		super(message);
-		this.name = "ProjectFilesRequestError";
-	}
-}
-
 export function getProjectFilesErrorMessage(error: unknown, fallback: string): string {
-	return error instanceof ProjectFilesRequestError ? error.message : fallback;
+	return error instanceof Error ? error.message : fallback;
 }
 
 export type UploadProjectFilesResult = {
@@ -37,9 +30,7 @@ export function createProjectFilesClient(fetcher: FetchLike = fetch): ProjectFil
 		async list(projectId) {
 			const response = await fetcher(`${API_URL}/projects/${projectId}/files`, {});
 			if (!response.ok) {
-				throw new ProjectFilesRequestError(
-					await readErrorMessage(response, "Could not load files"),
-				);
+				throw new Error(await readErrorMessage(response, "Could not load files"));
 			}
 
 			const payload = (await response.json()) as { files: DeckFile[] };
@@ -117,9 +108,7 @@ export function createProjectFilesClient(fetcher: FetchLike = fetch): ProjectFil
 				body: JSON.stringify({ name }),
 			});
 			if (!response.ok) {
-				throw new ProjectFilesRequestError(
-					await readErrorMessage(response, "Failed to rename item"),
-				);
+				throw new Error(await readErrorMessage(response, "Failed to rename item"));
 			}
 
 			const data = (await response.json()) as {
@@ -139,7 +128,7 @@ export function createProjectFilesClient(fetcher: FetchLike = fetch): ProjectFil
 				return { type: "file", oldFileId: file.id, newFileId: data.newFileId };
 			}
 
-			throw new ProjectFilesRequestError("Rename response was missing the new name.");
+			throw new Error("Rename response was missing the new name.");
 		},
 
 		async move(projectId, fileId, destination) {
@@ -175,7 +164,7 @@ async function ensureSuccessful(response: Response, fallbackMessage: string): Pr
 		return;
 	}
 
-	throw new ProjectFilesRequestError(await readErrorMessage(response, fallbackMessage));
+	throw new Error(await readErrorMessage(response, fallbackMessage));
 }
 
 const MAX_ERROR_TEXT_LENGTH = 300;
@@ -184,9 +173,11 @@ async function readErrorMessage(response: Response, fallbackMessage: string): Pr
 	const body = await response.text().catch(() => "");
 
 	try {
-		const data = JSON.parse(body) as { error?: unknown };
-		if (typeof data.error === "string" && data.error.length > 0) {
-			return data.error;
+		const data = JSON.parse(body) as { error?: unknown; message?: unknown };
+		for (const message of [data.error, data.message]) {
+			if (typeof message === "string" && message.length > 0) {
+				return message;
+			}
 		}
 	} catch {
 		// Body is not JSON — fall through to the raw response text.

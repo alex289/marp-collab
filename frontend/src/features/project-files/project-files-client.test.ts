@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { API_URL } from "../../lib/config.ts";
 import type { DeckFile } from "../../lib/types.ts";
-import { createProjectFilesClient } from "./project-files-client.ts";
+import { createProjectFilesClient, getProjectFilesErrorMessage } from "./project-files-client.ts";
 
 const deckFile = (id: string, type: DeckFile["type"] = "markdown"): DeckFile => ({
 	id,
@@ -168,7 +168,17 @@ test("preserves a backend error message", async () => {
 		Promise.resolve(Response.json({ error: "Name already exists" }, { status: 409 })),
 	);
 	await assert.rejects(() => client.createFile("p1", "slides.md"), {
-		name: "ProjectFilesRequestError",
+		name: "Error",
+		message: "Name already exists",
+	});
+});
+
+test("preserves a backend message field", async () => {
+	const client = createProjectFilesClient(() =>
+		Promise.resolve(Response.json({ message: "Name already exists" }, { status: 409 })),
+	);
+	await assert.rejects(() => client.createFile("p1", "slides.md"), {
+		name: "Error",
 		message: "Name already exists",
 	});
 });
@@ -178,7 +188,7 @@ test("falls back to the response text for non-JSON error bodies", async () => {
 		Promise.resolve(new Response("Bad Gateway", { status: 502 })),
 	);
 	await assert.rejects(() => client.createFile("p1", "slides.md"), {
-		name: "ProjectFilesRequestError",
+		name: "Error",
 		message: "Bad Gateway",
 	});
 });
@@ -188,9 +198,20 @@ test("falls back to the status code for empty error bodies", async () => {
 		Promise.resolve(new Response(null, { status: 500 })),
 	);
 	await assert.rejects(() => client.createFile("p1", "slides.md"), {
-		name: "ProjectFilesRequestError",
+		name: "Error",
 		message: "Failed to create file (HTTP 500)",
 	});
+});
+
+test("shows regular error messages and falls back for non-errors", () => {
+	assert.equal(
+		getProjectFilesErrorMessage(new TypeError("network unavailable"), "Unexpected error"),
+		"network unavailable",
+	);
+	assert.equal(
+		getProjectFilesErrorMessage("network unavailable", "Unexpected error"),
+		"Unexpected error",
+	);
 });
 
 test("encodes file URL segments without encoding path separators", () => {
