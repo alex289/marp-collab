@@ -12,17 +12,16 @@ import {
 import { Field, FieldGroup } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { API_URL } from "@/lib/config";
+import { getProjectFilesErrorMessage } from "@/features/project-files/project-files-client";
 import { useState } from "react";
 
 type Props = {
-	projectId: string;
 	open: boolean;
 	onOpenChange: (open: boolean) => void;
-	onCreated: () => void;
+	onCreate: (name: string) => Promise<void>;
 };
 
-export function CreateFolderDialog({ projectId, open, onOpenChange, onCreated }: Props) {
+export function CreateFolderDialog({ open, onOpenChange, onCreate }: Props) {
 	const [name, setName] = useState("");
 	const [error, setError] = useState<string | null>(null);
 	const [isSubmitting, setIsSubmitting] = useState(false);
@@ -42,23 +41,15 @@ export function CreateFolderDialog({ projectId, open, onOpenChange, onCreated }:
 		setError(null);
 
 		try {
-			const res = await fetch(`${API_URL}/projects/${projectId}/folders`, {
-				method: "POST",
-
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ name: name.trim() }),
-			});
-
-			if (!res.ok) {
-				const data = (await res.json()) as { error?: string };
-				setError(data.error ?? "Failed to create folder");
-				return;
-			}
-
-			onCreated();
+			await onCreate(name.trim());
 			handleOpenChange(false);
-		} catch {
-			setError("An unexpected error occurred. Please try again.");
+		} catch (requestError) {
+			setError(
+				getProjectFilesErrorMessage(
+					requestError,
+					"An unexpected error occurred. Please try again.",
+				),
+			);
 		} finally {
 			setIsSubmitting(false);
 		}

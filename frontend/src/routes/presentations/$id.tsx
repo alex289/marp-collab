@@ -8,7 +8,6 @@ import {
 	usePresenceUser,
 	useProjectPresence,
 } from "@/hooks/use-collab-document";
-import { useFiles } from "@/hooks/use-files";
 import type { DeckFile } from "@/lib/types";
 import Navbar from "@/components/navbar";
 import { PresenceAvatars } from "@/components/presence-avatars";
@@ -32,6 +31,7 @@ import { applyThemeToYText, getMarkdownTheme } from "@/lib/markdown-theme";
 import { upsertProjectTheme, type ProjectTheme } from "@/lib/project-themes";
 import { API_URL } from "@/lib/config";
 import { releaseWakeLock, requestWakeLock } from "@/lib/wake-lock";
+import { useProjectFilesWorkspace } from "@/features/project-files/use-project-files-workspace";
 import {
 	ChevronLeftIcon,
 	ChevronRightIcon,
@@ -141,9 +141,32 @@ function RouteComponent() {
 	const search = Route.useSearch();
 	const navigate = Route.useNavigate();
 	const presenceUser = usePresenceUser(session?.user ?? null);
-	const { files, isLoading, error, reload } = useFiles(id);
 	const { project } = useProject(id);
 	const [selectedFile, setSelectedFile] = useState<DeckFile | null>(null);
+	const projectPresenceAwareness = useProjectPresence(
+		id,
+		session?.user ?? null,
+		presenceUser,
+		selectedFile?.id ?? null,
+	);
+	const projectFiles = useProjectFilesWorkspace({
+		projectId: id,
+		selectedFile,
+		onSelectFile: setSelectedFile,
+		presenceAwareness: projectPresenceAwareness,
+		currentUserId: presenceUser.userId,
+	});
+	const { files, isLoading } = projectFiles;
+	const collab = useCollabDocument(
+		selectedFile?.type === "markdown" ? (selectedFile.documentName ?? null) : null,
+		session?.user ?? null,
+		presenceUser,
+		(payload) => {
+			if (payload === "files-changed") {
+				void projectFiles.reload();
+			}
+		},
+	);
 	const [previewFile, setPreviewFile] = useState<DeckFile | null>(null);
 	const [sidebarOpen, setSidebarOpen] = useState(true);
 	const [markdown, setMarkdown] = useState("");
@@ -216,23 +239,6 @@ function RouteComponent() {
 			return files.find((file) => isMarkdownDeckFile(file)) ?? null;
 		});
 	}, [files, selectedFile]);
-
-	const collab = useCollabDocument(
-		selectedFile?.type === "markdown" ? (selectedFile.documentName ?? null) : null,
-		session?.user ?? null,
-		presenceUser,
-		(payload) => {
-			if (payload === "files-changed") {
-				void reload();
-			}
-		},
-	);
-	const projectPresenceAwareness = useProjectPresence(
-		id,
-		session?.user ?? null,
-		presenceUser,
-		selectedFile?.id ?? null,
-	);
 
 	useEffect(() => {
 		if (selectedFile?.id.endsWith(".css")) {
@@ -883,13 +889,7 @@ function RouteComponent() {
 				)}
 			>
 				<FileSidebar
-					projectId={id}
-					files={files}
-					selectedFileId={selectedFile?.id ?? null}
-					onSelectFile={setSelectedFile}
-					isLoading={isLoading}
-					error={error}
-					onRetry={reload}
+					workspace={projectFiles}
 					sidebarOpen={sidebarOpen}
 					setSidebarOpen={setSidebarOpen}
 					themeNames={themeNames}
@@ -899,8 +899,6 @@ function RouteComponent() {
 					onProjectDeleted={() => {
 						void navigate({ to: "/", replace: true });
 					}}
-					presenceAwareness={projectPresenceAwareness}
-					currentUserId={presenceUser.userId}
 					searchPanel={
 						<SearchPanel
 							matches={searchMatches}

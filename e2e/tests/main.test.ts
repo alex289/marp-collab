@@ -327,7 +327,7 @@ test.describe("Editor page — file management", () => {
 	});
 
 	test("previews an uploaded image from the sidebar", async ({ page }) => {
-		await page.getByTitle("Upload file").click();
+		await page.getByRole("button", { name: "Upload file" }).click();
 		await page.locator('input[type="file"]').setInputFiles({
 			name: "preview.png",
 			mimeType: "image/png",
@@ -410,7 +410,7 @@ test.describe("Editor: content editing", () => {
 		await page.waitForURL(/\/presentations\/.+/);
 		await waitForSidebar(page);
 
-		await page.getByTitle("Upload file").click();
+		await page.getByRole("button", { name: "Upload file" }).click();
 		await page.locator('input[type="file"]').setInputFiles({
 			name: "photo.png",
 			mimeType: "image/png",
@@ -456,7 +456,7 @@ test.describe("Editor: content editing", () => {
 		await page.waitForURL(/\/presentations\/.+/);
 		await waitForSidebar(page);
 
-		await page.getByTitle("Upload file").click();
+		await page.getByRole("button", { name: "Upload file" }).click();
 		await page.locator('input[type="file"]').setInputFiles({
 			name: "live-theme.css",
 			mimeType: "text/css",
@@ -518,7 +518,7 @@ test.describe("Presentation mode", () => {
 				await route.continue();
 			});
 
-		await page.getByTitle("Upload file").click();
+		await page.getByRole("button", { name: "Upload file" }).click();
 		await page.locator('input[type="file"]').setInputFiles({
 			name: "race-theme.css",
 			mimeType: "text/css",
@@ -746,7 +746,7 @@ test.describe("Editor: file upload", () => {
 	});
 
 	test("upload a CSS file and it appears in the sidebar", async ({ page }) => {
-		await page.getByTitle("Upload file").click();
+		await page.getByRole("button", { name: "Upload file" }).click();
 		await expect(page.getByRole("heading", { name: "Upload File" })).toBeVisible();
 
 		await page.locator('input[type="file"]').setInputFiles({
@@ -782,14 +782,14 @@ test.describe("Editor: file upload", () => {
 	});
 
 	test("cancel upload closes the dialog without adding a file", async ({ page }) => {
-		await page.getByTitle("Upload file").click();
+		await page.getByRole("button", { name: "Upload file" }).click();
 		await expect(page.getByRole("heading", { name: "Upload File" })).toBeVisible();
 		await page.getByRole("button", { name: "Cancel" }).click();
 		await expect(page.getByRole("dialog")).not.toBeVisible();
 	});
 
 	test("upload button is disabled until a file is selected", async ({ page }) => {
-		await page.getByTitle("Upload file").click();
+		await page.getByRole("button", { name: "Upload file" }).click();
 		await expect(page.getByRole("button", { name: "Upload", exact: true })).toBeDisabled();
 	});
 });
@@ -806,7 +806,7 @@ test.describe("Editor: export", () => {
 
 		const [download] = await Promise.all([
 			page.waitForEvent("download"),
-			page.getByTitle("Export project as ZIP").click(),
+			page.getByRole("button", { name: "Export project as ZIP" }).click(),
 		]);
 		expect(download.suggestedFilename()).toMatch(/\.zip$/);
 	});
