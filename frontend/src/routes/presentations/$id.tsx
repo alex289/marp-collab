@@ -173,6 +173,7 @@ function RouteComponent() {
 	const [projectThemes, setProjectThemesState] = useState<ProjectTheme[]>([]);
 	const [themeNames, setThemeNames] = useState<string[]>(() => listThemeNames());
 	const [themeRevision, setThemeRevision] = useState(0);
+	const [assetRevision, setAssetRevision] = useState(0);
 	const [slideIndex, setSlideIndex] = useState(0);
 	const [startedAt, setStartedAt] = useState(() => Date.now());
 	const [now, setNow] = useState(() => Date.now());
@@ -241,12 +242,30 @@ function RouteComponent() {
 	}, [files, selectedFile]);
 
 	useEffect(() => {
-		if (selectedFile?.id.endsWith(".css")) {
+		// Project files are served under stable URLs; bump the asset version when
+		// the file list changes so re-uploaded images bypass the browser cache.
+		setAssetRevision((revision) => revision + 1);
+	}, [files]);
+
+	useEffect(() => {
+		if (!selectedFile) {
+			setMarkdown("");
 			return;
 		}
 
-		if (!collab.yText) {
-			setMarkdown("");
+		if (selectedFile.id.endsWith(".css")) {
+			return;
+		}
+
+		// The collab state lags one render behind a file switch, so yText can
+		// still hold the previously opened document. Only sync once the selected
+		// file's own document has loaded; until then keep the previous markdown
+		// so the preview doesn't re-render and lose its scroll position.
+		if (
+			!collab.yText ||
+			!collab.synced ||
+			collab.documentName !== (selectedFile.documentName ?? null)
+		) {
 			return;
 		}
 
@@ -261,7 +280,7 @@ function RouteComponent() {
 		return () => {
 			collab.yText?.unobserve(sync);
 		};
-	}, [collab.yText, selectedFile?.id]);
+	}, [collab.documentName, collab.synced, collab.yText, selectedFile]);
 
 	useEffect(() => {
 		const cssFiles = files.filter((file) => file.id.toLowerCase().endsWith(".css"));
@@ -315,7 +334,11 @@ function RouteComponent() {
 	}, [projectThemes]);
 
 	useEffect(() => {
-		if (!selectedFile?.id.toLowerCase().endsWith(".css") || !collab.yText) {
+		if (
+			!selectedFile?.id.toLowerCase().endsWith(".css") ||
+			!collab.yText ||
+			collab.documentName !== (selectedFile.documentName ?? null)
+		) {
 			return;
 		}
 
@@ -335,7 +358,7 @@ function RouteComponent() {
 		return () => {
 			collab.yText?.unobserve(syncTheme);
 		};
-	}, [collab.yText, id, selectedFile?.id]);
+	}, [collab.documentName, collab.yText, id, selectedFile]);
 
 	const currentTheme = useMemo(() => getMarkdownTheme(markdown) ?? "default", [markdown]);
 
@@ -725,6 +748,7 @@ function RouteComponent() {
 				projectId={id}
 				selectedFileId={selectedFile?.id ?? null}
 				themeRevision={themeRevision}
+				assetRevision={assetRevision}
 				onMetaChange={({ active }) => {
 					setSlideIndex(active);
 				}}
@@ -942,6 +966,7 @@ function RouteComponent() {
 						label={previewFile?.label ?? null}
 						projectId={id}
 						themeRevision={themeRevision}
+						assetRevision={assetRevision}
 						selectedFileId={previewFile?.id ?? null}
 					/>
 				</Suspense>

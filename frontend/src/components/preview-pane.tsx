@@ -12,6 +12,7 @@ type PreviewPaneProps = {
 	projectId: string;
 	selectedFileId: string | null;
 	themeRevision: number;
+	assetRevision: number;
 };
 
 // srcDoc never changes so the iframe never reloads.
@@ -128,6 +129,7 @@ export const PreviewPane = ({
 	projectId,
 	selectedFileId,
 	themeRevision,
+	assetRevision,
 }: PreviewPaneProps) => {
 	const { resolvedTheme } = useTheme();
 	const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -146,14 +148,14 @@ export const PreviewPane = ({
 		// Project themes are registered on the shared Marp instance; this invalidates stale renders.
 		void themeRevision;
 		try {
-			return renderMarp(markdown, projectId, selectedFileId);
+			return renderMarp(markdown, projectId, selectedFileId, assetRevision);
 		} catch (error) {
 			return {
 				html: `<section><h1>Marp Render Error</h1><p>${error instanceof Error ? error.message : "Unknown error"}</p></section>`,
 				css: "",
 			};
 		}
-	}, [markdown, projectId, selectedFileId, themeRevision]);
+	}, [markdown, projectId, selectedFileId, themeRevision, assetRevision]);
 
 	useEffect(() => {
 		const onMessage = (event: MessageEvent) => {

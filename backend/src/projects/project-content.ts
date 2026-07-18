@@ -1,4 +1,10 @@
-import { broadcastFilesChanged } from "../collab/project-events.ts";
+import {
+	broadcastFilesChanged,
+	closeProjectFileDocument,
+	closeProjectFolderDocuments,
+	flushProjectFileDocument,
+	flushProjectFolderDocuments,
+} from "../collab/project-events.ts";
 import { getFileType } from "../helpers/file-allowlist.ts";
 import { toDocumentName } from "./document-identity.ts";
 import {
@@ -80,12 +86,16 @@ export async function renameProjectContentFile(
 	fileId: string,
 	name: string,
 ): Promise<RenameProjectContentResult> {
+	await flushProjectFileDocument(projectId, fileId);
 	const id = await renameProjectFile(projectId, fileId, name);
 	if (!id) {
 		return { ok: false };
 	}
 
+	// Broadcast before closing so clients still editing the old document
+	// receive "files-changed" and switch away, then force the disconnect.
 	broadcastFilesChanged(projectId);
+	closeProjectFileDocument(projectId, fileId);
 	return { ok: true, id };
 }
 
@@ -94,12 +104,14 @@ export async function moveProjectContentFile(
 	fileId: string,
 	destination: string,
 ): Promise<RenameProjectContentResult> {
+	await flushProjectFileDocument(projectId, fileId);
 	const id = await moveProjectFile(projectId, fileId, destination);
 	if (!id) {
 		return { ok: false };
 	}
 
 	broadcastFilesChanged(projectId);
+	closeProjectFileDocument(projectId, fileId);
 	return { ok: true, id };
 }
 
@@ -108,12 +120,14 @@ export async function renameProjectContentFolder(
 	folderPath: string,
 	name: string,
 ): Promise<RenameProjectContentResult> {
+	await flushProjectFolderDocuments(projectId, folderPath);
 	const id = await renameProjectFolder(projectId, folderPath, name);
 	if (!id) {
 		return { ok: false };
 	}
 
 	broadcastFilesChanged(projectId);
+	closeProjectFolderDocuments(projectId, folderPath);
 	return { ok: true, id };
 }
 
@@ -126,6 +140,7 @@ export async function deleteProjectContentFile(
 	}
 
 	broadcastFilesChanged(projectId);
+	closeProjectFileDocument(projectId, fileId);
 	return { ok: true };
 }
 
@@ -138,5 +153,6 @@ export async function deleteProjectContentFolder(
 	}
 
 	broadcastFilesChanged(projectId);
+	closeProjectFolderDocuments(projectId, folderPath);
 	return { ok: true };
 }

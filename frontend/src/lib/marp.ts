@@ -3,6 +3,7 @@ import { API_URL } from "./config";
 
 let currentProjectId = "";
 let currentMarkdownDir = "";
+let currentAssetVersion = 0;
 
 function resolvePosixPath(dir: string, src: string): string {
 	const parts = (dir + src).split("/");
@@ -22,7 +23,10 @@ function rewriteImageSrc(src: string): string {
 		return src;
 	}
 	const resolved = resolvePosixPath(currentMarkdownDir, src);
-	return `${API_URL}/projects/${currentProjectId}/files/${resolved}`;
+	// The version query busts the browser cache after uploads replace a file
+	// behind an otherwise stable URL.
+	const version = currentAssetVersion > 0 ? `?v=${currentAssetVersion}` : "";
+	return `${API_URL}/projects/${currentProjectId}/files/${resolved}${version}`;
 }
 
 const marp = new Marp({
@@ -63,8 +67,10 @@ export const renderMarp = (
 	markdown: string,
 	projectId?: string,
 	selectedFileId?: string | null,
+	assetVersion = 0,
 ) => {
 	currentProjectId = projectId ?? "";
+	currentAssetVersion = assetVersion;
 	const lastSlash = selectedFileId?.lastIndexOf("/") ?? -1;
 	currentMarkdownDir = lastSlash > -1 ? selectedFileId!.slice(0, lastSlash + 1) : "";
 	return marp.render(markdown);

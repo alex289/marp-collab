@@ -199,7 +199,10 @@ function FileTreeItem({ node }: { node: FileTreeNode }) {
 				<SidebarMenuItem className={isDragging ? "opacity-40" : undefined}>
 					<div className="group/row relative">
 						<SidebarMenuButton
-							className={cn("pr-14", isImageFile && "hover:bg-accent hover:text-accent-foreground")}
+							className={cn(
+								"pr-14!",
+								isImageFile && "hover:bg-accent hover:text-accent-foreground",
+							)}
 							onClick={isImageFile ? () => onPreviewImage(file) : undefined}
 							tooltip={file.id}
 							{...dragProps}
@@ -232,8 +235,8 @@ function FileTreeItem({ node }: { node: FileTreeNode }) {
 					<SidebarMenuButton
 						isActive={selectedFileId === file.id}
 						className={cn(
-							"pr-14 data-[active=true]:bg-primary data-[active=true]:text-primary-foreground hover:bg-accent hover:text-accent-foreground",
-							filePresence.length > 0 && "pr-24",
+							"pr-14! data-[active=true]:bg-primary data-[active=true]:text-primary-foreground hover:bg-accent hover:text-accent-foreground",
+							filePresence.length > 0 && "pr-24!",
 						)}
 						onClick={() => selectFile(file)}
 						tooltip={file.id}
@@ -291,7 +294,7 @@ function FileTreeItem({ node }: { node: FileTreeNode }) {
 							<SidebarMenuButton
 								isActive={isActiveBranch}
 								tooltip={node.path}
-								className={cn("pr-14", isDragOver && "ring-2 ring-primary ring-inset")}
+								className={cn("pr-14!", isDragOver && "ring-2 ring-primary ring-inset")}
 								onDragOver={(event) => {
 									if (onExternalFileDragOverPath(event, node.path)) {
 										return;
@@ -319,7 +322,7 @@ function FileTreeItem({ node }: { node: FileTreeNode }) {
 							>
 								<ChevronRight className="transition-transform" />
 								<Folder />
-								{node.name}
+								<span className="min-w-0 flex-1 truncate">{node.name}</span>
 							</SidebarMenuButton>
 						}
 					/>
