@@ -35,6 +35,7 @@ import { useProjectFilesWorkspace } from "@/features/project-files/use-project-f
 import {
 	ChevronLeftIcon,
 	ChevronRightIcon,
+	MonitorOffIcon,
 	MonitorPlayIcon,
 	PauseIcon,
 	PlayIcon,
@@ -63,6 +64,7 @@ const searchValidator = z.object({
 type PresentationAwarenessState = {
 	fileId: string;
 	slideIndex: number;
+	blanked: boolean;
 	updatedAt: number;
 	userId: string;
 };
@@ -87,6 +89,8 @@ function parsePresentationAwarenessState(data: unknown): PresentationAwarenessSt
 	return {
 		fileId: payload.fileId,
 		slideIndex: Math.max(0, Math.trunc(payload.slideIndex)),
+		// Older clients don't send this field; treat it as "not blanked".
+		blanked: payload.blanked === true,
 		updatedAt: payload.updatedAt,
 		userId: payload.userId,
 	};
@@ -175,6 +179,7 @@ function RouteComponent() {
 	const [themeRevision, setThemeRevision] = useState(0);
 	const [assetRevision, setAssetRevision] = useState(0);
 	const [slideIndex, setSlideIndex] = useState(0);
+	const [isBlanked, setIsBlanked] = useState(false);
 	const [cursorLine, setCursorLine] = useState(1);
 	const [startedAt, setStartedAt] = useState(() => Date.now());
 	const [now, setNow] = useState(() => Date.now());
@@ -496,6 +501,7 @@ function RouteComponent() {
 		setNow(currentTime);
 		setIsTimerPaused(false);
 		setPausedElapsedMs(0);
+		setIsBlanked(false);
 	}, [isPresentation]);
 
 	useEffect(() => {
@@ -602,6 +608,13 @@ function RouteComponent() {
 				return;
 			}
 
+			setIsBlanked((current) => {
+				if (current !== newestState.blanked) {
+					suppressNextSlideAwarenessUpdateRef.current = true;
+				}
+				return newestState.blanked;
+			});
+
 			const nextSlideIndex = Math.min(newestState.slideIndex, maxSlideIndex);
 			setSlideIndex((current) => {
 				if (
@@ -659,11 +672,13 @@ function RouteComponent() {
 		collab.awareness.setLocalStateField("presentation", {
 			fileId: selectedFile.id,
 			slideIndex,
+			blanked: isBlanked,
 			updatedAt,
 			userId: presenceUser.userId,
 		} satisfies PresentationAwarenessState);
 	}, [
 		collab.awareness,
+		isBlanked,
 		isPresentation,
 		presenceUser.userId,
 		selectedFile?.id,
@@ -705,6 +720,12 @@ function RouteComponent() {
 				hotkey: "F",
 				callback: toggleViewerFullscreen,
 				options: { enabled: isViewer },
+			},
+			{
+				// PowerPoint-style "black screen": blanks the audience screen
+				// (viewer windows) while the presenter view stays visible.
+				hotkey: "B",
+				callback: () => setIsBlanked((current) => !current),
 			},
 			{
 				hotkey: "Escape",
@@ -770,6 +791,12 @@ function RouteComponent() {
 					className="relative h-svh w-svw overflow-hidden bg-black text-white"
 				>
 					{frame}
+					{isBlanked && (
+						<div className="absolute inset-0 z-40 flex select-none flex-col items-center justify-center gap-3 bg-black">
+							<PauseIcon aria-hidden className="size-10 text-white/15" />
+							<p className="text-sm text-white/25">Presentation paused</p>
+						</div>
+					)}
 					{fullscreenPromptVisible && (
 						<div
 							className="absolute inset-0 z-50 flex cursor-pointer flex-col items-center justify-center gap-3 bg-black/70"
@@ -832,6 +859,28 @@ function RouteComponent() {
 							</Tooltip>
 						</ButtonGroup>
 						<Separator orientation="vertical" />
+						<Tooltip>
+							<TooltipTrigger
+								render={
+									<Button
+										type="button"
+										variant={isBlanked ? "default" : "secondary"}
+										size="icon"
+										className="md:h-7 md:w-auto md:gap-1 md:px-2 md:text-xs/relaxed"
+										aria-label={isBlanked ? "Resume audience screen" : "Blank audience screen"}
+										onClick={() => setIsBlanked((current) => !current)}
+									>
+										<MonitorOffIcon />
+										<span className="hidden md:inline">
+											{isBlanked ? "Resume screen" : "Blank screen"}
+										</span>
+									</Button>
+								}
+							/>
+							<TooltipContent>
+								{isBlanked ? "Resume audience screen (B)" : "Blank audience screen (B)"}
+							</TooltipContent>
+						</Tooltip>
 						<Button
 							type="button"
 							variant="secondary"
@@ -863,7 +912,16 @@ function RouteComponent() {
 					</div>
 				</div>
 
-				<div className="min-h-0">{frame}</div>
+				<div className="relative min-h-0">
+					{frame}
+					{isBlanked && (
+						<div className="pointer-events-none absolute inset-x-0 top-3 z-10 flex justify-center">
+							<span className="rounded-full bg-black/80 px-3 py-1 text-xs font-medium text-white shadow-lg">
+								Audience screen is blanked — press B to resume
+							</span>
+						</div>
+					)}
+				</div>
 
 				<div className="flex justify-between gap-3 px-4 py-3">
 					<Button
