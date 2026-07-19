@@ -174,6 +174,10 @@ type FileSidebarProps = {
 	workspace: ProjectFilesWorkspace;
 	sidebarOpen: boolean;
 	setSidebarOpen: (open: boolean) => void;
+	/** Expanded sidebar width in pixels. */
+	width?: number;
+	/** True while the user drags the resize handle; disables width transitions. */
+	isResizing?: boolean;
 	searchPanel?: React.ReactNode;
 	outlinePanel?: React.ReactNode;
 	themeNames: string[];
@@ -187,6 +191,8 @@ export const FileSidebar = ({
 	workspace,
 	sidebarOpen,
 	setSidebarOpen,
+	width = 304,
+	isResizing = false,
 	searchPanel = null,
 	outlinePanel = null,
 	themeNames,
@@ -317,10 +323,10 @@ export const FileSidebar = ({
 		<SidebarProvider
 			open={sidebarOpen}
 			onOpenChange={setSidebarOpen}
-			className="min-h-0 md:h-full"
+			className={cn("min-h-0 md:h-full", isResizing && "**:transition-none")}
 			style={
 				{
-					"--sidebar-width": "19rem",
+					"--sidebar-width": `min(${width}px, 40vw)`,
 					"--sidebar-width-icon": "3rem",
 				} as React.CSSProperties
 			}
