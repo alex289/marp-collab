@@ -25,7 +25,7 @@ import { SearchPanel } from "@/components/search-panel";
 import { findTextMatches, replaceTextRange, type TextSearchMatch } from "@/lib/text-search";
 import { OutlinePanel } from "@/components/outline-panel";
 import { parseMarkdownOutline } from "@/lib/outline";
-import { countMarpSlides } from "@/lib/slide-count";
+import { countMarpSlides, getLineForSlideIndex, getSlideIndexForLine } from "@/lib/slide-count";
 import { isEditableDeckFile, isMarkdownDeckFile } from "@/lib/file-types";
 import { listThemeNames, rewriteCssUrls, setProjectThemes } from "@/lib/marp";
 import { applyThemeToYText, getMarkdownTheme } from "@/lib/markdown-theme";
@@ -176,6 +176,7 @@ function RouteComponent() {
 	const [themeRevision, setThemeRevision] = useState(0);
 	const [assetRevision, setAssetRevision] = useState(0);
 	const [slideIndex, setSlideIndex] = useState(0);
+	const [cursorLine, setCursorLine] = useState(1);
 	const [startedAt, setStartedAt] = useState(() => Date.now());
 	const [now, setNow] = useState(() => Date.now());
 	const [isTimerPaused, setIsTimerPaused] = useState(false);
@@ -197,10 +198,15 @@ function RouteComponent() {
 	const isViewer = search.mode === "viewer";
 	const autoFullscreen = search.fullscreen === true;
 	const outlineItems = useMemo(() => parseMarkdownOutline(markdown), [markdown]);
+	// Only follow the cursor when the editor is actively editing the file
+	// being previewed — editing a CSS theme shouldn't move the preview scroll.
+	const isEditingPreviewFile =
+		isMarkdownDeckFile(selectedFile) && selectedFile.id === previewFile?.id;
+	const followSlideIndex = isEditingPreviewFile ? getSlideIndexForLine(markdown, cursorLine) : null;
 	// Rendering (preview, presentation, slide count) works on the markdown with
 	// <!-- @include: file.md --> comments expanded; the editor keeps the raw text.
 	const renderedMarkdown = useIncludedMarkdown(markdown, id, previewFile?.id ?? null);
-	const slideCount = useMemo(() => countMarpSlides(renderedMarkdown), [renderedMarkdown]);
+	const slideCount = useMemo(() => countMarpSlides(markdown), [markdown]);
 
 	useEffect(() => {
 		if (files.length === 0) {
@@ -961,6 +967,7 @@ function RouteComponent() {
 						undoManager={collab.undoManager}
 						readOnly={collab.readOnly}
 						projectId={id}
+						onCursorLineChange={setCursorLine}
 					/>
 				</Suspense>
 
@@ -972,6 +979,14 @@ function RouteComponent() {
 						themeRevision={themeRevision}
 						assetRevision={assetRevision}
 						selectedFileId={previewFile?.id ?? null}
+						followSlideIndex={followSlideIndex}
+						onSlideDoubleClick={(index) => {
+							if (!isEditingPreviewFile) {
+								return;
+							}
+
+							editorPaneRef.current?.jumpToLine(getLineForSlideIndex(markdown, index));
+						}}
 					/>
 				</Suspense>
 			</main>

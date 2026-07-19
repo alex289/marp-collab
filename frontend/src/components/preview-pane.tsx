@@ -13,6 +13,13 @@ type PreviewPaneProps = {
 	selectedFileId: string | null;
 	themeRevision: number;
 	assetRevision: number;
+	// The slide index the editor cursor is currently on, or null when the
+	// editor isn't editing the previewed file. Scrolling to this slide is
+	// purely local UI state — it's never broadcast to other collaborators.
+	followSlideIndex: number | null;
+	// Called with the 0-based slide index when the user double-clicks a slide
+	// in the preview, so the caller can jump the editor to that position.
+	onSlideDoubleClick?: (index: number) => void;
 };
 
 // srcDoc never changes so the iframe never reloads.
@@ -51,6 +58,12 @@ const staticSrcDoc = `<!doctype html>
         window.scrollTo(0, 0);
       }
 
+      function scrollToSlide(index) {
+        var slides = document.querySelectorAll('div.marpit > svg[data-marpit-svg], body > section');
+        var target = slides[index];
+        if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+
       window.addEventListener('wheel', function (e) {
         if (!e.ctrlKey) return;
         e.preventDefault();
@@ -68,10 +81,23 @@ const staticSrcDoc = `<!doctype html>
         applyZoom();
       }, { passive: false });
 
+      function slideIndexFromTarget(target) {
+        var slides = document.querySelectorAll('div.marpit > svg[data-marpit-svg], body > section');
+        for (var i = 0; i < slides.length; i++) {
+          if (slides[i] === target || slides[i].contains(target)) return i;
+        }
+        return -1;
+      }
+
       window.addEventListener('dblclick', function (e) {
-        if (zoom === 1) return;
-        e.preventDefault();
-        resetZoom();
+        if (zoom !== 1) {
+          e.preventDefault();
+          resetZoom();
+          return;
+        }
+        var index = slideIndexFromTarget(e.target);
+        if (index === -1) return;
+        window.parent.postMessage({ type: 'marp-slide-doubleclick', index: index }, '*');
       });
 
       // Keydown/keyup inside the iframe don't bubble to the parent document, so
@@ -109,6 +135,10 @@ const staticSrcDoc = `<!doctype html>
           applyZoom();
           return;
         }
+        if (e.data.type === 'marp-scroll-to-slide') {
+          scrollToSlide(e.data.index);
+          return;
+        }
         if (e.data.type !== 'marp-update') return;
         document.getElementById('marp-styles').textContent = e.data.css;
         document.body.innerHTML = e.data.html;
@@ -130,6 +160,8 @@ export const PreviewPane = ({
 	selectedFileId,
 	themeRevision,
 	assetRevision,
+	followSlideIndex,
+	onSlideDoubleClick,
 }: PreviewPaneProps) => {
 	const { resolvedTheme } = useTheme();
 	const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -169,6 +201,11 @@ export const PreviewPane = ({
 				return;
 			}
 
+			if (payload?.type === "marp-slide-doubleclick" && typeof payload.index === "number") {
+				onSlideDoubleClick?.(payload.index);
+				return;
+			}
+
 			if (!payload || payload.type !== "presentation-key") {
 				return;
 			}
@@ -189,7 +226,7 @@ export const PreviewPane = ({
 
 		window.addEventListener("message", onMessage);
 		return () => window.removeEventListener("message", onMessage);
-	}, []);
+	}, [onSlideDoubleClick]);
 
 	useEffect(() => {
 		if (!iframeReady || !iframeRef.current?.contentWindow) {
@@ -247,6 +284,17 @@ export const PreviewPane = ({
 			window.location.origin,
 		);
 	}, [iframeReady, rendered, resolvedTheme, projectId, selectedFileId]);
+
+	useEffect(() => {
+		if (!iframeReady || followSlideIndex === null || !iframeRef.current?.contentWindow) {
+			return;
+		}
+
+		iframeRef.current.contentWindow.postMessage(
+			{ type: "marp-scroll-to-slide", index: followSlideIndex },
+			window.location.origin,
+		);
+	}, [iframeReady, followSlideIndex]);
 
 	return (
 		<div className="relative flex h-full min-h-0 flex-col overflow-hidden border-l border-border bg-canvas">

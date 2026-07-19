@@ -81,3 +81,105 @@ export function countMarpSlides(markdown: string): number {
 
 	return dividerCount + 1;
 }
+
+/**
+ * Returns the 0-based index of the slide containing the given 1-based line
+ * number, using the same divider/fence/front-matter rules as
+ * `countMarpSlides`.
+ */
+export function getSlideIndexForLine(markdown: string, line: number): number {
+	const lines = markdown.split(/\r\n|\n|\r/);
+	let startIndex = 0;
+
+	if (lines[0]?.trim() === "---") {
+		for (let index = 1; index < lines.length; index += 1) {
+			const trimmed = lines[index].trim();
+
+			if (trimmed === "---" || trimmed === "...") {
+				startIndex = index + 1;
+				break;
+			}
+		}
+	}
+
+	const targetIndex = Math.max(0, line - 1);
+	let slideIndex = 0;
+	let fence: Fence | null = null;
+
+	for (let index = startIndex; index < lines.length && index < targetIndex; index += 1) {
+		const currentLine = lines[index];
+
+		if (fence) {
+			if (closesFence(currentLine, fence)) {
+				fence = null;
+			}
+			continue;
+		}
+
+		const nextFence = getFence(currentLine);
+		if (nextFence) {
+			fence = nextFence;
+			continue;
+		}
+
+		if (isDivider(currentLine)) {
+			slideIndex += 1;
+		}
+	}
+
+	return slideIndex;
+}
+
+/**
+ * Returns the 1-based line number where the given 0-based slide index
+ * starts, using the same divider/fence/front-matter rules as
+ * `countMarpSlides`. Out-of-range indexes fall back to the closest bound.
+ */
+export function getLineForSlideIndex(markdown: string, slideIndex: number): number {
+	const lines = markdown.split(/\r\n|\n|\r/);
+	let startIndex = 0;
+
+	if (lines[0]?.trim() === "---") {
+		for (let index = 1; index < lines.length; index += 1) {
+			const trimmed = lines[index].trim();
+
+			if (trimmed === "---" || trimmed === "...") {
+				startIndex = index + 1;
+				break;
+			}
+		}
+	}
+
+	if (slideIndex <= 0) {
+		return startIndex + 1;
+	}
+
+	let currentSlide = 0;
+	let fence: Fence | null = null;
+
+	for (let index = startIndex; index < lines.length; index += 1) {
+		const line = lines[index];
+
+		if (fence) {
+			if (closesFence(line, fence)) {
+				fence = null;
+			}
+			continue;
+		}
+
+		const nextFence = getFence(line);
+		if (nextFence) {
+			fence = nextFence;
+			continue;
+		}
+
+		if (isDivider(line)) {
+			currentSlide += 1;
+			if (currentSlide === slideIndex) {
+				return index + 2;
+			}
+		}
+	}
+
+	return lines.length;
+}
