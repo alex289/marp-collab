@@ -1,6 +1,8 @@
 import { throw404OnError, cn } from "@/lib/utils";
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod/v4-mini";
+import * as Y from "yjs";
+import { toast } from "sonner";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FileSidebar } from "@/components/file-sidebar";
 import {
@@ -181,6 +183,10 @@ function RouteComponent() {
 	const [isTimerPaused, setIsTimerPaused] = useState(false);
 	const [pausedElapsedMs, setPausedElapsedMs] = useState(0);
 	const [searchQuery, setSearchQuery] = useState("");
+	const [pendingCursorJump, setPendingCursorJump] = useState<{
+		userId: string;
+		userName: string;
+	} | null>(null);
 	const [searchMatches, setSearchMatches] = useState<TextSearchMatch[]>([]);
 	const [searchLoading, setSearchLoading] = useState(false);
 	const [searchError, setSearchError] = useState<string | null>(null);
@@ -381,6 +387,112 @@ function RouteComponent() {
 		setSearchMatches([]);
 		setSearchError(null);
 	}, [selectedFile?.id]);
+
+	const jumpToUserCursor = useCallback(
+		(userId: string) => {
+			const doc = collab.yText?.doc;
+			if (!collab.awareness || !collab.yText || !doc) {
+				return false;
+			}
+
+			for (const state of collab.awareness.getStates().values()) {
+				const user = (state as { user?: { id?: string } }).user;
+				if (user?.id !== userId) {
+					continue;
+				}
+
+				const cursor = (state as { cursor?: { head?: unknown } }).cursor;
+				if (!cursor?.head) {
+					continue;
+				}
+
+				try {
+					const head = Y.createAbsolutePositionFromRelativePosition(
+						Y.createRelativePositionFromJSON(cursor.head),
+						doc,
+					);
+					if (!head || head.type !== collab.yText) {
+						continue;
+					}
+
+					editorPaneRef.current?.jumpToOffset(head.index);
+					return true;
+				} catch {
+					continue;
+				}
+			}
+
+			return false;
+		},
+		[collab.awareness, collab.yText],
+	);
+
+	const handleParticipantClick = useCallback(
+		(participantId: string) => {
+			if (!participantId || participantId === presenceUser.userId) {
+				return;
+			}
+
+			let participantName = "This user";
+			let targetFileId: string | null = null;
+			for (const state of projectPresenceAwareness?.getStates().values() ?? []) {
+				const user = (state as { user?: { id?: string; name?: string } }).user;
+				if (user?.id !== participantId) {
+					continue;
+				}
+
+				participantName = user.name ?? participantName;
+				const activeFile = (state as { activeFile?: { fileId?: unknown } | null }).activeFile;
+				if (typeof activeFile?.fileId === "string") {
+					targetFileId = activeFile.fileId;
+					break;
+				}
+			}
+
+			if (targetFileId && targetFileId !== selectedFile?.id) {
+				const targetFile = files.find((file) => file.id === targetFileId);
+				if (targetFile && isEditableDeckFile(targetFile)) {
+					setSelectedFile(targetFile);
+					setPendingCursorJump({ userId: participantId, userName: participantName });
+					return;
+				}
+			}
+
+			if (!jumpToUserCursor(participantId)) {
+				// The cursor may not have been broadcast yet; keep retrying briefly.
+				setPendingCursorJump({ userId: participantId, userName: participantName });
+			}
+		},
+		[files, jumpToUserCursor, presenceUser.userId, projectPresenceAwareness, selectedFile?.id],
+	);
+
+	useEffect(() => {
+		if (!pendingCursorJump || !collab.awareness || !collab.synced) {
+			return;
+		}
+
+		if (jumpToUserCursor(pendingCursorJump.userId)) {
+			setPendingCursorJump(null);
+			return;
+		}
+
+		const awareness = collab.awareness;
+		const retry = () => {
+			if (jumpToUserCursor(pendingCursorJump.userId)) {
+				setPendingCursorJump(null);
+			}
+		};
+		awareness.on("change", retry);
+		const timeout = window.setTimeout(() => {
+			setPendingCursorJump(null);
+			toast(`${pendingCursorJump.userName} has no cursor in this file right now.`);
+		}, 4000);
+
+		return () => {
+			awareness.off("change", retry);
+			window.clearTimeout(timeout);
+		};
+	}, [collab.awareness, collab.synced, jumpToUserCursor, pendingCursorJump]);
 
 	const runActiveFileSearch = (query: string) => {
 		setSearchQuery(query);
@@ -722,7 +834,7 @@ function RouteComponent() {
 				},
 			},
 		],
-		{ enabled: isPresentation },
+		{ enabled: isPresentation, conflictBehavior: "allow" },
 	);
 
 	if (isPresentation) {
@@ -901,7 +1013,10 @@ function RouteComponent() {
 				}}
 				actions={
 					<>
-						<PresenceAvatars awareness={projectPresenceAwareness} />
+						<PresenceAvatars
+							awareness={projectPresenceAwareness}
+							onParticipantClick={handleParticipantClick}
+						/>
 						<PresentationActions
 							projectId={id}
 							selectedFileId={previewFile?.id ?? null}
