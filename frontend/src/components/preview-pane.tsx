@@ -13,6 +13,10 @@ type PreviewPaneProps = {
 	selectedFileId: string | null;
 	themeRevision: number;
 	assetRevision: number;
+	// The slide index the editor cursor is currently on, or null when the
+	// editor isn't editing the previewed file. Scrolling to this slide is
+	// purely local UI state — it's never broadcast to other collaborators.
+	followSlideIndex: number | null;
 };
 
 // srcDoc never changes so the iframe never reloads.
@@ -49,6 +53,12 @@ const staticSrcDoc = `<!doctype html>
         if (el) el.style.transformOrigin = '';
         applyZoom();
         window.scrollTo(0, 0);
+      }
+
+      function scrollToSlide(index) {
+        var slides = document.querySelectorAll('div.marpit > svg[data-marpit-svg], body > section');
+        var target = slides[index];
+        if (target) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
       }
 
       window.addEventListener('wheel', function (e) {
@@ -109,6 +119,10 @@ const staticSrcDoc = `<!doctype html>
           applyZoom();
           return;
         }
+        if (e.data.type === 'marp-scroll-to-slide') {
+          scrollToSlide(e.data.index);
+          return;
+        }
         if (e.data.type !== 'marp-update') return;
         document.getElementById('marp-styles').textContent = e.data.css;
         document.body.innerHTML = e.data.html;
@@ -130,6 +144,7 @@ export const PreviewPane = ({
 	selectedFileId,
 	themeRevision,
 	assetRevision,
+	followSlideIndex,
 }: PreviewPaneProps) => {
 	const { resolvedTheme } = useTheme();
 	const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -247,6 +262,17 @@ export const PreviewPane = ({
 			window.location.origin,
 		);
 	}, [iframeReady, rendered, resolvedTheme, projectId, selectedFileId]);
+
+	useEffect(() => {
+		if (!iframeReady || followSlideIndex === null || !iframeRef.current?.contentWindow) {
+			return;
+		}
+
+		iframeRef.current.contentWindow.postMessage(
+			{ type: "marp-scroll-to-slide", index: followSlideIndex },
+			window.location.origin,
+		);
+	}, [iframeReady, followSlideIndex]);
 
 	return (
 		<div className="relative flex h-full min-h-0 flex-col overflow-hidden border-l border-border bg-canvas">
