@@ -24,7 +24,7 @@ import { SearchPanel } from "@/components/search-panel";
 import { findTextMatches, replaceTextRange, type TextSearchMatch } from "@/lib/text-search";
 import { OutlinePanel } from "@/components/outline-panel";
 import { parseMarkdownOutline } from "@/lib/outline";
-import { countMarpSlides, getSlideIndexForLine } from "@/lib/slide-count";
+import { countMarpSlides, getLineForSlideIndex, getSlideIndexForLine } from "@/lib/slide-count";
 import { isEditableDeckFile, isMarkdownDeckFile } from "@/lib/file-types";
 import { listThemeNames, rewriteCssUrls, setProjectThemes } from "@/lib/marp";
 import { applyThemeToYText, getMarkdownTheme } from "@/lib/markdown-theme";
@@ -976,6 +976,13 @@ function RouteComponent() {
 						assetRevision={assetRevision}
 						selectedFileId={previewFile?.id ?? null}
 						followSlideIndex={followSlideIndex}
+						onSlideDoubleClick={(index) => {
+							if (!isEditingPreviewFile) {
+								return;
+							}
+
+							editorPaneRef.current?.jumpToLine(getLineForSlideIndex(markdown, index));
+						}}
 					/>
 				</Suspense>
 			</main>

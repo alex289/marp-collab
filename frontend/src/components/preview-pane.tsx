@@ -17,6 +17,9 @@ type PreviewPaneProps = {
 	// editor isn't editing the previewed file. Scrolling to this slide is
 	// purely local UI state — it's never broadcast to other collaborators.
 	followSlideIndex: number | null;
+	// Called with the 0-based slide index when the user double-clicks a slide
+	// in the preview, so the caller can jump the editor to that position.
+	onSlideDoubleClick?: (index: number) => void;
 };
 
 // srcDoc never changes so the iframe never reloads.
@@ -78,10 +81,23 @@ const staticSrcDoc = `<!doctype html>
         applyZoom();
       }, { passive: false });
 
+      function slideIndexFromTarget(target) {
+        var slides = document.querySelectorAll('div.marpit > svg[data-marpit-svg], body > section');
+        for (var i = 0; i < slides.length; i++) {
+          if (slides[i] === target || slides[i].contains(target)) return i;
+        }
+        return -1;
+      }
+
       window.addEventListener('dblclick', function (e) {
-        if (zoom === 1) return;
-        e.preventDefault();
-        resetZoom();
+        if (zoom !== 1) {
+          e.preventDefault();
+          resetZoom();
+          return;
+        }
+        var index = slideIndexFromTarget(e.target);
+        if (index === -1) return;
+        window.parent.postMessage({ type: 'marp-slide-doubleclick', index: index }, '*');
       });
 
       // Keydown/keyup inside the iframe don't bubble to the parent document, so
@@ -145,6 +161,7 @@ export const PreviewPane = ({
 	themeRevision,
 	assetRevision,
 	followSlideIndex,
+	onSlideDoubleClick,
 }: PreviewPaneProps) => {
 	const { resolvedTheme } = useTheme();
 	const iframeRef = useRef<HTMLIFrameElement>(null);
@@ -184,6 +201,11 @@ export const PreviewPane = ({
 				return;
 			}
 
+			if (payload?.type === "marp-slide-doubleclick" && typeof payload.index === "number") {
+				onSlideDoubleClick?.(payload.index);
+				return;
+			}
+
 			if (!payload || payload.type !== "presentation-key") {
 				return;
 			}
@@ -204,7 +226,7 @@ export const PreviewPane = ({
 
 		window.addEventListener("message", onMessage);
 		return () => window.removeEventListener("message", onMessage);
-	}, []);
+	}, [onSlideDoubleClick]);
 
 	useEffect(() => {
 		if (!iframeReady || !iframeRef.current?.contentWindow) {

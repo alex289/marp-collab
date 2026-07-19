@@ -298,7 +298,7 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 			const docLine = view.state.doc.line(targetLine);
 			view.dispatch({
 				selection: { anchor: docLine.from },
-				effects: EditorView.scrollIntoView(docLine.from, { y: "center" }),
+				effects: EditorView.scrollIntoView(docLine.from, { y: "start" }),
 			});
 			view.focus();
 		},
