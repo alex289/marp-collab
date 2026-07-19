@@ -40,3 +40,9 @@ Herausforderungen:
 
 - Es stört mich jedes Mal, dass es in Web Browsern immer noch keinen guten Weg ohne <a> Tag mit Blob URLs gibt, um Dateien asynchron herunterzuladen und den Status des Downloads zu verfolgen, der in allen modernen Browsern funktioniert.
 - Marp Präsentationen können nicht ohne einen Webbrowser als PDF gerendert werden. Da wir Chromium nicht in unseren Container integrieren wollten, nutzen wir Gotenberg, einen PDF-Rendering Service, der in einem separaten Container läuft.
+
+# KW 29
+
+Herausforderungen:
+
+- Leider bieten die Marp Bibliotheken keine verwendbare API um Informationen aus der Präsentation zu extrahieren, wie zum Beispiel die Anzahl der Folien zu bestimmen. Deshalb extrahieren wir die Informationen mit Regulären Ausdrücken aus dem Markdown Code.

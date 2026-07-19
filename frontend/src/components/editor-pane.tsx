@@ -35,6 +35,7 @@ type EditorPaneProps = {
 	undoManager: Y.UndoManager | null;
 	readOnly: boolean;
 	projectId: string;
+	onCursorLineChange?: (line: number) => void;
 };
 
 export type EditorPaneHandle = {
@@ -184,7 +185,7 @@ const editorTheme = EditorView.theme({
 });
 
 export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function EditorPane(
-	{ label, yText, awareness, undoManager, readOnly, projectId },
+	{ label, yText, awareness, undoManager, readOnly, projectId, onCursorLineChange },
 	ref,
 ) {
 	const mountRef = useRef<HTMLDivElement | null>(null);
@@ -251,7 +252,9 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 				yCollab(yText, awareness, { undoManager }),
 				EditorView.updateListener.of((update) => {
 					if (update.docChanged || update.selectionSet) {
-						setStats(getEditorStats(update.view));
+						const nextStats = getEditorStats(update.view);
+						setStats(nextStats);
+						onCursorLineChange?.(nextStats.cursorLine);
 					}
 				}),
 				wrapEnabled ? EditorView.lineWrapping : [],
@@ -273,7 +276,16 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 			}
 			view.destroy();
 		};
-	}, [yText, awareness, undoManager, label, resolvedTheme, wrapEnabled, readOnly]);
+	}, [
+		yText,
+		awareness,
+		undoManager,
+		label,
+		resolvedTheme,
+		wrapEnabled,
+		readOnly,
+		onCursorLineChange,
+	]);
 
 	useImperativeHandle(ref, () => ({
 		jumpToLine(line: number) {
