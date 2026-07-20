@@ -30,6 +30,7 @@ import { countMarpSlides, getLineForSlideIndex, getSlideIndexForLine } from "@/l
 import { isEditableDeckFile, isMarkdownDeckFile } from "@/lib/file-types";
 import { PaneResizeHandle } from "@/components/pane-resize-handle";
 import { listThemeNames, rewriteCssUrls, setProjectThemes } from "@/lib/marp";
+import { useAssetToken } from "@/lib/asset-token";
 import { applyThemeToYText, getMarkdownTheme } from "@/lib/markdown-theme";
 import { upsertProjectTheme, type ProjectTheme } from "@/lib/project-themes";
 import { API_URL } from "@/lib/config";
@@ -209,6 +210,7 @@ function RouteComponent() {
 	const [themeNames, setThemeNames] = useState<string[]>(() => listThemeNames());
 	const [themeRevision, setThemeRevision] = useState(0);
 	const [assetRevision, setAssetRevision] = useState(0);
+	const assetToken = useAssetToken(id);
 	const [slideIndex, setSlideIndex] = useState(0);
 	const [isBlanked, setIsBlanked] = useState(false);
 	const [cursorLine, setCursorLine] = useState(1);
@@ -417,7 +419,10 @@ function RouteComponent() {
 						if (!res.ok) {
 							return null;
 						}
-						return { id: file.id, css: rewriteCssUrls(await res.text(), id, file.id) };
+						return {
+							id: file.id,
+							css: rewriteCssUrls(await res.text(), id, file.id, assetToken),
+						};
 					} catch {
 						return null;
 					}
@@ -442,7 +447,7 @@ function RouteComponent() {
 		})();
 
 		return () => controller.abort();
-	}, [files, id]);
+	}, [files, id, assetToken]);
 
 	useEffect(() => {
 		setThemeNames(setProjectThemes(projectThemes));
@@ -460,7 +465,7 @@ function RouteComponent() {
 
 		const syncTheme = () => {
 			// oxlint-disable-next-line no-base-to-string
-			const css = rewriteCssUrls(collab.yText?.toString() ?? "", id, selectedFile.id);
+			const css = rewriteCssUrls(collab.yText?.toString() ?? "", id, selectedFile.id, assetToken);
 			setProjectThemesState((current) =>
 				upsertProjectTheme(current, {
 					id: selectedFile.id,
@@ -474,7 +479,7 @@ function RouteComponent() {
 		return () => {
 			collab.yText?.unobserve(syncTheme);
 		};
-	}, [collab.documentName, collab.yText, id, selectedFile]);
+	}, [collab.documentName, collab.yText, id, selectedFile, assetToken]);
 
 	const currentTheme = useMemo(() => getMarkdownTheme(markdown) ?? "default", [markdown]);
 
@@ -987,6 +992,7 @@ function RouteComponent() {
 				selectedFileId={selectedFile?.id ?? null}
 				themeRevision={themeRevision}
 				assetRevision={assetRevision}
+				assetToken={assetToken}
 				onMetaChange={({ active }) => {
 					setSlideIndex(active);
 				}}
@@ -1275,6 +1281,7 @@ function RouteComponent() {
 						projectId={id}
 						themeRevision={themeRevision}
 						assetRevision={assetRevision}
+						assetToken={assetToken}
 						selectedFileId={previewFile?.id ?? null}
 						followSlideIndex={followSlideIndex}
 						onSlideDoubleClick={(index) => {
