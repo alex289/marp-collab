@@ -13,6 +13,7 @@ type PreviewPaneProps = {
 	selectedFileId: string | null;
 	themeRevision: number;
 	assetRevision: number;
+	assetToken?: string;
 	// The slide index the editor cursor is currently on, or null when the
 	// editor isn't editing the previewed file. Scrolling to this slide is
 	// purely local UI state — it's never broadcast to other collaborators.
@@ -46,7 +47,9 @@ const staticSrcDoc = `<!doctype html>
         // only message the parent when the zoom value actually changed.
         if (zoom !== lastNotifiedZoom) {
           lastNotifiedZoom = zoom;
-          window.parent.postMessage({ type: 'marp-zoom-changed', zoom: zoom }, '*');
+          if (port) {
+            port.postMessage({ type: 'marp-zoom-changed', zoom: zoom });
+          }
         }
       }
 
@@ -97,7 +100,9 @@ const staticSrcDoc = `<!doctype html>
         }
         var index = slideIndexFromTarget(e.target);
         if (index === -1) return;
-        window.parent.postMessage({ type: 'marp-slide-doubleclick', index: index }, '*');
+        if (port) {
+          port.postMessage({ type: 'marp-slide-doubleclick', index: index });
+        }
       });
 
       // Keydown/keyup inside the iframe don't bubble to the parent document, so
@@ -106,7 +111,10 @@ const staticSrcDoc = `<!doctype html>
       // them on its own document.
       function forwardKey(type) {
         return function (e) {
-          window.parent.postMessage({
+          if (!port) {
+            return;
+          }
+          port.postMessage({
             type: 'presentation-key',
             eventType: type,
             key: e.key,
@@ -115,15 +123,17 @@ const staticSrcDoc = `<!doctype html>
             shiftKey: e.shiftKey,
             altKey: e.altKey,
             metaKey: e.metaKey,
-          }, '*');
+          });
         };
       }
 
       window.addEventListener('keydown', forwardKey('keydown'));
       window.addEventListener('keyup', forwardKey('keyup'));
 
-      window.addEventListener('message', function(e) {
-        if (e.source !== window.parent) return;
+      // Set once the parent hands over a MessagePort (see 'init-port' below).
+      var port = null;
+
+      function handlePortMessage(e) {
         if (!e.data) return;
         if (e.data.type === 'marp-zoom') {
           if (e.data.action === 'reset') {
@@ -147,6 +157,14 @@ const staticSrcDoc = `<!doctype html>
           zoom = 1;
         }
         applyZoom();
+      }
+
+      window.addEventListener('message', function (e) {
+        if (e.source !== window.parent) return;
+        if (e.data && e.data.type === 'init-port' && e.ports && e.ports[0]) {
+          port = e.ports[0];
+          port.onmessage = handlePortMessage;
+        }
       });
     </script>
   </head>
@@ -160,76 +178,81 @@ export const PreviewPane = ({
 	selectedFileId,
 	themeRevision,
 	assetRevision,
+	assetToken,
 	followSlideIndex,
 	onSlideDoubleClick,
 }: PreviewPaneProps) => {
 	const { resolvedTheme } = useTheme();
 	const iframeRef = useRef<HTMLIFrameElement>(null);
+	// MessagePort to the iframe, set on load instead of using broadcast
+	// postMessage(..., "*") so a navigated-away frame can't keep receiving messages.
+	const portRef = useRef<MessagePort | null>(null);
 	const [iframeReady, setIframeReady] = useState(false);
 	const prevFileKeyRef = useRef<string | null>(null);
 	const [zoomPercent, setZoomPercent] = useState(100);
+	const onSlideDoubleClickRef = useRef(onSlideDoubleClick);
+
+	useEffect(() => {
+		onSlideDoubleClickRef.current = onSlideDoubleClick;
+	}, [onSlideDoubleClick]);
 
 	const sendZoom = useCallback((action: "in" | "out" | "reset") => {
-		iframeRef.current?.contentWindow?.postMessage(
-			{ type: "marp-zoom", action },
-			window.location.origin,
-		);
+		portRef.current?.postMessage({ type: "marp-zoom", action });
 	}, []);
 
 	const rendered = useMemo(() => {
 		// Project themes are registered on the shared Marp instance; this invalidates stale renders.
 		void themeRevision;
 		try {
-			return renderMarp(markdown, projectId, selectedFileId, assetRevision);
+			return renderMarp(markdown, projectId, selectedFileId, assetRevision, assetToken);
 		} catch (error) {
 			return {
 				html: `<section><h1>Marp Render Error</h1><p>${error instanceof Error ? error.message : "Unknown error"}</p></section>`,
 				css: "",
 			};
 		}
-	}, [markdown, projectId, selectedFileId, themeRevision, assetRevision]);
+	}, [markdown, projectId, selectedFileId, themeRevision, assetRevision, assetToken]);
+
+	const handlePortMessage = useCallback((event: MessageEvent) => {
+		const payload = event.data;
+		if (payload?.type === "marp-zoom-changed" && typeof payload.zoom === "number") {
+			setZoomPercent(Math.round(payload.zoom * 100));
+			return;
+		}
+
+		if (payload?.type === "marp-slide-doubleclick" && typeof payload.index === "number") {
+			onSlideDoubleClickRef.current?.(payload.index);
+			return;
+		}
+
+		if (!payload || payload.type !== "presentation-key") {
+			return;
+		}
+
+		document.dispatchEvent(
+			new KeyboardEvent(payload.eventType, {
+				key: payload.key,
+				code: payload.code,
+				ctrlKey: payload.ctrlKey,
+				shiftKey: payload.shiftKey,
+				altKey: payload.altKey,
+				metaKey: payload.metaKey,
+				bubbles: true,
+				cancelable: true,
+			}),
+		);
+	}, []);
+
+	const handleIframeLoad = useCallback(() => {
+		const channel = new MessageChannel();
+		portRef.current = channel.port1;
+		channel.port1.onmessage = handlePortMessage;
+		iframeRef.current?.contentWindow?.postMessage({ type: "init-port" }, "*", [channel.port2]);
+		setIframeReady(true);
+	}, [handlePortMessage]);
 
 	useEffect(() => {
-		const onMessage = (event: MessageEvent) => {
-			if (event.source !== iframeRef.current?.contentWindow) {
-				return;
-			}
-
-			const payload = event.data;
-			if (payload?.type === "marp-zoom-changed" && typeof payload.zoom === "number") {
-				setZoomPercent(Math.round(payload.zoom * 100));
-				return;
-			}
-
-			if (payload?.type === "marp-slide-doubleclick" && typeof payload.index === "number") {
-				onSlideDoubleClick?.(payload.index);
-				return;
-			}
-
-			if (!payload || payload.type !== "presentation-key") {
-				return;
-			}
-
-			document.dispatchEvent(
-				new KeyboardEvent(payload.eventType, {
-					key: payload.key,
-					code: payload.code,
-					ctrlKey: payload.ctrlKey,
-					shiftKey: payload.shiftKey,
-					altKey: payload.altKey,
-					metaKey: payload.metaKey,
-					bubbles: true,
-					cancelable: true,
-				}),
-			);
-		};
-
-		window.addEventListener("message", onMessage);
-		return () => window.removeEventListener("message", onMessage);
-	}, [onSlideDoubleClick]);
-
-	useEffect(() => {
-		if (!iframeReady || !iframeRef.current?.contentWindow) {
+		if (!iframeReady || !portRef.current) {
 			return;
 		}
 
@@ -243,11 +266,10 @@ export const PreviewPane = ({
 		const pageShadow =
 			resolvedTheme === "dark" ? "0 2px 12px rgb(0 0 0 / 0.55)" : "0 1px 6px rgb(0 0 0 / 0.18)";
 
-		iframeRef.current.contentWindow.postMessage(
-			{
-				type: "marp-update",
-				scrollToTop,
-				css: `
+		portRef.current.postMessage({
+			type: "marp-update",
+			scrollToTop,
+			css: `
       html, body {
         margin: 0;
         min-height: 100%;
@@ -279,21 +301,16 @@ export const PreviewPane = ({
         width: 100% !important;
       }
     `,
-				html: rendered.html,
-			},
-			window.location.origin,
-		);
+			html: rendered.html,
+		});
 	}, [iframeReady, rendered, resolvedTheme, projectId, selectedFileId]);
 
 	useEffect(() => {
-		if (!iframeReady || followSlideIndex === null || !iframeRef.current?.contentWindow) {
+		if (!iframeReady || followSlideIndex === null || !portRef.current) {
 			return;
 		}
 
-		iframeRef.current.contentWindow.postMessage(
-			{ type: "marp-scroll-to-slide", index: followSlideIndex },
-			window.location.origin,
-		);
+		portRef.current.postMessage({ type: "marp-scroll-to-slide", index: followSlideIndex });
 	}, [iframeReady, followSlideIndex]);
 
 	return (
@@ -360,8 +377,8 @@ export const PreviewPane = ({
 				title="Marp preview"
 				srcDoc={staticSrcDoc}
 				className="min-h-0 w-full flex-1"
-				sandbox="allow-scripts allow-same-origin"
-				onLoad={() => setIframeReady(true)}
+				sandbox="allow-scripts"
+				onLoad={handleIframeLoad}
 			/>
 		</div>
 	);

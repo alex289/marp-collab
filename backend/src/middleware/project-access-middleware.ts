@@ -1,6 +1,6 @@
 import { createMiddleware } from "hono/factory";
-import { getProjectAccess, type ProjectAccess } from "../../../projects/access-policy.ts";
-import type { HonoVariables } from "../../../types.ts";
+import { getProjectAccess, type ProjectAccess } from "../projects/access-policy.ts";
+import type { HonoVariables } from "../types.ts";
 
 export type ProjectRouteVariables = HonoVariables & {
 	projectAccess: ProjectAccess;
@@ -11,14 +11,21 @@ type ProjectRouteEnvironment = {
 };
 
 export const requireProjectAccess = createMiddleware<ProjectRouteEnvironment>(async (c, next) => {
-	const user = c.get("user");
-	if (!user) {
-		return c.json({ error: "Unauthorized" }, 401);
-	}
-
 	const projectId = c.req.param("projectId");
 	if (!projectId) {
 		return c.json({ error: "Project not found or access denied" }, 403);
+	}
+
+	// Asset tokens are used for access to project assets from sandboxed iframes
+	if (c.get("assetTokenProjectId") === projectId) {
+		c.set("projectAccess", { isOwner: false, readOnly: true });
+		await next();
+		return;
+	}
+
+	const user = c.get("user");
+	if (!user) {
+		return c.json({ error: "Unauthorized" }, 401);
 	}
 
 	const access = getProjectAccess(projectId, user.id);

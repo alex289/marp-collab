@@ -3,6 +3,7 @@ import { Readable } from "node:stream";
 import { Hono } from "hono";
 import { stream } from "hono/streaming";
 import z from "zod";
+import { ASSET_TOKEN_TTL_SECONDS, signAssetToken } from "../../../helpers/asset-token.ts";
 import {
 	getMimeType,
 	isAllowedUpload,
@@ -28,7 +29,7 @@ import {
 import {
 	requireProjectWriteAccess,
 	type ProjectRouteVariables,
-} from "./project-access-middleware.ts";
+} from "../../../middleware/project-access-middleware.ts";
 import {
 	createFileSchema,
 	createFolderSchema,
@@ -42,6 +43,15 @@ const app = new Hono<{ Variables: ProjectRouteVariables }>();
 app.get("/:projectId/files", async (c) => {
 	const { projectId } = c.req.param();
 	return c.json({ files: await listProjectContent(projectId) });
+});
+
+// oxlint-disable-next-line require-await
+app.get("/:projectId/asset-token", async (c) => {
+	const { projectId } = c.req.param();
+	return c.json({
+		token: signAssetToken(projectId),
+		expiresIn: ASSET_TOKEN_TTL_SECONDS,
+	});
 });
 
 app.post("/:projectId/files", requireProjectWriteAccess, async (c) => {
@@ -146,6 +156,13 @@ app.get("/:projectId/files/:fileId{.+}", async (c) => {
 	c.header("Content-Type", getMimeType(fileId));
 	c.header("Content-Disposition", "attachment");
 	c.header("Cache-Control", "no-cache");
+	// Requested from sandboxed preview/presentation iframes (opaque Origin), which the
+	// default same-origin CORP header blocks in Firefox. Access is already gated by
+	// project auth or the signed asset token, so relaxing CORP here is safe.
+	c.header("Cross-Origin-Resource-Policy", "cross-origin");
+	// @font-face (and other CSS url()) resources are always fetched in CORS mode by
+	// spec, so the opaque-origin iframe also needs an explicit ACAO header.
+	c.header("Access-Control-Allow-Origin", "*");
 
 	return stream(c, async (s) => {
 		s.onAbort(() => {
