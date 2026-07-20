@@ -73,25 +73,28 @@ async function clickSidebarRename(
 }
 
 async function getPreviewImageReference(page: Page) {
-	const frame = page.locator('iframe[title="Marp preview"]');
-	return await frame.evaluate((iframe: HTMLIFrameElement) => {
-		const doc = iframe.contentDocument;
-		const image = doc?.querySelector("img, image");
-		if (image instanceof HTMLImageElement) {
-			return image.getAttribute("src") || image.src;
+	// The preview iframe is sandboxed without allow-same-origin, so
+	// iframe.contentDocument is inaccessible from the parent frame's JS context.
+	// frameLocator reaches into the frame via Playwright's own protocol instead.
+	const previewFrame = page.frameLocator('iframe[title="Marp preview"]');
+	const image = previewFrame.locator("img, image").first();
+	if ((await image.count()) === 0) {
+		return "";
+	}
+	return await image.evaluate((el: Element) => {
+		if (el instanceof HTMLImageElement) {
+			return el.getAttribute("src") || el.src;
 		}
-		if (image instanceof SVGImageElement) {
+		if (el instanceof SVGImageElement) {
 			return (
-				image.href.baseVal ||
-				image.getAttribute("href") ||
-				image.getAttributeNS("http://www.w3.org/1999/xlink", "href") ||
-				image.getAttribute("xlink:href") ||
+				el.href.baseVal ||
+				el.getAttribute("href") ||
+				el.getAttributeNS("http://www.w3.org/1999/xlink", "href") ||
+				el.getAttribute("xlink:href") ||
 				""
 			);
 		}
-		return (
-			image?.getAttribute("href") ?? image?.getAttribute("xlink:href") ?? doc?.body.innerHTML ?? ""
-		);
+		return el.getAttribute("href") ?? el.getAttribute("xlink:href") ?? "";
 	});
 }
 
@@ -104,18 +107,19 @@ async function getPreviewSectionBackground(page: Page) {
 }
 
 async function getPreviewSlideMetrics(page: Page) {
-	const frame = page.locator('iframe[title="Marp preview"]');
-	return await frame.evaluate((iframe: HTMLIFrameElement) => {
-		const doc = iframe.contentDocument;
-		const slide = doc?.querySelector("svg[data-marpit-svg], section");
-		const iframeRect = iframe.getBoundingClientRect();
-		const slideRect = slide?.getBoundingClientRect();
+	// Same cross-origin constraint as getPreviewImageReference: measure the
+	// iframe element from the parent and the slide from within via frameLocator.
+	const iframeBox = await page.locator('iframe[title="Marp preview"]').boundingBox();
+	const previewFrame = page.frameLocator('iframe[title="Marp preview"]');
+	const slideBox = await previewFrame
+		.locator("svg[data-marpit-svg], section")
+		.first()
+		.boundingBox();
 
-		return {
-			iframeWidth: iframeRect.width,
-			slideWidth: slideRect?.width ?? 0,
-		};
-	});
+	return {
+		iframeWidth: iframeBox?.width ?? 0,
+		slideWidth: slideBox?.width ?? 0,
+	};
 }
 
 test.describe("Dashboard", () => {
