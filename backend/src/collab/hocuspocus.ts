@@ -12,6 +12,7 @@ import { auth } from "../auth.ts";
 import { getProjectAuthorization } from "../projects/access-policy.ts";
 import { registerProjectConnection, unregisterProjectConnection } from "./connections.ts";
 import { parseProjectDocumentName } from "../projects/document-identity.ts";
+import { logger } from "../helpers/logger.ts";
 
 type CollabContext = {
 	userId: string;
@@ -48,33 +49,41 @@ export const collabServer = new Hocuspocus({
 		documentName: string;
 		connectionConfig: ConnectionConfiguration;
 	}) {
-		const session = await auth.api.getSession({ headers: requestHeaders });
-		if (!session) {
-			throw new Error("Unauthorized");
-		}
+		// Hocuspocus swallows exceptions thrown from this hook without logging
+		// them anywhere, so genuine bugs (not just expected auth rejections)
+		// would otherwise be completely invisible.
+		try {
+			const session = await auth.api.getSession({ headers: requestHeaders });
+			if (!session) {
+				throw new Error("Unauthorized");
+			}
 
-		const parsed = parseProjectDocumentName(documentName);
-		if (!parsed) {
-			throw new Error("Invalid document name");
-		}
-		const { projectId, fileId } = parsed;
-		if (fileId !== PROJECT_PRESENCE_DOCUMENT_ID && !isEditableExtension(fileId)) {
-			throw new Error("Only text files can be opened in the editor");
-		}
+			const parsed = parseProjectDocumentName(documentName);
+			if (!parsed) {
+				throw new Error("Invalid document name");
+			}
+			const { projectId, fileId } = parsed;
+			if (fileId !== PROJECT_PRESENCE_DOCUMENT_ID && !isEditableExtension(fileId)) {
+				throw new Error("Only text files can be opened in the editor");
+			}
 
-		const authorization = getProjectAuthorization(projectId, session.user.id, "read");
-		if (!authorization.allowed) {
-			throw new Error("Forbidden");
+			const authorization = getProjectAuthorization(projectId, session.user.id, "read");
+			if (!authorization.allowed) {
+				throw new Error("Forbidden");
+			}
+
+			connectionConfig.readOnly = authorization.access.readOnly;
+
+			return {
+				userId: session.user.id,
+				userName: session.user.name || session.user.email,
+				color: fallbackColors[hashString(session.user.id) % fallbackColors.length] ?? "#0ea5e9",
+				readOnly: authorization.access.readOnly,
+			} satisfies CollabContext;
+		} catch (error) {
+			logger.error({ err: error, documentName }, "collab onAuthenticate failed");
+			throw error;
 		}
-
-		connectionConfig.readOnly = authorization.access.readOnly;
-
-		return {
-			userId: session.user.id,
-			userName: session.user.name || session.user.email,
-			color: fallbackColors[hashString(session.user.id) % fallbackColors.length] ?? "#0ea5e9",
-			readOnly: authorization.access.readOnly,
-		} satisfies CollabContext;
 	},
 	// oxlint-disable-next-line require-await
 	async connected({ socketId, documentName, context, connection }) {
@@ -90,44 +99,56 @@ export const collabServer = new Hocuspocus({
 		unregisterProjectConnection(socketId, documentName);
 	},
 	async onLoadDocument({ documentName }: { documentName: string }) {
-		if (isProjectPresenceDocument(documentName)) {
-			return new Y.Doc();
-		}
+		// See the comment in onAuthenticate: Hocuspocus does not log exceptions
+		// thrown from this hook, so we log them ourselves before rethrowing.
+		try {
+			if (isProjectPresenceDocument(documentName)) {
+				return new Y.Doc();
+			}
 
-		const binary = await getDocumentBinary(documentName);
-		if (binary) {
+			const binary = await getDocumentBinary(documentName);
+			if (binary) {
+				const doc = new Y.Doc();
+				Y.applyUpdate(doc, binary);
+				return doc;
+			}
+
+			const initialContent = await getDocumentContent(documentName);
+			if (initialContent === undefined) {
+				// Files are always created through the REST API before they are opened
+				// for collaboration. A missing file means it was renamed, moved, or
+				// deleted — refuse to load so a reconnecting client can't recreate it.
+				throw new Error(`Document not found: ${documentName}`);
+			}
+
 			const doc = new Y.Doc();
-			Y.applyUpdate(doc, binary);
+			doc.getText("content").insert(0, initialContent);
 			return doc;
+		} catch (error) {
+			logger.error({ err: error, documentName }, "collab onLoadDocument failed");
+			throw error;
 		}
-
-		const initialContent = await getDocumentContent(documentName);
-		if (initialContent === undefined) {
-			// Files are always created through the REST API before they are opened
-			// for collaboration. A missing file means it was renamed, moved, or
-			// deleted — refuse to load so a reconnecting client can't recreate it.
-			throw new Error(`Document not found: ${documentName}`);
-		}
-
-		const doc = new Y.Doc();
-		doc.getText("content").insert(0, initialContent);
-		return doc;
 	},
 	async onStoreDocument({ documentName, document }: { documentName: string; document: Y.Doc }) {
-		if (isProjectPresenceDocument(documentName)) {
-			return;
-		}
+		try {
+			if (isProjectPresenceDocument(documentName)) {
+				return;
+			}
 
-		if (!(await documentFileExists(documentName))) {
-			// The backing file was renamed, moved, or deleted while this document
-			// was still loaded — don't resurrect it at the old location.
-			return;
-		}
+			if (!(await documentFileExists(documentName))) {
+				// The backing file was renamed, moved, or deleted while this document
+				// was still loaded — don't resurrect it at the old location.
+				return;
+			}
 
-		const binary = Y.encodeStateAsUpdate(document);
-		await Promise.all([
-			saveDocumentBinary(documentName, binary),
-			saveDocumentContent(documentName, document.getText("content").toJSON()),
-		]);
+			const binary = Y.encodeStateAsUpdate(document);
+			await Promise.all([
+				saveDocumentBinary(documentName, binary),
+				saveDocumentContent(documentName, document.getText("content").toJSON()),
+			]);
+		} catch (error) {
+			logger.error({ err: error, documentName }, "collab onStoreDocument failed");
+			throw error;
+		}
 	},
 });

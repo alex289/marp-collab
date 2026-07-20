@@ -4,6 +4,7 @@ import { dirname, extname, isAbsolute, join, relative, resolve, sep } from "node
 import { Readable } from "node:stream";
 import { ZipArchive } from "archiver";
 import { getFileType, MARKDOWN_EXTENSIONS } from "../helpers/file-allowlist.ts";
+import { logger } from "../helpers/logger.ts";
 import { parseProjectDocumentName } from "./document-identity.ts";
 
 export type DeckFile = {
@@ -387,8 +388,13 @@ export async function moveProjectFile(
 
 	try {
 		await rename(`${sourcePath}.yjs`, `${destPath}.yjs`);
-	} catch {
-		// .yjs companion may not exist
+	} catch (error) {
+		if (!isMissingFileError(error)) {
+			// The main file already moved; the .yjs companion is now orphaned at
+			// the old path. Not fatal (content still loads from the .md file),
+			// but silent otherwise.
+			logger.error({ err: error, sourcePath, destPath }, "Failed to move .yjs companion file");
+		}
 	}
 
 	return newFileId;
