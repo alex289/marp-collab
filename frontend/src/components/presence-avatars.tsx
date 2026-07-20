@@ -17,9 +17,15 @@ type Participant = {
 	image: string | null;
 };
 
-const MAX_VISIBLE_PARTICIPANTS = 4;
+const MAX_VISIBLE_PARTICIPANTS = 5;
 
-export const PresenceAvatars = ({ awareness }: { awareness: Awareness | null }) => {
+export const PresenceAvatars = ({
+	awareness,
+	onParticipantClick,
+}: {
+	awareness: Awareness | null;
+	onParticipantClick?: (participantId: string) => void;
+}) => {
 	const [participants, setParticipants] = useState<Participant[]>([]);
 
 	useEffect(() => {
@@ -71,7 +77,19 @@ export const PresenceAvatars = ({ awareness }: { awareness: Awareness | null }) 
 				<Tooltip key={participant.id}>
 					<TooltipTrigger
 						render={
-							<Avatar size="sm" className="ring-1 ring-background after:border-0">
+							<Avatar
+								size="sm"
+								className={`ring-1 ring-background after:border-0 ${onParticipantClick ? "cursor-pointer" : ""}`}
+								render={
+									onParticipantClick ? (
+										<button
+											type="button"
+											aria-label={`Jump to ${participant.name}'s cursor`}
+											onClick={() => onParticipantClick(participant.id)}
+										/>
+									) : undefined
+								}
+							>
 								{participant.image ? (
 									<AvatarImage src={participant.image} alt={participant.name} />
 								) : null}
