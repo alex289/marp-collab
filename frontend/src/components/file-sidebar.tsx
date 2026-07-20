@@ -1,6 +1,6 @@
 // oxlint-disable no-warning-comments
 import { useState } from "react";
-import { Files, ListTree, Search, Settings, Trash2 } from "lucide-react";
+import { Files, ListTree, RotateCcw, Search, Settings, Trash2 } from "lucide-react";
 import { useHotkeys } from "@tanstack/react-hotkeys";
 import useSWR from "swr";
 import type { Project } from "@/lib/types";
@@ -174,6 +174,10 @@ type FileSidebarProps = {
 	workspace: ProjectFilesWorkspace;
 	sidebarOpen: boolean;
 	setSidebarOpen: (open: boolean) => void;
+	/** Expanded sidebar width in pixels. */
+	width?: number;
+	/** True while the user drags the resize handle; disables width transitions. */
+	isResizing?: boolean;
 	searchPanel?: React.ReactNode;
 	outlinePanel?: React.ReactNode;
 	themeNames: string[];
@@ -181,12 +185,15 @@ type FileSidebarProps = {
 	onThemeChange: (theme: string) => void;
 	themeSelectDisabled: boolean;
 	onProjectDeleted?: () => void;
+	onResetPaneLayout?: () => void;
 };
 
 export const FileSidebar = ({
 	workspace,
 	sidebarOpen,
 	setSidebarOpen,
+	width = 304,
+	isResizing = false,
 	searchPanel = null,
 	outlinePanel = null,
 	themeNames,
@@ -194,6 +201,7 @@ export const FileSidebar = ({
 	onThemeChange,
 	themeSelectDisabled,
 	onProjectDeleted,
+	onResetPaneLayout,
 }: FileSidebarProps) => {
 	const [activePanel, setActivePanel] = useState<WorkspacePanel>("files");
 	const projectId = workspace.projectId;
@@ -280,6 +288,23 @@ export const FileSidebar = ({
 				</div>
 
 				<div className="space-y-1.5">
+					<Label className="px-1 text-xs font-medium">Layout</Label>
+					<Button
+						type="button"
+						variant="outline"
+						className="w-full justify-start"
+						disabled={!onResetPaneLayout}
+						onClick={onResetPaneLayout}
+					>
+						<RotateCcw />
+						Reset panel sizes
+					</Button>
+					<p className="px-1 text-xs text-muted-foreground">
+						Restores the sidebar, editor and preview to their default widths.
+					</p>
+				</div>
+
+				<div className="space-y-1.5">
 					<Label className="px-1 text-xs font-medium">Danger zone</Label>
 					{projectSettings?.project ? (
 						<DeleteProjectDialog
@@ -317,10 +342,10 @@ export const FileSidebar = ({
 		<SidebarProvider
 			open={sidebarOpen}
 			onOpenChange={setSidebarOpen}
-			className="min-h-0 md:h-full"
+			className={cn("min-h-0 md:h-full", isResizing && "**:transition-none")}
 			style={
 				{
-					"--sidebar-width": "19rem",
+					"--sidebar-width": `min(${width}px, 40vw)`,
 					"--sidebar-width-icon": "3rem",
 				} as React.CSSProperties
 			}

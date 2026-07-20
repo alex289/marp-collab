@@ -1,6 +1,8 @@
 import { throw404OnError, cn } from "@/lib/utils";
 import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod/v4-mini";
+import * as Y from "yjs";
+import { toast } from "sonner";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FileSidebar } from "@/components/file-sidebar";
 import {
@@ -26,6 +28,7 @@ import { OutlinePanel } from "@/components/outline-panel";
 import { parseMarkdownOutline } from "@/lib/outline";
 import { countMarpSlides, getLineForSlideIndex, getSlideIndexForLine } from "@/lib/slide-count";
 import { isEditableDeckFile, isMarkdownDeckFile } from "@/lib/file-types";
+import { PaneResizeHandle } from "@/components/pane-resize-handle";
 import { listThemeNames, rewriteCssUrls, setProjectThemes } from "@/lib/marp";
 import { applyThemeToYText, getMarkdownTheme } from "@/lib/markdown-theme";
 import { upsertProjectTheme, type ProjectTheme } from "@/lib/project-themes";
@@ -125,6 +128,26 @@ export const Route = createFileRoute("/presentations/$id")({
 	},
 });
 
+const SIDEBAR_DEFAULT_WIDTH = 304;
+const SIDEBAR_COLLAPSED_WIDTH = 48;
+const SIDEBAR_MIN_WIDTH = 220;
+const SIDEBAR_MAX_WIDTH = 560;
+const PREVIEW_MIN_WIDTH = 320;
+const EDITOR_MIN_WIDTH = 320;
+
+const SIDEBAR_WIDTH_STORAGE_KEY = "marp-collab:sidebar-width";
+const PREVIEW_WIDTH_STORAGE_KEY = "marp-collab:preview-width";
+
+function readStoredPaneWidth(key: string) {
+	const raw = localStorage.getItem(key);
+	const value = raw === null ? Number.NaN : Number.parseInt(raw, 10);
+	return Number.isFinite(value) ? value : null;
+}
+
+function clampPaneWidth(value: number, min: number, max: number) {
+	return Math.min(Math.max(value, min), Math.max(min, max));
+}
+
 function formatElapsed(ms: number) {
 	const totalSeconds = Math.max(0, Math.floor(ms / 1000));
 	const hours = Math.floor(totalSeconds / 3600);
@@ -173,6 +196,14 @@ function RouteComponent() {
 	);
 	const [previewFile, setPreviewFile] = useState<DeckFile | null>(null);
 	const [sidebarOpen, setSidebarOpen] = useState(true);
+	const [sidebarWidth, setSidebarWidth] = useState(
+		() => readStoredPaneWidth(SIDEBAR_WIDTH_STORAGE_KEY) ?? SIDEBAR_DEFAULT_WIDTH,
+	);
+	const [previewWidth, setPreviewWidth] = useState<number | null>(() =>
+		readStoredPaneWidth(PREVIEW_WIDTH_STORAGE_KEY),
+	);
+	const [sidebarResizing, setSidebarResizing] = useState(false);
+	const mainRef = useRef<HTMLElement | null>(null);
 	const [markdown, setMarkdown] = useState("");
 	const [projectThemes, setProjectThemesState] = useState<ProjectTheme[]>([]);
 	const [themeNames, setThemeNames] = useState<string[]>(() => listThemeNames());
@@ -186,6 +217,10 @@ function RouteComponent() {
 	const [isTimerPaused, setIsTimerPaused] = useState(false);
 	const [pausedElapsedMs, setPausedElapsedMs] = useState(0);
 	const [searchQuery, setSearchQuery] = useState("");
+	const [pendingCursorJump, setPendingCursorJump] = useState<{
+		userId: string;
+		userName: string;
+	} | null>(null);
 	const [searchMatches, setSearchMatches] = useState<TextSearchMatch[]>([]);
 	const [searchLoading, setSearchLoading] = useState(false);
 	const [searchError, setSearchError] = useState<string | null>(null);
@@ -197,6 +232,76 @@ function RouteComponent() {
 	selectedCssFileIdRef.current = selectedFile?.id.toLowerCase().endsWith(".css")
 		? selectedFile.id
 		: null;
+
+	useEffect(() => {
+		localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, String(sidebarWidth));
+	}, [sidebarWidth]);
+
+	useEffect(() => {
+		if (previewWidth === null) {
+			localStorage.removeItem(PREVIEW_WIDTH_STORAGE_KEY);
+		} else {
+			localStorage.setItem(PREVIEW_WIDTH_STORAGE_KEY, String(previewWidth));
+		}
+	}, [previewWidth]);
+
+	const resizeSidebar = useCallback((clientX: number) => {
+		const rect = mainRef.current?.getBoundingClientRect();
+		if (!rect) {
+			return;
+		}
+
+		setSidebarWidth(
+			clampPaneWidth(
+				Math.round(clientX - rect.left),
+				SIDEBAR_MIN_WIDTH,
+				Math.min(SIDEBAR_MAX_WIDTH, rect.width * 0.4),
+			),
+		);
+	}, []);
+
+	const nudgeSidebar = useCallback((delta: number) => {
+		setSidebarWidth((width) => clampPaneWidth(width + delta, SIDEBAR_MIN_WIDTH, SIDEBAR_MAX_WIDTH));
+	}, []);
+
+	const resizePreview = useCallback(
+		(clientX: number) => {
+			const rect = mainRef.current?.getBoundingClientRect();
+			if (!rect) {
+				return;
+			}
+
+			const sidebarColumn = sidebarOpen ? sidebarWidth : SIDEBAR_COLLAPSED_WIDTH;
+			setPreviewWidth(
+				clampPaneWidth(
+					Math.round(rect.right - clientX),
+					PREVIEW_MIN_WIDTH,
+					rect.width - sidebarColumn - EDITOR_MIN_WIDTH,
+				),
+			);
+		},
+		[sidebarOpen, sidebarWidth],
+	);
+
+	const resetPaneLayout = useCallback(() => {
+		setSidebarWidth(SIDEBAR_DEFAULT_WIDTH);
+		setPreviewWidth(null);
+	}, []);
+
+	const nudgePreview = useCallback((delta: number) => {
+		const rect = mainRef.current?.getBoundingClientRect();
+		setPreviewWidth((width) => {
+			// The default track is minmax(320px, 42%); resolve it to pixels so
+			// the first keyboard nudge starts from the rendered width.
+			const current = width ?? Math.max(PREVIEW_MIN_WIDTH, Math.round((rect?.width ?? 0) * 0.42));
+			// Moving the divider right shrinks the preview pane.
+			return clampPaneWidth(
+				current - delta,
+				PREVIEW_MIN_WIDTH,
+				rect ? rect.width - SIDEBAR_MIN_WIDTH - EDITOR_MIN_WIDTH : current,
+			);
+		});
+	}, []);
 
 	const isPresentation = search.mode === "present" || search.mode === "viewer";
 	const isViewer = search.mode === "viewer";
@@ -386,6 +491,112 @@ function RouteComponent() {
 		setSearchMatches([]);
 		setSearchError(null);
 	}, [selectedFile?.id]);
+
+	const jumpToUserCursor = useCallback(
+		(userId: string) => {
+			const doc = collab.yText?.doc;
+			if (!collab.awareness || !collab.yText || !doc) {
+				return false;
+			}
+
+			for (const state of collab.awareness.getStates().values()) {
+				const user = (state as { user?: { id?: string } }).user;
+				if (user?.id !== userId) {
+					continue;
+				}
+
+				const cursor = (state as { cursor?: { head?: unknown } }).cursor;
+				if (!cursor?.head) {
+					continue;
+				}
+
+				try {
+					const head = Y.createAbsolutePositionFromRelativePosition(
+						Y.createRelativePositionFromJSON(cursor.head),
+						doc,
+					);
+					if (!head || head.type !== collab.yText) {
+						continue;
+					}
+
+					editorPaneRef.current?.jumpToOffset(head.index);
+					return true;
+				} catch {
+					continue;
+				}
+			}
+
+			return false;
+		},
+		[collab.awareness, collab.yText],
+	);
+
+	const handleParticipantClick = useCallback(
+		(participantId: string) => {
+			if (!participantId || participantId === presenceUser.userId) {
+				return;
+			}
+
+			let participantName = "This user";
+			let targetFileId: string | null = null;
+			for (const state of projectPresenceAwareness?.getStates().values() ?? []) {
+				const user = (state as { user?: { id?: string; name?: string } }).user;
+				if (user?.id !== participantId) {
+					continue;
+				}
+
+				participantName = user.name ?? participantName;
+				const activeFile = (state as { activeFile?: { fileId?: unknown } | null }).activeFile;
+				if (typeof activeFile?.fileId === "string") {
+					targetFileId = activeFile.fileId;
+					break;
+				}
+			}
+
+			if (targetFileId && targetFileId !== selectedFile?.id) {
+				const targetFile = files.find((file) => file.id === targetFileId);
+				if (targetFile && isEditableDeckFile(targetFile)) {
+					setSelectedFile(targetFile);
+					setPendingCursorJump({ userId: participantId, userName: participantName });
+					return;
+				}
+			}
+
+			if (!jumpToUserCursor(participantId)) {
+				// The cursor may not have been broadcast yet; keep retrying briefly.
+				setPendingCursorJump({ userId: participantId, userName: participantName });
+			}
+		},
+		[files, jumpToUserCursor, presenceUser.userId, projectPresenceAwareness, selectedFile?.id],
+	);
+
+	useEffect(() => {
+		if (!pendingCursorJump || !collab.awareness || !collab.synced) {
+			return;
+		}
+
+		if (jumpToUserCursor(pendingCursorJump.userId)) {
+			setPendingCursorJump(null);
+			return;
+		}
+
+		const awareness = collab.awareness;
+		const retry = () => {
+			if (jumpToUserCursor(pendingCursorJump.userId)) {
+				setPendingCursorJump(null);
+			}
+		};
+		awareness.on("change", retry);
+		const timeout = window.setTimeout(() => {
+			setPendingCursorJump(null);
+			toast(`${pendingCursorJump.userName} has no cursor in this file right now.`);
+		}, 4000);
+
+		return () => {
+			awareness.off("change", retry);
+			window.clearTimeout(timeout);
+		};
+	}, [collab.awareness, collab.synced, jumpToUserCursor, pendingCursorJump]);
 
 	const runActiveFileSearch = (query: string) => {
 		setSearchQuery(query);
@@ -743,7 +954,7 @@ function RouteComponent() {
 				},
 			},
 		],
-		{ enabled: isPresentation },
+		{ enabled: isPresentation, conflictBehavior: "allow" },
 	);
 
 	if (isPresentation) {
@@ -959,7 +1170,10 @@ function RouteComponent() {
 				}}
 				actions={
 					<>
-						<PresenceAvatars awareness={projectPresenceAwareness} />
+						<PresenceAvatars
+							awareness={projectPresenceAwareness}
+							onParticipantClick={handleParticipantClick}
+						/>
 						<PresentationActions
 							projectId={id}
 							selectedFileId={previewFile?.id ?? null}
@@ -969,17 +1183,30 @@ function RouteComponent() {
 				}
 			/>
 			<main
+				ref={mainRef}
 				className={cn(
 					"grid min-h-0 flex-1 grid-cols-1 overflow-hidden max-md:grid-rows-[auto_minmax(0,3fr)_minmax(0,2fr)]",
-					sidebarOpen
-						? "xl:grid-cols-[304px_minmax(0,1fr)_minmax(320px,42%)]"
-						: "xl:grid-cols-[48px_minmax(0,1fr)_minmax(320px,42%)]",
+					"xl:grid-cols-[var(--sidebar-col)_0px_minmax(0,1fr)_0px_var(--preview-col)]",
 				)}
+				style={
+					{
+						"--sidebar-col": sidebarOpen
+							? `min(${sidebarWidth}px, 40vw)`
+							: `${SIDEBAR_COLLAPSED_WIDTH}px`,
+						"--preview-col":
+							previewWidth === null
+								? `minmax(${PREVIEW_MIN_WIDTH}px, 42%)`
+								: `min(${previewWidth}px, 60%)`,
+					} as React.CSSProperties
+				}
 			>
 				<FileSidebar
 					workspace={projectFiles}
 					sidebarOpen={sidebarOpen}
 					setSidebarOpen={setSidebarOpen}
+					width={sidebarWidth}
+					isResizing={sidebarResizing}
+					onResetPaneLayout={resetPaneLayout}
 					themeNames={themeNames}
 					currentTheme={currentTheme}
 					onThemeChange={handleThemeChange}
@@ -1012,6 +1239,15 @@ function RouteComponent() {
 					}
 				/>
 
+				<PaneResizeHandle
+					label="Resize sidebar"
+					onResize={resizeSidebar}
+					onNudge={nudgeSidebar}
+					onReset={() => setSidebarWidth(SIDEBAR_DEFAULT_WIDTH)}
+					onResizingChange={setSidebarResizing}
+					disabled={!sidebarOpen}
+				/>
+
 				<Suspense>
 					<EditorPane
 						ref={editorPaneRef}
@@ -1024,6 +1260,13 @@ function RouteComponent() {
 						onCursorLineChange={setCursorLine}
 					/>
 				</Suspense>
+
+				<PaneResizeHandle
+					label="Resize preview"
+					onResize={resizePreview}
+					onNudge={nudgePreview}
+					onReset={() => setPreviewWidth(null)}
+				/>
 
 				<Suspense>
 					<PreviewPane
