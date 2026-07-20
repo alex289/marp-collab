@@ -40,6 +40,7 @@ type EditorPaneProps = {
 
 export type EditorPaneHandle = {
 	jumpToLine: (line: number) => void;
+	jumpToOffset: (offset: number) => void;
 };
 
 type EditorStats = {
@@ -302,6 +303,19 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 			});
 			view.focus();
 		},
+		jumpToOffset(offset: number) {
+			const view = viewRef.current;
+			if (!view) {
+				return;
+			}
+
+			const position = Math.min(Math.max(0, offset), view.state.doc.length);
+			view.dispatch({
+				selection: { anchor: position },
+				effects: EditorView.scrollIntoView(position, { y: "center" }),
+			});
+			view.focus();
+		},
 	}));
 
 	useHotkey(
@@ -309,7 +323,7 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 		() => {
 			setIsFocused(false);
 		},
-		{ enabled: isFocused },
+		{ enabled: isFocused, conflictBehavior: "allow" },
 	);
 
 	return (
