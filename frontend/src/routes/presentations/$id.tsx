@@ -272,6 +272,11 @@ function RouteComponent() {
 		[sidebarOpen, sidebarWidth],
 	);
 
+	const resetPaneLayout = useCallback(() => {
+		setSidebarWidth(SIDEBAR_DEFAULT_WIDTH);
+		setPreviewWidth(null);
+	}, []);
+
 	const nudgePreview = useCallback((delta: number) => {
 		const rect = mainRef.current?.getBoundingClientRect();
 		setPreviewWidth((width) => {
@@ -1028,6 +1033,7 @@ function RouteComponent() {
 					setSidebarOpen={setSidebarOpen}
 					width={sidebarWidth}
 					isResizing={sidebarResizing}
+					onResetPaneLayout={resetPaneLayout}
 					themeNames={themeNames}
 					currentTheme={currentTheme}
 					onThemeChange={handleThemeChange}
