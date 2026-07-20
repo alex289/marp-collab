@@ -793,8 +793,8 @@ function RouteComponent() {
 					{frame}
 					{isBlanked && (
 						<div className="absolute inset-0 z-40 flex select-none flex-col items-center justify-center gap-3 bg-black">
-							<PauseIcon aria-hidden className="size-10 text-white/15" />
-							<p className="text-sm text-white/25">Presentation paused</p>
+							<PauseIcon aria-hidden className="size-10 text-white/70" />
+							<p className="text-sm text-white/70">Presentation paused</p>
 						</div>
 					)}
 					{fullscreenPromptVisible && (
