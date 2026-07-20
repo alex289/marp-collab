@@ -103,17 +103,6 @@ app.onError((err, c) => {
 	return c.json({ error: "Internal Server Error" }, 500);
 });
 
-// Node's process crashes uncaught otherwise, with a raw stack trace on
-// stderr instead of a structured log line — easy to miss in `docker logs`.
-process.on("uncaughtException", (err) => {
-	logger.error(err, "Uncaught exception");
-	process.exit(1);
-});
-process.on("unhandledRejection", (reason) => {
-	logger.error(reason, "Unhandled rejection");
-	process.exit(1);
-});
-
 const wss = new WebSocketServer({ noServer: true });
 // A WebSocketServer that emits "error" with no listener throws synchronously
 // (EventEmitter default behavior) — make sure it's always logged.

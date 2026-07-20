@@ -37,9 +37,6 @@ app.get(
 				},
 			};
 		},
-		// @hono/node-server defaults to console.error for exceptions thrown from
-		// the handlers above; route them through pino instead so they show up
-		// alongside the rest of the backend's structured logs.
 		{ onError: (err) => logger.error(err, "collab websocket handler failed") },
 	),
 );
