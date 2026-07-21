@@ -1,3 +1,4 @@
+import { escapeHtml, escapeYaml, escapeYamlValue } from "./escape.ts";
 import type { ProjectTemplate } from "./types.ts";
 
 export const whsTemplate: ProjectTemplate = {
@@ -8,10 +9,10 @@ export const whsTemplate: ProjectTemplate = {
 marp: true
 size: 16:9
 fragmented: false
-title: ${title}
+title: ${escapeYaml(title)}
 description: A Marp presentation with the Westfälische Hochschule theme
-keywords: Presentation, ${title}
-author: ${author}
+keywords: "Presentation, ${escapeYamlValue(title)}"
+author: ${escapeYaml(author)}
 theme: whs
 paginate: true
 header: "![](theme/whs-logo.svg)"
@@ -25,9 +26,9 @@ header: "![](theme/whs-logo.svg)"
 - Bei Fragen gerne reinrufen
 -->
 
-<div class="title">${title}</div>
+<div class="title">${escapeHtml(title)}</div>
 <div class="subtitle">A subtitle ...</div>
-<div class="author">${author}, ...</div>
+<div class="author">${escapeHtml(author)}, ...</div>
 <div class="date">??.??.????</div>
 <div class="module">Kurs ?? im Semester ??</div>
 <div class="lector">Prof. ????????</div>

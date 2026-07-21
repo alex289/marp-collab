@@ -1,3 +1,4 @@
+import { escapeHtml, escapeYaml, escapeYamlValue } from "./escape.ts";
 import type { ProjectTemplate } from "./types.ts";
 
 export const defaultTemplate: ProjectTemplate = {
@@ -7,15 +8,15 @@ export const defaultTemplate: ProjectTemplate = {
 	createMarkdown: (title, author) => `---
 marp: true
 size: 16:9
-title: ${title}
+title: ${escapeYaml(title)}
 description: A Marp presentation
-keywords: Presentation, ${title}
-author: ${author}
+keywords: "Presentation, ${escapeYamlValue(title)}"
+author: ${escapeYaml(author)}
 theme: default
 paginate: true
 ---
 
-# ${title}
+# ${escapeHtml(title)}
 
 ---
 
