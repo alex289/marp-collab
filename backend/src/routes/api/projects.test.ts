@@ -73,6 +73,64 @@ describe("projects routes", () => {
 		delete process.env.DATA_PATH;
 	});
 
+	test("creates a project with the default template", async () => {
+		const response = await app.request("/", {
+			method: "POST",
+			headers: {
+				"content-type": "application/json",
+				"x-test-user-id": "user-1",
+			},
+			body: JSON.stringify({ name: "Default Project" }),
+		});
+
+		equal(response.status, 200);
+		const body = (await response.json()) as { projectId: string };
+		ok(body.projectId);
+
+		const markdown = await files.getDocumentContent(`project/${body.projectId}/presentation.md`);
+		ok(markdown?.includes("theme: default"));
+
+		const deckFiles = await files.getDeckFiles(body.projectId);
+		ok(!deckFiles.some((file) => file.id.startsWith("theme/")));
+	});
+
+	test("creates a project with the whs template, seeding theme assets", async () => {
+		const response = await app.request("/", {
+			method: "POST",
+			headers: {
+				"content-type": "application/json",
+				"x-test-user-id": "user-1",
+			},
+			body: JSON.stringify({ name: "WHS Project", template: "whs" }),
+		});
+
+		equal(response.status, 200);
+		const body = (await response.json()) as { projectId: string };
+		ok(body.projectId);
+
+		const markdown = await files.getDocumentContent(`project/${body.projectId}/presentation.md`);
+		ok(markdown?.includes("theme: whs"));
+
+		const css = await files.getDocumentContent(`project/${body.projectId}/theme/whs.css`);
+		ok(css?.includes("@theme whs"));
+
+		const deckFiles = await files.getDeckFiles(body.projectId);
+		ok(deckFiles.some((file) => file.id === "theme/logo.svg"));
+	});
+
+	test("rejects an unknown template value", async () => {
+		const response = await app.request("/", {
+			method: "POST",
+			headers: {
+				"content-type": "application/json",
+				"x-test-user-id": "user-1",
+			},
+			body: JSON.stringify({ name: "Bad Template Project", template: "does-not-exist" }),
+		});
+
+		equal(response.status, 400);
+	});
+
 	test("uploads a file into a destination folder", async () => {
 		const formData = new FormData();
 		formData.append("destination", "assets");
