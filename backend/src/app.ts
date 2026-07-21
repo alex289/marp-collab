@@ -104,6 +104,11 @@ app.onError((err, c) => {
 });
 
 const wss = new WebSocketServer({ noServer: true });
+// A WebSocketServer that emits "error" with no listener throws synchronously
+// (EventEmitter default behavior) — make sure it's always logged.
+wss.on("error", (err) => {
+	logger.error(err, "WebSocket server error");
+});
 
 serve(
 	{
