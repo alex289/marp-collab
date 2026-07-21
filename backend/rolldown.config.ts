@@ -15,6 +15,18 @@ function copyNativeAddonsPlugin(): Plugin {
 	};
 }
 
+function copyTemplateAssetsPlugin(): Plugin {
+	return {
+		name: "copy-template-assets",
+		writeBundle: async () => {
+			const distDir = join(import.meta.dirname, "../dist");
+			await cp(join(import.meta.dirname, "./assets"), join(distDir, "assets"), {
+				recursive: true,
+			});
+		},
+	};
+}
+
 export default defineConfig({
 	input: ["src/app.ts"],
 	platform: "node",
@@ -24,7 +36,7 @@ export default defineConfig({
 			__dirname: "import.meta.dirname",
 		},
 	},
-	plugins: [copyNativeAddonsPlugin()],
+	plugins: [copyNativeAddonsPlugin(), copyTemplateAssetsPlugin()],
 	output: {
 		dir: "../dist",
 		format: "esm",

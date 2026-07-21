@@ -10,8 +10,7 @@ import {
 } from "../../../db/models/project.ts";
 import { getCollaborationsByUserId } from "../../../db/models/project-collaborator.ts";
 import { getProjectAuthorization } from "../../../projects/access-policy.ts";
-import { toDocumentName } from "../../../projects/document-identity.ts";
-import { saveDocumentContent } from "../../../projects/storage.ts";
+import { seedProjectFromTemplate } from "../../../projects/project-templates.ts";
 import type { HonoVariables } from "../../../types.ts";
 import { createProjectSchema, updateProjectSchema } from "./schemas.ts";
 
@@ -29,26 +28,6 @@ app.get("/", (c) => {
 	return c.json({ projects: ownedProjects, sharedProjects: sharedProjects });
 });
 
-function createDefaultPresentationMarkdown(name: string, authorName: string) {
-	return `---
-marp: true
-size: 16:9
-title: ${name}
-description: A Marp presentation
-keywords: Presentation, ${name}
-author: ${authorName}
-theme: default
-paginate: true
----
-
-# ${name}
-
----
-
-## Slide 2
-`;
-}
-
 app.post("/", async (c) => {
 	const user = c.get("user");
 	if (!user) {
@@ -61,15 +40,12 @@ app.post("/", async (c) => {
 		return c.json({ error: z.prettifyError(parseResult.error) }, 400);
 	}
 
-	const { name } = parseResult.data;
+	const { name, template } = parseResult.data;
 	const id = randomUUID();
 
 	createProject({ id, name, ownerId: user.id });
 
-	await saveDocumentContent(
-		toDocumentName(id, "presentation.md"),
-		createDefaultPresentationMarkdown(name, user.name ?? ""),
-	);
+	await seedProjectFromTemplate(id, template, name, user.name ?? "Unknown Author");
 
 	return c.json({ projectId: id });
 });
