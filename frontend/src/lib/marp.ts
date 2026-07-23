@@ -4,6 +4,19 @@ import { API_URL } from "./config";
 let currentProjectId = "";
 let currentMarkdownDir = "";
 let currentAssetVersion = 0;
+let currentAssetToken = "";
+
+function assetQuery(version: number, token: string): string {
+	const params = new URLSearchParams();
+	if (version > 0) {
+		params.set("v", String(version));
+	}
+	if (token) {
+		params.set("token", token);
+	}
+	const query = params.toString();
+	return query ? `?${query}` : "";
+}
 
 export function resolvePosixPath(dir: string, src: string): string {
 	const parts = (dir + src).split("/");
@@ -18,15 +31,21 @@ export function resolvePosixPath(dir: string, src: string): string {
 	return stack.join("/");
 }
 
+// A leading "/" is treated as relative to the project's file root, not the
+// app's own origin — users have no reason to reference application files, only
+// their own project assets.
+function resolveAssetPath(dir: string, src: string): string {
+	return src.startsWith("/") ? resolvePosixPath("", src.slice(1)) : resolvePosixPath(dir, src);
+}
+
 function rewriteImageSrc(src: string): string {
-	if (!currentProjectId || /^(https?:\/\/|data:|\/\/)/.test(src) || src.startsWith("/")) {
+	if (!currentProjectId || /^(https?:\/\/|data:|\/\/)/.test(src)) {
 		return src;
 	}
-	const resolved = resolvePosixPath(currentMarkdownDir, src);
+	const resolved = resolveAssetPath(currentMarkdownDir, src);
 	// The version query busts the browser cache after uploads replace a file
 	// behind an otherwise stable URL.
-	const version = currentAssetVersion > 0 ? `?v=${currentAssetVersion}` : "";
-	return `${API_URL}/projects/${currentProjectId}/files/${resolved}${version}`;
+	return `${API_URL}/projects/${currentProjectId}/files/${resolved}${assetQuery(currentAssetVersion, currentAssetToken)}`;
 }
 
 const marp = new Marp({
@@ -68,9 +87,11 @@ export const renderMarp = (
 	projectId?: string,
 	selectedFileId?: string | null,
 	assetVersion = 0,
+	assetToken = "",
 ) => {
 	currentProjectId = projectId ?? "";
 	currentAssetVersion = assetVersion;
+	currentAssetToken = assetToken;
 	const lastSlash = selectedFileId?.lastIndexOf("/") ?? -1;
 	currentMarkdownDir = lastSlash > -1 ? selectedFileId!.slice(0, lastSlash + 1) : "";
 	return marp.render(markdown);
@@ -101,14 +122,20 @@ function prepareThemeCss(css: string, fallbackName: string): { css: string; name
  * Rewrites relative url(...) references in a CSS string to absolute backend API URLs.
  * Mirrors the image URL rewriting done for Markdown — background-image, @font-face src, etc.
  */
-export function rewriteCssUrls(css: string, projectId: string, fileId: string): string {
+export function rewriteCssUrls(
+	css: string,
+	projectId: string,
+	fileId: string,
+	assetToken = "",
+): string {
 	const lastSlash = fileId.lastIndexOf("/");
 	const cssDir = lastSlash > -1 ? fileId.slice(0, lastSlash + 1) : "";
+	const query = assetToken ? `?token=${encodeURIComponent(assetToken)}` : "";
 	return css.replace(
-		/url\(\s*(['"]?)(?!https?:\/\/|data:|\/\/|#|\/)([^'"\s)]+)\1\s*\)/gi,
+		/url\(\s*(['"]?)(?!https?:\/\/|data:|\/\/|#)([^'"\s)]+)\1\s*\)/gi,
 		(_match, quote: string, src: string) => {
-			const resolved = resolvePosixPath(cssDir, src);
-			return `url(${quote}${API_URL}/projects/${projectId}/files/${resolved}${quote})`;
+			const resolved = resolveAssetPath(cssDir, src);
+			return `url(${quote}${API_URL}/projects/${projectId}/files/${resolved}${query}${quote})`;
 		},
 	);
 }

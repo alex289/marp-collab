@@ -15,15 +15,22 @@ import { WebSocketServer } from "ws";
 import { logger } from "./helpers/logger.ts";
 import apiRouter from "./routes/api.ts";
 import { collabServer } from "./collab/hocuspocus.ts";
+import { apiAuthMiddleware } from "./middleware/api-auth-middleware.ts";
 
 const app = new Hono<{ Variables: HonoVariables }>();
 
 app.use(timeout(30 * 1000)); // 30 seconds
 app.use(trimTrailingSlash());
-app.use(secureHeaders());
+// crossOriginResourcePolicy is set below instead of here: secureHeaders() writes its
+// headers after next() resolves, so it always runs last and would clobber any
+// per-route override (e.g. the asset-serving route needing "cross-origin").
+app.use(secureHeaders({ crossOriginResourcePolicy: false }));
 app.use((c, next) => {
 	// Prevent search engines from indexing any page
 	c.header("X-Robots-Tag", "noindex, nofollow, noarchive");
+	// Default CORP; set before next() so routes further down the stack (like the
+	// asset-serving route used by sandboxed iframes) can still override it.
+	c.header("Cross-Origin-Resource-Policy", "same-origin");
 	return next();
 });
 
@@ -42,25 +49,7 @@ app.on(["GET", "POST"], "/api/v1/auth/*", (c) => {
 	return auth.handler(c.req.raw);
 });
 
-app.use("/api/*", async (c, next) => {
-	// Routes without authentication
-	if (
-		c.req.path.startsWith("/api/v1/auth/") ||
-		c.req.path.startsWith("/api/v1/health") ||
-		c.req.path === "/api/v1/auth-providers"
-	) {
-		return next();
-	}
-
-	const session = await auth.api.getSession({ headers: c.req.raw.headers });
-	if (!session) {
-		return c.json({ error: "Unauthorized" }, 401);
-	}
-
-	c.set("user", session.user);
-	c.set("session", session.session);
-	await next();
-});
+app.use("/api/*", apiAuthMiddleware);
 
 app.route("/api/v1", apiRouter);
 
@@ -115,6 +104,11 @@ app.onError((err, c) => {
 });
 
 const wss = new WebSocketServer({ noServer: true });
+// A WebSocketServer that emits "error" with no listener throws synchronously
+// (EventEmitter default behavior) — make sure it's always logged.
+wss.on("error", (err) => {
+	logger.error(err, "WebSocket server error");
+});
 
 serve(
 	{

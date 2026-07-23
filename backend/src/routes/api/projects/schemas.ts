@@ -1,7 +1,9 @@
 import z from "zod";
+import { PROJECT_TEMPLATE_IDS } from "../../../projects/templates/index.ts";
 
 const createProjectSchema = z.object({
 	name: z.string().trim().min(1).max(255),
+	template: z.enum(PROJECT_TEMPLATE_IDS).default("default"),
 });
 
 const updateProjectSchema = z.object({

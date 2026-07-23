@@ -15,6 +15,17 @@ async function fillPresentationName(page: Page, name: string) {
 	await page.getByRole("textbox", { name: "Name" }).fill(name);
 }
 
+async function createPresentation(page: Page, name: string, template?: "default" | "whs") {
+	await page.getByRole("button", { name: "Create Presentation" }).click();
+	await fillPresentationName(page, name);
+	await page.getByRole("button", { name: "Continue" }).click();
+	if (template === "whs") {
+		await page.getByRole("button", { name: "Westfälische Hochschule" }).click();
+	}
+	await page.getByRole("button", { name: "Create" }).click();
+	await expect(page.getByRole("dialog")).not.toBeVisible();
+}
+
 async function fillNewFileName(page: Page, fileName: string) {
 	await page.getByRole("textbox", { name: "File name" }).fill(fileName);
 }
@@ -73,25 +84,28 @@ async function clickSidebarRename(
 }
 
 async function getPreviewImageReference(page: Page) {
-	const frame = page.locator('iframe[title="Marp preview"]');
-	return await frame.evaluate((iframe: HTMLIFrameElement) => {
-		const doc = iframe.contentDocument;
-		const image = doc?.querySelector("img, image");
-		if (image instanceof HTMLImageElement) {
-			return image.getAttribute("src") || image.src;
+	// The preview iframe is sandboxed without allow-same-origin, so
+	// iframe.contentDocument is inaccessible from the parent frame's JS context.
+	// frameLocator reaches into the frame via Playwright's own protocol instead.
+	const previewFrame = page.frameLocator('iframe[title="Marp preview"]');
+	const image = previewFrame.locator("img, image").first();
+	if ((await image.count()) === 0) {
+		return "";
+	}
+	return await image.evaluate((el: Element) => {
+		if (el instanceof HTMLImageElement) {
+			return el.getAttribute("src") || el.src;
 		}
-		if (image instanceof SVGImageElement) {
+		if (el instanceof SVGImageElement) {
 			return (
-				image.href.baseVal ||
-				image.getAttribute("href") ||
-				image.getAttributeNS("http://www.w3.org/1999/xlink", "href") ||
-				image.getAttribute("xlink:href") ||
+				el.href.baseVal ||
+				el.getAttribute("href") ||
+				el.getAttributeNS("http://www.w3.org/1999/xlink", "href") ||
+				el.getAttribute("xlink:href") ||
 				""
 			);
 		}
-		return (
-			image?.getAttribute("href") ?? image?.getAttribute("xlink:href") ?? doc?.body.innerHTML ?? ""
-		);
+		return el.getAttribute("href") ?? el.getAttribute("xlink:href") ?? "";
 	});
 }
 
@@ -104,18 +118,19 @@ async function getPreviewSectionBackground(page: Page) {
 }
 
 async function getPreviewSlideMetrics(page: Page) {
-	const frame = page.locator('iframe[title="Marp preview"]');
-	return await frame.evaluate((iframe: HTMLIFrameElement) => {
-		const doc = iframe.contentDocument;
-		const slide = doc?.querySelector("svg[data-marpit-svg], section");
-		const iframeRect = iframe.getBoundingClientRect();
-		const slideRect = slide?.getBoundingClientRect();
+	// Same cross-origin constraint as getPreviewImageReference: measure the
+	// iframe element from the parent and the slide from within via frameLocator.
+	const iframeBox = await page.locator('iframe[title="Marp preview"]').boundingBox();
+	const previewFrame = page.frameLocator('iframe[title="Marp preview"]');
+	const slideBox = await previewFrame
+		.locator("svg[data-marpit-svg], section")
+		.first()
+		.boundingBox();
 
-		return {
-			iframeWidth: iframeRect.width,
-			slideWidth: slideRect?.width ?? 0,
-		};
-	});
+	return {
+		iframeWidth: iframeBox?.width ?? 0,
+		slideWidth: slideBox?.width ?? 0,
+	};
 }
 
 test.describe("Dashboard", () => {
@@ -137,6 +152,12 @@ test.describe("Presentation lifecycle", () => {
 		await expect(page.getByRole("heading", { name: "Create Presentation" })).toBeVisible();
 
 		await fillPresentationName(page, PRESENTATION_NAME);
+		await page.getByRole("button", { name: "Continue" }).click();
+
+		await expect(page.getByRole("heading", { name: "Choose a Theme" })).toBeVisible();
+		await expect(page.getByRole("button", { name: "Default" })).toBeVisible();
+		await expect(page.getByRole("button", { name: "Westfälische Hochschule" })).toBeVisible();
+
 		await page.getByRole("button", { name: "Create" }).click();
 
 		await expect(page.getByRole("dialog")).not.toBeVisible();
@@ -151,9 +172,7 @@ test.describe("Presentation lifecycle", () => {
 		await page.getByRole("button", { name: "Create Presentation" }).click();
 		await expect(page.getByRole("dialog")).toBeVisible();
 
-		await page.getByRole("button", { name: "Create" }).click();
-
-		await expect(page.getByRole("dialog")).toBeVisible();
+		await expect(page.getByRole("button", { name: "Continue" })).toBeDisabled();
 	});
 
 	test("cancel create dialog discards input", async ({ page }) => {
@@ -166,16 +185,57 @@ test.describe("Presentation lifecycle", () => {
 		await expect(page.getByRole("dialog")).not.toBeVisible();
 		await expect(page.getByText("Draft")).not.toBeVisible();
 	});
+
+	test("back button returns to the name step and preserves the name", async ({ page }) => {
+		await page.goto("/");
+
+		await page.getByRole("button", { name: "Create Presentation" }).click();
+		await fillPresentationName(page, "Back Step Test");
+		await page.getByRole("button", { name: "Continue" }).click();
+		await expect(page.getByRole("heading", { name: "Choose a Theme" })).toBeVisible();
+
+		await page.getByRole("button", { name: "Back" }).click();
+
+		await expect(page.getByRole("heading", { name: "Create Presentation" })).toBeVisible();
+		await expect(page.getByRole("textbox", { name: "Name" })).toHaveValue("Back Step Test");
+	});
+
+	test("closing the dialog resets the theme step back to the name step", async ({ page }) => {
+		await page.goto("/");
+
+		await page.getByRole("button", { name: "Create Presentation" }).click();
+		await fillPresentationName(page, "Reset Step Test");
+		await page.getByRole("button", { name: "Continue" }).click();
+		await expect(page.getByRole("heading", { name: "Choose a Theme" })).toBeVisible();
+
+		await page.getByRole("button", { name: "Close" }).click();
+		await expect(page.getByRole("dialog")).not.toBeVisible();
+
+		await page.getByRole("button", { name: "Create Presentation" }).click();
+		await expect(page.getByRole("heading", { name: "Create Presentation" })).toBeVisible();
+		await expect(page.getByRole("textbox", { name: "Name" })).toHaveValue("");
+	});
+
+	test("creates a presentation seeded with the selected theme", async ({ page }) => {
+		await page.goto("/");
+
+		await createPresentation(page, "WHS Theme Test", "whs");
+
+		await expect(page).toHaveURL(/\/presentations\/.+/);
+		await waitForSidebar(page);
+
+		await expect(page.getByRole("button", { name: "theme", exact: true })).toBeVisible();
+		await page.getByRole("button", { name: "theme", exact: true }).click();
+		await expect(page.getByRole("button", { name: "theme.css" })).toBeVisible();
+		await expect(page.getByRole("button", { name: "whs-logo.svg" })).toBeVisible();
+	});
 });
 
 test.describe("Editor page — file management", () => {
 	test.beforeEach(async ({ page }) => {
 		await page.goto("/");
 
-		await page.getByRole("button", { name: "Create Presentation" }).click();
-		await fillPresentationName(page, PRESENTATION_NAME);
-		await page.getByRole("button", { name: "Create" }).click();
-		await expect(page.getByRole("dialog")).not.toBeVisible();
+		await createPresentation(page, PRESENTATION_NAME);
 
 		await page.waitForURL(/\/presentations\/.+/);
 
@@ -356,10 +416,7 @@ test.describe("Editor: content editing", () => {
 	test("type into the CodeMirror editor and see live preview update", async ({ page }) => {
 		await page.goto("/");
 
-		await page.getByRole("button", { name: "Create Presentation" }).click();
-		await fillPresentationName(page, "Editor Flow Test");
-		await page.getByRole("button", { name: "Create" }).click();
-		await expect(page.getByRole("dialog")).not.toBeVisible();
+		await createPresentation(page, "Editor Flow Test");
 		await page.waitForURL(/\/presentations\/.+/);
 
 		const editor = page.locator(".cm-content");
@@ -379,10 +436,7 @@ test.describe("Editor: content editing", () => {
 		await page.setViewportSize({ width: 390, height: 844 });
 		await page.goto("/");
 
-		await page.getByRole("button", { name: "Create Presentation" }).click();
-		await fillPresentationName(page, "Mobile Preview Fit Test");
-		await page.getByRole("button", { name: "Create" }).click();
-		await expect(page.getByRole("dialog")).not.toBeVisible();
+		await createPresentation(page, "Mobile Preview Fit Test");
 		await page.waitForURL(/\/presentations\/.+/);
 
 		const previewFrame = page.frameLocator('iframe[title="Marp preview"]');
@@ -403,10 +457,7 @@ test.describe("Editor: content editing", () => {
 	}) => {
 		await page.goto("/");
 
-		await page.getByRole("button", { name: "Create Presentation" }).click();
-		await fillPresentationName(page, "CSS Folder Preview Test");
-		await page.getByRole("button", { name: "Create" }).click();
-		await expect(page.getByRole("dialog")).not.toBeVisible();
+		await createPresentation(page, "CSS Folder Preview Test");
 		await page.waitForURL(/\/presentations\/.+/);
 		await waitForSidebar(page);
 
@@ -449,10 +500,7 @@ test.describe("Editor: content editing", () => {
 	test("applies CSS theme edits to the preview without reloading the page", async ({ page }) => {
 		await page.goto("/");
 
-		await page.getByRole("button", { name: "Create Presentation" }).click();
-		await fillPresentationName(page, "Live CSS Theme Test");
-		await page.getByRole("button", { name: "Create" }).click();
-		await expect(page.getByRole("dialog")).not.toBeVisible();
+		await createPresentation(page, "Live CSS Theme Test");
 		await page.waitForURL(/\/presentations\/.+/);
 		await waitForSidebar(page);
 
@@ -500,10 +548,7 @@ test.describe("Presentation mode", () => {
 	}) => {
 		await page.goto("/");
 
-		await page.getByRole("button", { name: "Create Presentation" }).click();
-		await fillPresentationName(page, "Delayed Theme Test");
-		await page.getByRole("button", { name: "Create" }).click();
-		await expect(page.getByRole("dialog")).not.toBeVisible();
+		await createPresentation(page, "Delayed Theme Test");
 		await page.waitForURL(/\/presentations\/.+/);
 		await waitForSidebar(page);
 
@@ -557,10 +602,7 @@ test.describe("Presentation mode", () => {
 	test("start and end a presentation", async ({ page }) => {
 		await page.goto("/");
 
-		await page.getByRole("button", { name: "Create Presentation" }).click();
-		await fillPresentationName(page, "Presentation Mode Test");
-		await page.getByRole("button", { name: "Create" }).click();
-		await expect(page.getByRole("dialog")).not.toBeVisible();
+		await createPresentation(page, "Presentation Mode Test");
 		await page.waitForURL(/\/presentations\/.+/);
 
 		await waitForSidebar(page);
@@ -589,10 +631,7 @@ test.describe("Presentation mode", () => {
 	test("Escape key exits presentation mode", async ({ page }) => {
 		await page.goto("/");
 
-		await page.getByRole("button", { name: "Create Presentation" }).click();
-		await fillPresentationName(page, "Escape Test");
-		await page.getByRole("button", { name: "Create" }).click();
-		await expect(page.getByRole("dialog")).not.toBeVisible();
+		await createPresentation(page, "Escape Test");
 		await page.waitForURL(/\/presentations\/.+/);
 
 		await expect(page.getByRole("button", { name: "Start presentation" })).toBeVisible({
@@ -613,10 +652,7 @@ test.describe("Dashboard: card actions", () => {
 		const ORIGINAL = "Card Rename Original";
 		const RENAMED = "Card Rename Updated";
 		await page.goto("/");
-		await page.getByRole("button", { name: "Create Presentation" }).click();
-		await fillPresentationName(page, ORIGINAL);
-		await page.getByRole("button", { name: "Create" }).click();
-		await expect(page.getByRole("dialog")).not.toBeVisible();
+		await createPresentation(page, ORIGINAL);
 		await page.goto("/");
 
 		await page.getByRole("button", { name: `Rename ${ORIGINAL}` }).click();
@@ -632,10 +668,7 @@ test.describe("Dashboard: card actions", () => {
 	test("rename submit button is disabled when name is unchanged", async ({ page }) => {
 		const NAME = "Rename Unchanged Test";
 		await page.goto("/");
-		await page.getByRole("button", { name: "Create Presentation" }).click();
-		await fillPresentationName(page, NAME);
-		await page.getByRole("button", { name: "Create" }).click();
-		await expect(page.getByRole("dialog")).not.toBeVisible();
+		await createPresentation(page, NAME);
 		await page.goto("/");
 
 		await page.getByRole("button", { name: `Rename ${NAME}` }).click();
@@ -647,10 +680,7 @@ test.describe("Dashboard: card actions", () => {
 	test("cancel rename keeps the original name", async ({ page }) => {
 		const NAME = "Cancel Rename Test";
 		await page.goto("/");
-		await page.getByRole("button", { name: "Create Presentation" }).click();
-		await fillPresentationName(page, NAME);
-		await page.getByRole("button", { name: "Create" }).click();
-		await expect(page.getByRole("dialog")).not.toBeVisible();
+		await createPresentation(page, NAME);
 		await page.goto("/");
 
 		await page.getByRole("button", { name: `Rename ${NAME}` }).click();
@@ -664,10 +694,7 @@ test.describe("Dashboard: card actions", () => {
 	test("delete a presentation from the card", async ({ page }) => {
 		const NAME = "Card Delete Test";
 		await page.goto("/");
-		await page.getByRole("button", { name: "Create Presentation" }).click();
-		await fillPresentationName(page, NAME);
-		await page.getByRole("button", { name: "Create" }).click();
-		await expect(page.getByRole("dialog")).not.toBeVisible();
+		await createPresentation(page, NAME);
 		await page.goto("/");
 		await expect(page.getByRole("link", { name: new RegExp(NAME) })).toBeVisible();
 
@@ -682,10 +709,7 @@ test.describe("Dashboard: card actions", () => {
 	test("cancel delete keeps the presentation", async ({ page }) => {
 		const NAME = "Cancel Delete Test";
 		await page.goto("/");
-		await page.getByRole("button", { name: "Create Presentation" }).click();
-		await fillPresentationName(page, NAME);
-		await page.getByRole("button", { name: "Create" }).click();
-		await expect(page.getByRole("dialog")).not.toBeVisible();
+		await createPresentation(page, NAME);
 		await page.goto("/");
 
 		await page.getByRole("button", { name: `Delete ${NAME}` }).click();
@@ -700,10 +724,7 @@ test.describe("Dashboard: card actions", () => {
 test.describe("Editor: settings panel", () => {
 	test.beforeEach(async ({ page }) => {
 		await page.goto("/");
-		await page.getByRole("button", { name: "Create Presentation" }).click();
-		await fillPresentationName(page, "Settings Panel Test");
-		await page.getByRole("button", { name: "Create" }).click();
-		await expect(page.getByRole("dialog")).not.toBeVisible();
+		await createPresentation(page, "Settings Panel Test");
 		await page.waitForURL(/\/presentations\/.+/);
 		await waitForSidebar(page);
 		await page
@@ -737,10 +758,7 @@ test.describe("Editor: settings panel", () => {
 test.describe("Editor: file upload", () => {
 	test.beforeEach(async ({ page }) => {
 		await page.goto("/");
-		await page.getByRole("button", { name: "Create Presentation" }).click();
-		await fillPresentationName(page, "Upload Test");
-		await page.getByRole("button", { name: "Create" }).click();
-		await expect(page.getByRole("dialog")).not.toBeVisible();
+		await createPresentation(page, "Upload Test");
 		await page.waitForURL(/\/presentations\/.+/);
 		await waitForSidebar(page);
 	});
@@ -797,10 +815,7 @@ test.describe("Editor: file upload", () => {
 test.describe("Editor: export", () => {
 	test("export project as ZIP triggers a download", async ({ page }) => {
 		await page.goto("/");
-		await page.getByRole("button", { name: "Create Presentation" }).click();
-		await fillPresentationName(page, "Export Test");
-		await page.getByRole("button", { name: "Create" }).click();
-		await expect(page.getByRole("dialog")).not.toBeVisible();
+		await createPresentation(page, "Export Test");
 		await page.waitForURL(/\/presentations\/.+/);
 		await waitForSidebar(page);
 
@@ -815,10 +830,7 @@ test.describe("Editor: export", () => {
 test.describe("Editor: outline panel", () => {
 	test.beforeEach(async ({ page }) => {
 		await page.goto("/");
-		await page.getByRole("button", { name: "Create Presentation" }).click();
-		await fillPresentationName(page, "Outline Test");
-		await page.getByRole("button", { name: "Create" }).click();
-		await expect(page.getByRole("dialog")).not.toBeVisible();
+		await createPresentation(page, "Outline Test");
 		await page.waitForURL(/\/presentations\/.+/);
 	});
 
@@ -858,10 +870,7 @@ test.describe("Editor: outline panel", () => {
 test.describe("Editor: search panel", () => {
 	test.beforeEach(async ({ page }) => {
 		await page.goto("/");
-		await page.getByRole("button", { name: "Create Presentation" }).click();
-		await fillPresentationName(page, "Search Test");
-		await page.getByRole("button", { name: "Create" }).click();
-		await expect(page.getByRole("dialog")).not.toBeVisible();
+		await createPresentation(page, "Search Test");
 		await page.waitForURL(/\/presentations\/.+/);
 
 		const editor = page.locator(".cm-content");
@@ -897,10 +906,7 @@ test.describe("Editor: search panel", () => {
 test.describe("Editor: collaboration", () => {
 	test.beforeEach(async ({ page }) => {
 		await page.goto("/");
-		await page.getByRole("button", { name: "Create Presentation" }).click();
-		await fillPresentationName(page, "Collab Test");
-		await page.getByRole("button", { name: "Create" }).click();
-		await expect(page.getByRole("dialog")).not.toBeVisible();
+		await createPresentation(page, "Collab Test");
 		await page.waitForURL(/\/presentations\/.+/);
 		await waitForSidebar(page);
 	});
@@ -962,10 +968,7 @@ test.describe("Editor: collaboration", () => {
 test.describe("Presentation mode: slide counter and timer", () => {
 	test.beforeEach(async ({ page }) => {
 		await page.goto("/");
-		await page.getByRole("button", { name: "Create Presentation" }).click();
-		await fillPresentationName(page, "Counter Timer Test");
-		await page.getByRole("button", { name: "Create" }).click();
-		await expect(page.getByRole("dialog")).not.toBeVisible();
+		await createPresentation(page, "Counter Timer Test");
 		await page.waitForURL(/\/presentations\/.+/);
 
 		const editor = page.locator(".cm-content");
@@ -996,10 +999,7 @@ test.describe("Navigation", () => {
 	test("back link navigates to the dashboard", async ({ page }) => {
 		await page.goto("/");
 
-		await page.getByRole("button", { name: "Create Presentation" }).click();
-		await fillPresentationName(page, "Nav Test");
-		await page.getByRole("button", { name: "Create" }).click();
-		await expect(page.getByRole("dialog")).not.toBeVisible();
+		await createPresentation(page, "Nav Test");
 		await page.waitForURL(/\/presentations\/.+/);
 
 		await page.getByRole("link", { name: "Back to presentations" }).click();

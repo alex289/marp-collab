@@ -5,8 +5,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Hono } from "hono";
 import type { Database } from "better-sqlite3";
-import type { HonoVariables } from "../../../types.ts";
-import type { ProjectAccess } from "../../../projects/access-policy.ts";
+import type { HonoVariables } from "../types.ts";
+import type { ProjectAccess } from "../projects/access-policy.ts";
 
 type TestVariables = HonoVariables & { projectAccess: ProjectAccess };
 
@@ -19,7 +19,7 @@ describe("Project Access Middleware", () => {
 		tempDir = await mkdtemp(join(tmpdir(), "marp-project-access-middleware-"));
 		process.env.DATA_PATH = tempDir;
 
-		const dbModule = await import("../../../db/db.ts");
+		const dbModule = await import("../db/db.ts");
 		const middleware = await import("./project-access-middleware.ts");
 		db = dbModule.db;
 
