@@ -28,4 +28,4 @@ RUN echo '{ "type": "module" }' > package.json
 
 EXPOSE 8787
 
-CMD ["node", "./app.js"]
+CMD ["node", "./bin/app.js"]

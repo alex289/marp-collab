@@ -38,7 +38,7 @@ export default defineConfig({
 	},
 	plugins: [copyNativeAddonsPlugin(), copyTemplateAssetsPlugin()],
 	output: {
-		dir: "../dist",
+		dir: "../dist/bin",
 		format: "esm",
 		sourcemap: true,
 		cleanDir: false,
