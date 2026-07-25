@@ -11,7 +11,7 @@ COPY backend/package.json ./backend/
 COPY e2e/package.json ./e2e/
 
 RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
-    pnpm i --frozen-lockfile --store-dir /pnpm/store && cd backend && pnpm rebuild better-sqlite3
+    pnpm i --frozen-lockfile --store-dir /pnpm/store
 
 COPY . .
 RUN cd backend && node --run build && cd ../frontend && node --run build
