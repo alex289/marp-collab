@@ -43,6 +43,7 @@ const staticSrcDoc = `<!doctype html>
       var activeIndex = -1;
       var pressIndex = -1;
       var pressY = 0;
+      var pressScrollY = 0;
       var dragging = false;
       var dragAllowed = false;
 
@@ -110,27 +111,50 @@ const staticSrcDoc = `<!doctype html>
       }
 
       // Returns the insertion slot (0..count) the pointer currently sits in.
+      // The lifted slide rides along with the cursor, so its own rect says
+      // nothing about where the drop belongs and has to be ignored.
       function slotFromPoint(y) {
         var slides = slideElements();
         for (var i = 0; i < slides.length; i++) {
+          if (dragging && i === pressIndex) continue;
           var rect = slides[i].getBoundingClientRect();
           if (y < rect.top + rect.height / 2) return i;
         }
         return slides.length;
       }
 
+      // Both the slot before and the slot after the dragged slide land it back
+      // where it started, so neither should promise a move.
       function paintDropSlot(slot) {
         var slides = slideElements();
+        var settled = (slot > pressIndex ? slot - 1 : slot) === pressIndex;
+
         slides.forEach(function (slide, index) {
-          slide.classList.toggle('drop-before', index === slot);
-          slide.classList.toggle('drop-after', slot === slides.length && index === slides.length - 1);
+          slide.classList.toggle('drop-before', !settled && index === slot);
+          slide.classList.toggle(
+            'drop-after',
+            !settled && slot === slides.length && index === slides.length - 1
+          );
         });
+      }
+
+      function liftDragged(offset) {
+        var slide = slideElements()[pressIndex];
+        if (slide) slide.style.setProperty('--drag-offset', offset + 'px');
+      }
+
+      function labelFor(index) {
+        return document.querySelector('.thumb-label[data-index="' + index + '"]');
       }
 
       function clearDrag() {
         document.body.classList.remove('is-dragging');
         slideElements().forEach(function (slide) {
           slide.classList.remove('drop-before', 'drop-after', 'is-dragged');
+          slide.style.removeProperty('--drag-offset');
+        });
+        Array.prototype.forEach.call(document.querySelectorAll('.thumb-label'), function (label) {
+          label.classList.remove('is-dragged-label');
         });
         pressIndex = -1;
         dragging = false;
@@ -145,6 +169,7 @@ const staticSrcDoc = `<!doctype html>
 
         pressIndex = Number(element.getAttribute('data-index'));
         pressY = e.clientY;
+        pressScrollY = window.scrollY;
         dragging = false;
         // Touch drags would fight the panel's own scrolling, so on touch the
         // number badge is the only drag handle.
@@ -163,6 +188,8 @@ const staticSrcDoc = `<!doctype html>
             document.body.classList.add('is-dragging');
             var slides = slideElements();
             if (slides[pressIndex]) slides[pressIndex].classList.add('is-dragged');
+            var label = labelFor(pressIndex);
+            if (label) label.classList.add('is-dragged-label');
           }
 
           e.preventDefault();
@@ -170,6 +197,9 @@ const staticSrcDoc = `<!doctype html>
           if (e.clientY < 48) window.scrollBy(0, -14);
           else if (e.clientY > window.innerHeight - 48) window.scrollBy(0, 14);
 
+          // The slide is offset from where it was picked up, so auto-scrolling
+          // the list has to be folded in or it drifts away from the cursor.
+          liftDragged(e.clientY - pressY + (window.scrollY - pressScrollY));
           paintDropSlot(slotFromPoint(e.clientY));
         },
         { passive: false }
@@ -196,6 +226,12 @@ const staticSrcDoc = `<!doctype html>
       });
 
       document.addEventListener('pointercancel', clearDrag);
+
+      // Images inside a slide are still natively draggable, which would spawn a
+      // ghost image and swallow the reorder gesture.
+      document.addEventListener('dragstart', function (e) {
+        e.preventDefault();
+      });
 
       // Key events inside an iframe don't reach the parent document, so page
       // hotkeys would die once a thumbnail has focus. Mirrors the preview pane.
@@ -342,6 +378,7 @@ export const SlideOverviewPanel = ({
 		const isDark = resolvedTheme === "dark";
 		const background = isDark ? "oklch(0.14 0 0)" : "oklch(0.92 0 0)";
 		const pageShadow = isDark ? "0 1px 6px rgb(0 0 0 / 0.55)" : "0 1px 4px rgb(0 0 0 / 0.18)";
+		const liftShadow = isDark ? "0 10px 24px rgb(0 0 0 / 0.7)" : "0 10px 24px rgb(0 0 0 / 0.35)";
 		const accent = isDark ? "oklch(0.72 0.15 250)" : "oklch(0.52 0.18 255)";
 		const muted = isDark ? "oklch(0.65 0 0)" : "oklch(0.45 0 0)";
 
@@ -360,6 +397,13 @@ export const SlideOverviewPanel = ({
         font-family: system-ui, -apple-system, sans-serif;
       }
       *, *::before, *::after { box-sizing: border-box; }
+      /* Thumbnails are a navigation surface, not readable text — a drag across
+         them must reorder slides, never smear a text selection over the deck. */
+      body, body * {
+        -webkit-user-select: none;
+        user-select: none;
+        -webkit-user-drag: none;
+      }
       ${rendered.css}
       .thumb-grid {
         display: grid;
@@ -384,9 +428,27 @@ export const SlideOverviewPanel = ({
         transition: outline-color 120ms ease;
       }
       .thumb-grid > .is-active { outline-color: ${accent}; }
-      .thumb-grid > .is-dragged { opacity: 0.35; }
       .thumb-grid > .drop-before { box-shadow: 0 -4px 0 -1px ${accent}, ${pageShadow}; }
       .thumb-grid > .drop-after { box-shadow: 0 4px 0 -1px ${accent}, ${pageShadow}; }
+      /* The picked-up slide leaves its slot behind and rides the cursor, so the
+         gap it came from stays visible as the drop indicator moves. Listed last
+         so the lift wins over any drop-indicator shadow. */
+      .thumb-grid > .is-dragged {
+        transform: translateY(var(--drag-offset, 0px)) scale(1.04) rotate(-1deg);
+        transform-origin: center;
+        transition: none;
+        position: relative;
+        z-index: 2;
+        opacity: 0.92;
+        outline-color: ${accent};
+        box-shadow: ${liftShadow};
+      }
+      body.is-dragging .thumb-label { opacity: 0.45; }
+      body.is-dragging .thumb-label.is-dragged-label {
+        opacity: 1;
+        color: ${accent};
+        font-weight: 600;
+      }
       .thumb-label {
         grid-column: 1;
         display: flex;
@@ -446,7 +508,9 @@ export const SlideOverviewPanel = ({
 							sandbox="allow-scripts"
 							onLoad={handleIframeLoad}
 						/>
-						<p className="shrink-0 px-2 pt-2 text-xs text-muted-foreground">{reorderHint}</p>
+						<p className="shrink-0 px-2 pt-2 text-xs text-center text-muted-foreground">
+							{reorderHint}
+						</p>
 					</>
 				)}
 			</SidebarGroupContent>
