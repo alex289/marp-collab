@@ -60,11 +60,18 @@ const staticSrcDoc = `<!doctype html>
         var content = document.getElementById('content');
         var slides = [];
         var active = 0;
+        // Last index the parent asked for, kept unclamped: at load time the deck
+        // isn't rendered yet, so clamping against an empty slide list would pin
+        // the frame to slide 0 until the parent next navigates.
+        var desired = 0;
         var zoom = 1;
         var MIN_ZOOM = 1;
         var MAX_ZOOM = 4;
         // Set once the parent hands over a MessagePort (see 'init-port' below).
         var port = null;
+        // Thumbnail frames (e.g. the next-slide preview) opt out of zoom, laser
+        // pointer and key forwarding via the 'presentation-config' message.
+        var interactive = true;
 
         function collectSlides() {
           var found = Array.from(content.querySelectorAll('svg[data-marpit-svg]'));
@@ -96,7 +103,9 @@ const staticSrcDoc = `<!doctype html>
         }
 
         function report() {
-          if (!port) {
+          // Before the first render there is nothing meaningful to report, and a
+          // {active: 0, total: 0} would make the parent reset its slide index.
+          if (!port || slides.length === 0) {
             return;
           }
           port.postMessage({
@@ -159,16 +168,18 @@ const staticSrcDoc = `<!doctype html>
           content.innerHTML = html;
           slides = collectSlides();
           zoom = 1;
-          apply(active);
+          apply(desired);
         }
 
         window.addEventListener('resize', function () {
-          fit(slides[active]);
+          var slide = slides[active];
+          if (!slide) return;
+          fit(slide);
           applyZoom();
         });
 
         window.addEventListener('wheel', function (e) {
-          if (!e.ctrlKey) return;
+          if (!interactive || !e.ctrlKey) return;
           e.preventDefault();
 
           var slide = slides[active];
@@ -185,7 +196,7 @@ const staticSrcDoc = `<!doctype html>
         }, { passive: false });
 
         window.addEventListener('dblclick', function (e) {
-          if (zoom === 1) return;
+          if (!interactive || zoom === 1) return;
           e.preventDefault();
           resetZoom();
         });
@@ -196,7 +207,7 @@ const staticSrcDoc = `<!doctype html>
         // them on its own document.
         function forwardKey(type) {
           return function (e) {
-            if (!port) {
+            if (!interactive || !port) {
               return;
             }
             port.postMessage({
@@ -236,6 +247,7 @@ const staticSrcDoc = `<!doctype html>
         }
 
         window.addEventListener('mousemove', function (e) {
+          if (!interactive) return;
           laserX = e.clientX;
           laserY = e.clientY;
           laserActive = e.shiftKey;
@@ -253,6 +265,14 @@ const staticSrcDoc = `<!doctype html>
           if (!data) {
             return;
           }
+          if (data.type === 'presentation-config') {
+            interactive = data.interactive !== false;
+            if (!interactive) {
+              laserActive = false;
+              updateLaser();
+            }
+            return;
+          }
           if (data.type === 'presentation-laser') {
             laserActive = !!data.active;
             updateLaser();
@@ -265,7 +285,8 @@ const staticSrcDoc = `<!doctype html>
           if (data.type !== 'presentation-set-slide') {
             return;
           }
-          apply(Number(data.index) || 0);
+          desired = Number(data.index) || 0;
+          apply(desired);
         }
 
         window.addEventListener('message', function (event) {
@@ -282,28 +303,36 @@ const staticSrcDoc = `<!doctype html>
   </body>
 </html>`;
 
-export function PresentationFrame({
-	markdown,
+type SlideFrameProps = {
+	title: string;
+	html: string;
+	css: string;
+	slideIndex: number;
+	/** Non-interactive frames (thumbnails) skip zoom, laser pointer and key forwarding. */
+	interactive?: boolean;
+	isLaserActive?: boolean;
+	onMetaChange?: (meta: { active: number; total: number }) => void;
+	className?: string;
+};
+
+function SlideFrame({
+	title,
+	html,
+	css,
 	slideIndex,
-	projectId,
-	selectedFileId,
-	themeRevision,
-	assetRevision = 0,
-	assetToken,
+	interactive = true,
+	isLaserActive = false,
 	onMetaChange,
-	showSpeakerNotes = false,
 	className,
-}: PresentationFrameProps) {
+}: SlideFrameProps) {
 	const iframeRef = useRef<HTMLIFrameElement | null>(null);
 	// MessagePort to the iframe, set on load instead of using broadcast
 	// postMessage(..., "*") so a navigated-away frame can't keep receiving messages.
 	const portRef = useRef<MessagePort | null>(null);
 	const [iframeReady, setIframeReady] = useState(false);
-	// Shift held anywhere (iframe key events are forwarded to this document) turns
-	// the cursor into a laser pointer on the active slide.
-	const isLaserActive = useKeyHold("Shift");
 	const slideIndexRef = useRef(slideIndex);
 	const isLaserActiveRef = useRef(isLaserActive);
+	const interactiveRef = useRef(interactive);
 	const onMetaChangeRef = useRef(onMetaChange);
 
 	useEffect(() => {
@@ -315,25 +344,12 @@ export function PresentationFrame({
 	}, [isLaserActive]);
 
 	useEffect(() => {
+		interactiveRef.current = interactive;
+	}, [interactive]);
+
+	useEffect(() => {
 		onMetaChangeRef.current = onMetaChange;
 	}, [onMetaChange]);
-
-	const rendered = useMemo(() => {
-		// Project themes are registered on the shared Marp instance; this invalidates stale renders.
-		void themeRevision;
-		try {
-			return renderMarp(markdown, projectId, selectedFileId, assetRevision, assetToken);
-		} catch (error) {
-			return {
-				html: `<section><h1>Marp Render Error</h1><p>${error instanceof Error ? error.message : "Unknown error"}</p></section>`,
-				css: "",
-				comments: [[]],
-			};
-		}
-	}, [markdown, projectId, selectedFileId, themeRevision, assetRevision, assetToken]);
-
-	const activeComments = rendered.comments[slideIndex] ?? [];
-	const hasSpeakerNotes = activeComments.some((comment) => comment.trim().length > 0);
 
 	const handlePortMessage = useCallback((event: MessageEvent) => {
 		const payload = event.data;
@@ -373,6 +389,10 @@ export function PresentationFrame({
 		// The fresh document has no content yet; resync it with the presenter's
 		// current slide/laser state once the first marp-update arrives.
 		portRef.current.postMessage({
+			type: "presentation-config",
+			interactive: interactiveRef.current,
+		});
+		portRef.current.postMessage({
 			type: "presentation-set-slide",
 			index: slideIndexRef.current,
 		});
@@ -390,10 +410,10 @@ export function PresentationFrame({
 
 		portRef.current?.postMessage({
 			type: "marp-update",
-			html: rendered.html,
-			css: rendered.css,
+			html,
+			css,
 		});
-	}, [iframeReady, rendered]);
+	}, [iframeReady, html, css]);
 
 	useEffect(() => {
 		portRef.current?.postMessage({
@@ -409,57 +429,128 @@ export function PresentationFrame({
 		});
 	}, [isLaserActive]);
 
-	const iframe = (
+	return (
 		<iframe
 			ref={iframeRef}
-			title="Presentation"
+			title={title}
 			srcDoc={staticSrcDoc}
+			className={className ?? "h-full w-full border-0"}
+			sandbox="allow-scripts"
+			onLoad={handleIframeLoad}
+		/>
+	);
+}
+
+export function PresentationFrame({
+	markdown,
+	slideIndex,
+	projectId,
+	selectedFileId,
+	themeRevision,
+	assetRevision = 0,
+	assetToken,
+	onMetaChange,
+	showSpeakerNotes = false,
+	className,
+}: PresentationFrameProps) {
+	// Shift held anywhere (iframe key events are forwarded to this document) turns
+	// the cursor into a laser pointer on the active slide.
+	const isLaserActive = useKeyHold("Shift");
+
+	const rendered = useMemo(() => {
+		// Project themes are registered on the shared Marp instance; this invalidates stale renders.
+		void themeRevision;
+		try {
+			return renderMarp(markdown, projectId, selectedFileId, assetRevision, assetToken);
+		} catch (error) {
+			return {
+				html: `<section><h1>Marp Render Error</h1><p>${error instanceof Error ? error.message : "Unknown error"}</p></section>`,
+				css: "",
+				comments: [[]],
+			};
+		}
+	}, [markdown, projectId, selectedFileId, themeRevision, assetRevision, assetToken]);
+
+	const activeComments = rendered.comments[slideIndex] ?? [];
+	const hasSpeakerNotes = activeComments.some((comment) => comment.trim().length > 0);
+	// Marp returns one comment bucket per slide, so this doubles as the slide count.
+	const hasNextSlide = slideIndex + 1 < rendered.comments.length;
+
+	const slide = (
+		<SlideFrame
+			title="Presentation"
+			html={rendered.html}
+			css={rendered.css}
+			slideIndex={slideIndex}
+			isLaserActive={isLaserActive}
+			onMetaChange={onMetaChange}
 			className={
 				showSpeakerNotes
 					? "h-full w-full border-0 bg-black"
 					: (className ?? "h-full w-full border-0")
 			}
-			sandbox="allow-scripts"
-			onLoad={handleIframeLoad}
 		/>
 	);
 
 	if (!showSpeakerNotes) {
-		return iframe;
+		return slide;
 	}
 
 	return (
 		<div className={className ?? "h-full w-full"}>
 			<div className="grid h-full w-full grid-cols-1 gap-3  p-4 md:grid-cols-[minmax(0,1fr)_minmax(280px,24vw)]">
 				<div className="hidden min-h-0 overflow-hidden rounded-md border border-white/10 shadow-2xl md:block">
-					{iframe}
+					{slide}
 				</div>
-				<Card className="flex min-h-0 flex-col overflow-hidden py-0 shadow-2xl">
-					<CardHeader className="shrink-0 border-b border-border px-4 py-3">
-						<CardTitle>Speaker notes</CardTitle>
-					</CardHeader>
-					<CardContent className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
-						{hasSpeakerNotes ? (
-							<div className="space-y-3 text-sm leading-6">
-								{activeComments.map((comment, index) => {
-									const trimmed = comment.trim();
+				<div className="flex min-h-0 flex-col gap-3">
+					<Card className="hidden shrink-0 flex-col overflow-hidden py-0 shadow-2xl md:flex gap-0">
+						<CardHeader className="shrink-0 border-b border-border px-4 py-3">
+							<CardTitle>Next slide</CardTitle>
+						</CardHeader>
+						<CardContent className="relative aspect-video px-0">
+							{/* Kept mounted past the last slide so stepping back doesn't reload the iframe. */}
+							<SlideFrame
+								title="Next slide preview"
+								html={rendered.html}
+								css={rendered.css}
+								slideIndex={slideIndex + 1}
+								interactive={false}
+								className="pointer-events-none h-full w-full rounded-b-lg border-0 bg-black"
+							/>
+							{!hasNextSlide && (
+								<div className="absolute inset-0 flex items-center justify-center bg-card">
+									<p className="text-sm text-muted-foreground">End of presentation</p>
+								</div>
+							)}
+						</CardContent>
+					</Card>
+					<Card className="flex min-h-0 flex-1 flex-col overflow-hidden py-0 shadow-2xl">
+						<CardHeader className="shrink-0 border-b border-border px-4 py-3">
+							<CardTitle>Speaker notes</CardTitle>
+						</CardHeader>
+						<CardContent className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+							{hasSpeakerNotes ? (
+								<div className="space-y-3 text-sm leading-6">
+									{activeComments.map((comment, index) => {
+										const trimmed = comment.trim();
 
-									if (!trimmed) {
-										return null;
-									}
+										if (!trimmed) {
+											return null;
+										}
 
-									return (
-										<p className="whitespace-pre-wrap" key={`${index}-${trimmed}`}>
-											{trimmed}
-										</p>
-									);
-								})}
-							</div>
-						) : (
-							<p className="text-sm text-muted-foreground">No speaker notes for this slide.</p>
-						)}
-					</CardContent>
-				</Card>
+										return (
+											<p className="whitespace-pre-wrap" key={`${index}-${trimmed}`}>
+												{trimmed}
+											</p>
+										);
+									})}
+								</div>
+							) : (
+								<p className="text-sm text-muted-foreground">No speaker notes for this slide.</p>
+							)}
+						</CardContent>
+					</Card>
+				</div>
 			</div>
 		</div>
 	);

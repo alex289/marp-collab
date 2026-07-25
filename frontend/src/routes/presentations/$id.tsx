@@ -26,8 +26,10 @@ import type { EditorPaneHandle } from "@/components/editor-pane";
 import { SearchPanel } from "@/components/search-panel";
 import { findTextMatches, replaceTextRange, type TextSearchMatch } from "@/lib/text-search";
 import { OutlinePanel } from "@/components/outline-panel";
+import { SlideOverviewPanel } from "@/components/slide-overview-panel";
 import { parseMarkdownOutline } from "@/lib/outline";
 import { countMarpSlides, getLineForSlideIndex, getSlideIndexForLine } from "@/lib/slide-count";
+import { computeMinimalSplice, moveSlide } from "@/lib/slide-blocks";
 import { isEditableDeckFile, isMarkdownDeckFile } from "@/lib/file-types";
 import { PaneResizeHandle } from "@/components/pane-resize-handle";
 import { listThemeNames, rewriteCssUrls, setProjectThemes } from "@/lib/marp";
@@ -711,6 +713,50 @@ function RouteComponent() {
 		runActiveFileSearch(query);
 	};
 
+	// Reordering rewrites the deck's own document, so it is only offered while
+	// that deck is the file the editor has open for writing.
+	const canReorderSlides = isEditingPreviewFile && !collab.readOnly;
+	const reorderHint = collab.readOnly
+		? "You have read-only access to this deck."
+		: canReorderSlides
+			? "Click to jump, drag to reorder."
+			: "Open this deck in the editor to reorder its slides.";
+
+	const handleMoveSlide = useCallback(
+		(from: number, to: number) => {
+			const yText = collab.yText;
+			if (!yText || !canReorderSlides) {
+				return;
+			}
+
+			// oxlint-disable-next-line no-base-to-string
+			const current = yText.toString();
+			const next = moveSlide(current, from, to);
+			const splice = computeMinimalSplice(current, next);
+			if (!splice) {
+				return;
+			}
+
+			const applyMove = () => {
+				yText.delete(splice.index, splice.deleteCount);
+				if (splice.insert) {
+					yText.insert(splice.index, splice.insert);
+				}
+			};
+
+			if (yText.doc) {
+				yText.doc.transact(applyMove);
+			} else {
+				applyMove();
+			}
+
+			// Follow the slide to its new home so the caret doesn't strand the
+			// preview on whatever content shifted into the old position.
+			editorPaneRef.current?.jumpToLine(getLineForSlideIndex(next, to));
+		},
+		[canReorderSlides, collab.yText],
+	);
+
 	useEffect(() => {
 		if (!isPresentation) {
 			return;
@@ -1245,6 +1291,24 @@ function RouteComponent() {
 							items={outlineItems}
 							isMarkdown={isMarkdownDeckFile(selectedFile)}
 							onSelectLine={(line) => editorPaneRef.current?.jumpToLine(line)}
+						/>
+					}
+					slidesPanel={
+						<SlideOverviewPanel
+							markdown={markdown}
+							isMarkdown={previewFile !== null}
+							projectId={id}
+							deckFileId={previewFile?.id ?? null}
+							themeRevision={themeRevision}
+							assetRevision={assetRevision}
+							assetToken={assetToken}
+							activeSlideIndex={followSlideIndex}
+							canReorder={canReorderSlides}
+							reorderHint={reorderHint}
+							onSelectSlide={(index) =>
+								editorPaneRef.current?.jumpToLine(getLineForSlideIndex(markdown, index))
+							}
+							onMoveSlide={handleMoveSlide}
 						/>
 					}
 				/>
