@@ -515,7 +515,7 @@ export function PresentationFrame({
 								css={rendered.css}
 								slideIndex={slideIndex + 1}
 								interactive={false}
-								className="pointer-events-none h-full w-full border-0 bg-black"
+								className="pointer-events-none h-full w-full rounded-b-lg border-0 bg-black"
 							/>
 							{!hasNextSlide && (
 								<div className="absolute inset-0 flex items-center justify-center bg-card">
