@@ -1,6 +1,6 @@
 // oxlint-disable no-warning-comments
 import { useState } from "react";
-import { Files, ListTree, RotateCcw, Search, Settings, Trash2 } from "lucide-react";
+import { Files, LayoutGrid, ListTree, RotateCcw, Search, Settings, Trash2 } from "lucide-react";
 import { useHotkeys } from "@tanstack/react-hotkeys";
 import useSWR from "swr";
 import type { Project } from "@/lib/types";
@@ -31,7 +31,7 @@ import { Button } from "./ui/button";
 import { ProjectFilesPanel } from "@/features/project-files/project-files-panel";
 import type { ProjectFilesWorkspace } from "@/features/project-files/use-project-files-workspace";
 
-type WorkspacePanel = "files" | "search" | "outline" | "settings";
+type WorkspacePanel = "files" | "search" | "outline" | "slides" | "settings";
 
 type ProjectSettingsResponse = {
 	project: Project;
@@ -42,7 +42,8 @@ const WORKSPACE_PANEL_HOTKEYS = {
 	files: "Alt+1",
 	search: "Alt+2",
 	outline: "Alt+3",
-	settings: "Alt+4",
+	slides: "Alt+4",
+	settings: "Alt+5",
 } as const;
 
 const projectSettingsFetcher = async (url: string): Promise<ProjectSettingsResponse> => {
@@ -135,6 +136,14 @@ const WorkspaceRailButtons = ({ activePanel, onPanelClick }: WorkspaceRailButton
 			<ListTree />
 		</WorkspaceRailButton>
 		<WorkspaceRailButton
+			active={activePanel === "slides"}
+			label="Slides"
+			hotkey={WORKSPACE_PANEL_HOTKEYS.slides}
+			onClick={() => onPanelClick("slides")}
+		>
+			<LayoutGrid />
+		</WorkspaceRailButton>
+		<WorkspaceRailButton
 			active={activePanel === "settings"}
 			label="Settings"
 			hotkey={WORKSPACE_PANEL_HOTKEYS.settings}
@@ -180,6 +189,7 @@ type FileSidebarProps = {
 	isResizing?: boolean;
 	searchPanel?: React.ReactNode;
 	outlinePanel?: React.ReactNode;
+	slidesPanel?: React.ReactNode;
 	themeNames: string[];
 	currentTheme: string;
 	onThemeChange: (theme: string) => void;
@@ -196,6 +206,7 @@ export const FileSidebar = ({
 	isResizing = false,
 	searchPanel = null,
 	outlinePanel = null,
+	slidesPanel = null,
 	themeNames,
 	currentTheme,
 	onThemeChange,
@@ -230,6 +241,10 @@ export const FileSidebar = ({
 		{
 			hotkey: WORKSPACE_PANEL_HOTKEYS.outline,
 			callback: () => handlePanelButtonClick("outline"),
+		},
+		{
+			hotkey: WORKSPACE_PANEL_HOTKEYS.slides,
+			callback: () => handlePanelButtonClick("slides"),
 		},
 		{
 			hotkey: WORKSPACE_PANEL_HOTKEYS.settings,
@@ -370,6 +385,7 @@ export const FileSidebar = ({
 							</div>
 							{activePanel === "search" ? (searchPanel ?? emptyPanel) : null}
 							{activePanel === "outline" ? (outlinePanel ?? emptyPanel) : null}
+							{activePanel === "slides" ? (slidesPanel ?? emptyPanel) : null}
 							{activePanel === "settings" ? settingsPanel : null}
 						</div>
 					</div>
