@@ -60,6 +60,10 @@ const staticSrcDoc = `<!doctype html>
         var content = document.getElementById('content');
         var slides = [];
         var active = 0;
+        // Last index the parent asked for, kept unclamped: at load time the deck
+        // isn't rendered yet, so clamping against an empty slide list would pin
+        // the frame to slide 0 until the parent next navigates.
+        var desired = 0;
         var zoom = 1;
         var MIN_ZOOM = 1;
         var MAX_ZOOM = 4;
@@ -99,7 +103,9 @@ const staticSrcDoc = `<!doctype html>
         }
 
         function report() {
-          if (!port) {
+          // Before the first render there is nothing meaningful to report, and a
+          // {active: 0, total: 0} would make the parent reset its slide index.
+          if (!port || slides.length === 0) {
             return;
           }
           port.postMessage({
@@ -162,11 +168,13 @@ const staticSrcDoc = `<!doctype html>
           content.innerHTML = html;
           slides = collectSlides();
           zoom = 1;
-          apply(active);
+          apply(desired);
         }
 
         window.addEventListener('resize', function () {
-          fit(slides[active]);
+          var slide = slides[active];
+          if (!slide) return;
+          fit(slide);
           applyZoom();
         });
 
@@ -277,7 +285,8 @@ const staticSrcDoc = `<!doctype html>
           if (data.type !== 'presentation-set-slide') {
             return;
           }
-          apply(Number(data.index) || 0);
+          desired = Number(data.index) || 0;
+          apply(desired);
         }
 
         window.addEventListener('message', function (event) {
