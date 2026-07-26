@@ -13,6 +13,7 @@ import { getProjectAuthorization } from "../../../projects/access-policy.ts";
 import { seedProjectFromTemplate } from "../../../projects/project-templates.ts";
 import type { HonoVariables } from "../../../types.ts";
 import { createProjectSchema, updateProjectSchema } from "./schemas.ts";
+import { deleteProjectDirectory } from "../../../projects/storage.ts";
 
 const app = new Hono<{ Variables: HonoVariables }>();
 
@@ -95,7 +96,7 @@ app.patch("/:projectId", async (c) => {
 	return c.json({ success: true });
 });
 
-app.delete("/:projectId", (c) => {
+app.delete("/:projectId", async (c) => {
 	const user = c.get("user");
 	if (!user) {
 		return c.json({ error: "Unauthorized" }, 401);
@@ -103,11 +104,17 @@ app.delete("/:projectId", (c) => {
 
 	const { projectId } = c.req.param();
 
-	const deleteResult = deleteProject(projectId, user.id);
+	const authorization = getProjectAuthorization(projectId, user.id, "manage");
+	if (!authorization.allowed) {
+		return c.json({ error: "Project not found or you don't have permission to delete it" }, 404);
+	}
 
+	const deleteResult = deleteProject(projectId, user.id);
 	if (deleteResult.changes === 0) {
 		return c.json({ error: "Project not found or you don't have permission to delete it" }, 404);
 	}
+
+	await deleteProjectDirectory(projectId);
 
 	return c.json({ success: true });
 });
