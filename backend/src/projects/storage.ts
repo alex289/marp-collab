@@ -520,3 +520,11 @@ export async function deleteProjectFile(projectId: string, fileId: string): Prom
 
 	return true;
 }
+
+export async function deleteProjectDirectory(projectId: string): Promise<void> {
+	if (!isValidProjectId(projectId)) {
+		throw new Error(`Invalid project id: ${projectId}`);
+	}
+
+	await rm(resolve(presentationsDir, projectId), { recursive: true, force: true });
+}
