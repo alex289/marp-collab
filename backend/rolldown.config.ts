@@ -8,7 +8,7 @@ function copyNativeAddonsPlugin(): Plugin {
 		writeBundle: async () => {
 			const distDir = join(import.meta.dirname, "../dist");
 			const sqliteDir = join(import.meta.dirname, "./node_modules/better-sqlite3");
-			await cp(join(sqliteDir, "build", "Release"), join(distDir, "build", "Release"), {
+			await cp(join(sqliteDir, "prebuilds"), join(distDir, "prebuilds"), {
 				recursive: true,
 			});
 		},
@@ -38,7 +38,7 @@ export default defineConfig({
 	},
 	plugins: [copyNativeAddonsPlugin(), copyTemplateAssetsPlugin()],
 	output: {
-		dir: "../dist",
+		dir: "../dist/bin",
 		format: "esm",
 		sourcemap: true,
 		cleanDir: false,
