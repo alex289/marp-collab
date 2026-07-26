@@ -109,12 +109,12 @@ app.delete("/:projectId", async (c) => {
 		return c.json({ error: "Project not found or you don't have permission to delete it" }, 404);
 	}
 
+	await deleteProjectDirectory(projectId);
+
 	const deleteResult = deleteProject(projectId, user.id);
 	if (deleteResult.changes === 0) {
 		return c.json({ error: "Project not found or you don't have permission to delete it" }, 404);
 	}
-
-	await deleteProjectDirectory(projectId);
 
 	return c.json({ success: true });
 });
