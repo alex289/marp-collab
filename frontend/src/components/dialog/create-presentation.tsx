@@ -12,12 +12,13 @@ import {
 	DialogTrigger,
 } from "@/components/ui/dialog";
 import { Field, FieldGroup } from "@/components/ui/field";
+import { FileDropZone } from "@/components/ui/file-drop-zone";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { API_URL } from "@/lib/config";
 import { cn } from "@/lib/utils";
 import { useNavigate } from "@tanstack/react-router";
-import { PlusIcon } from "lucide-react";
+import { FolderUpIcon, PlusIcon } from "lucide-react";
 import { useState } from "react";
 import { useSWRConfig } from "swr";
 
@@ -61,9 +62,10 @@ export function CreatePresentationDialog() {
 	const { mutate } = useSWRConfig();
 	const navigate = useNavigate();
 	const [open, setOpen] = useState(false);
-	const [step, setStep] = useState<"name" | "template">("name");
+	const [step, setStep] = useState<"name" | "template" | "import">("name");
 	const [name, setName] = useState("");
 	const [template, setTemplate] = useState<ProjectTemplateId>("default");
+	const [zipFile, setZipFile] = useState<File | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -73,9 +75,15 @@ export function CreatePresentationDialog() {
 			setStep("name");
 			setName("");
 			setTemplate("default");
+			setZipFile(null);
 			setError(null);
 			setIsSubmitting(false);
 		}
+	}
+
+	function goToStep(next: "name" | "template" | "import") {
+		setError(null);
+		setStep(next);
 	}
 
 	function handleContinue(e: React.FormEvent) {
@@ -83,7 +91,7 @@ export function CreatePresentationDialog() {
 		if (!name.trim()) {
 			return;
 		}
-		setStep("template");
+		goToStep("template");
 	}
 
 	async function handleSubmit(e: React.FormEvent) {
@@ -102,6 +110,41 @@ export function CreatePresentationDialog() {
 			if (!res.ok) {
 				const data = (await res.json()) as { error?: string };
 				setError(data.error ?? "Failed to create presentation");
+				return;
+			}
+
+			const { projectId } = (await res.json()) as { projectId: string };
+			await mutate(`${API_URL}/projects`);
+			setOpen(false);
+			await navigate({ to: "/presentations/$id", params: { id: projectId } });
+		} catch {
+			setError("An unexpected error occurred. Please try again.");
+		} finally {
+			setIsSubmitting(false);
+		}
+	}
+
+	async function handleImportSubmit(e: React.FormEvent) {
+		e.preventDefault();
+		if (!zipFile) {
+			return;
+		}
+		setIsSubmitting(true);
+		setError(null);
+
+		try {
+			const formData = new FormData();
+			formData.append("name", name);
+			formData.append("file", zipFile);
+
+			const res = await fetch(`${API_URL}/projects/import`, {
+				method: "POST",
+				body: formData,
+			});
+
+			if (!res.ok) {
+				const data = (await res.json()) as { error?: string };
+				setError(data.error ?? "Failed to import presentation");
 				return;
 			}
 
@@ -159,7 +202,7 @@ export function CreatePresentationDialog() {
 							</Button>
 						</DialogFooter>
 					</form>
-				) : (
+				) : step === "template" ? (
 					<form onSubmit={handleSubmit} className="flex flex-col gap-3">
 						<DialogHeader>
 							<DialogTitle>Choose a Theme</DialogTitle>
@@ -190,13 +233,45 @@ export function CreatePresentationDialog() {
 								</Card>
 							))}
 						</div>
+
 						{error && <ErrorAlert title="Failed to create presentation" description={error} />}
 						<DialogFooter>
-							<Button variant="outline" type="button" onClick={() => setStep("name")}>
+							<Button
+								variant="outline"
+								type="button"
+								className="sm:mr-auto"
+								onClick={() => goToStep("import")}
+							>
+								<FolderUpIcon /> Import a ZIP
+							</Button>
+							<Button variant="outline" type="button" onClick={() => goToStep("name")}>
 								Back
 							</Button>
 							<Button type="submit" disabled={isSubmitting}>
 								{isSubmitting ? "Creating..." : "Create"}
+							</Button>
+						</DialogFooter>
+					</form>
+				) : (
+					<form onSubmit={handleImportSubmit} className="flex flex-col gap-3">
+						<DialogHeader>
+							<DialogTitle>Import from ZIP</DialogTitle>
+							<DialogDescription>
+								Import "{name}" from a previously exported ZIP file.
+							</DialogDescription>
+						</DialogHeader>
+						<FileDropZone
+							accept=".zip,application/zip"
+							onChange={(files) => setZipFile(files[0] ?? null)}
+						/>
+						{zipFile && <p className="truncate text-xs text-muted-foreground">{zipFile.name}</p>}
+						{error && <ErrorAlert title="Failed to import presentation" description={error} />}
+						<DialogFooter>
+							<Button variant="outline" type="button" onClick={() => goToStep("template")}>
+								Back
+							</Button>
+							<Button type="submit" disabled={isSubmitting || !zipFile}>
+								{isSubmitting ? "Importing..." : "Import"}
 							</Button>
 						</DialogFooter>
 					</form>

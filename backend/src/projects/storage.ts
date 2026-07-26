@@ -528,3 +528,23 @@ export async function deleteProjectDirectory(projectId: string): Promise<void> {
 
 	await rm(resolve(presentationsDir, projectId), { recursive: true, force: true });
 }
+
+export async function commitStagedProjectDirectory(
+	stagingId: string,
+	projectId: string,
+): Promise<void> {
+	if (!isValidProjectId(stagingId) || !isValidProjectId(projectId)) {
+		throw new Error("Invalid project id");
+	}
+
+	const sourceDir = resolve(presentationsDir, stagingId);
+	const destDir = resolve(presentationsDir, projectId);
+	if (
+		!sourceDir.startsWith(presentationsDir + sep) ||
+		!destDir.startsWith(presentationsDir + sep)
+	) {
+		throw new Error("Path traversal detected");
+	}
+
+	await rename(sourceDir, destDir);
+}

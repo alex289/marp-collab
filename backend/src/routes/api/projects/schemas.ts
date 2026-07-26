@@ -1,13 +1,19 @@
 import z from "zod";
 import { PROJECT_TEMPLATE_IDS } from "../../../projects/templates/index.ts";
 
+const projectNameSchema = z.string().trim().min(1).max(255);
+
 const createProjectSchema = z.object({
-	name: z.string().trim().min(1).max(255),
+	name: projectNameSchema,
 	template: z.enum(PROJECT_TEMPLATE_IDS).default("default"),
 });
 
 const updateProjectSchema = z.object({
-	name: z.string().trim().min(1).max(255),
+	name: projectNameSchema,
+});
+
+const importProjectSchema = z.object({
+	name: projectNameSchema,
 });
 
 const addCollaboratorSchema = z.object({
@@ -85,6 +91,7 @@ export {
 	createFileSchema,
 	createFolderSchema,
 	createProjectSchema,
+	importProjectSchema,
 	moveFileSchema,
 	renameEntrySchema,
 	updateCollaboratorSchema,
