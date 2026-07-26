@@ -20,9 +20,10 @@ export default defineConfig(({ mode }) => ({
 				enabled: true,
 			},
 			workbox: {
-				navigateFallbackDenylist: [/^\/api\//],
+				cleanupOutdatedCaches: true,
 				...(mode !== "development" && {
-					globPatterns: ["**/*.{html,ico,png,svg,woff2,webmanifest}", "assets/*.css"],
+					globPatterns: [],
+					navigateFallback: undefined,
 				}),
 			},
 			manifest: {
