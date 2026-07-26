@@ -1,16 +1,40 @@
 import { describe, test, before, after } from "node:test";
 import { deepEqual, equal, ok } from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readdir, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import type { Readable } from "node:stream";
 import { Hono } from "hono";
+import { ZipArchive } from "archiver";
 import type { HonoVariables } from "../../types.ts";
+
+async function readAll(stream: Readable): Promise<Buffer> {
+	const chunks: Buffer[] = [];
+	for await (const chunk of stream) {
+		chunks.push(Buffer.from(chunk));
+	}
+	return Buffer.concat(chunks);
+}
+
+async function buildZipFile(
+	name: string,
+	entries: { name: string; content: string }[],
+): Promise<File> {
+	const archive = new ZipArchive({ zlib: { level: 9 } });
+	for (const entry of entries) {
+		archive.append(entry.content, { name: entry.name });
+	}
+	await archive.finalize();
+	const buffer = await readAll(archive);
+	return new File([new Uint8Array(buffer)], name, { type: "application/zip" });
+}
 
 describe("projects routes", () => {
 	let tempDir: string;
 	let db: typeof import("../../db/db.ts").db;
 	let app: Hono<{ Variables: HonoVariables }>;
 	let files: typeof import("../../projects/storage.ts");
+	let getProjectById: typeof import("../../db/models/project.ts").getProjectById;
 
 	before(async () => {
 		tempDir = await mkdtemp(join(tmpdir(), "marp-test-projects-route-"));
@@ -20,6 +44,7 @@ describe("projects routes", () => {
 		const projectsRouter = (await import("./projects.ts")).default;
 		const projectModel = await import("../../db/models/project.ts");
 		files = await import("../../projects/storage.ts");
+		getProjectById = projectModel.getProjectById;
 
 		db = dbModule.db;
 		const now = new Date().toISOString();
@@ -232,5 +257,109 @@ describe("projects routes", () => {
 		deepEqual(await outsiderResponse.json(), {
 			error: "Project not found or access denied",
 		});
+	});
+
+	test("rejects a delete from a non-owner collaborator without touching project files", async () => {
+		const writerResponse = await app.request("/upload-proj", {
+			method: "DELETE",
+			headers: { "x-test-user-id": "route-writer" },
+		});
+		equal(writerResponse.status, 404);
+
+		const readerResponse = await app.request("/upload-proj", {
+			method: "DELETE",
+			headers: { "x-test-user-id": "route-reader" },
+		});
+		equal(readerResponse.status, 404);
+
+		ok(getProjectById("upload-proj"));
+		ok((await stat(join(tempDir, "presentations", "upload-proj", "assets"))).isDirectory());
+	});
+
+	test("imports a project from a zip file", async () => {
+		const formData = new FormData();
+		formData.append("name", "Imported Project");
+		formData.append(
+			"file",
+			await buildZipFile("export.zip", [
+				{ name: "presentation.md", content: "# Imported" },
+				{ name: "theme/style.css", content: "body {}" },
+			]),
+		);
+
+		const response = await app.request("/import", {
+			method: "POST",
+			headers: { "x-test-user-id": "user-1" },
+			body: formData,
+		});
+
+		equal(response.status, 200);
+		const body = (await response.json()) as { projectId: string };
+		ok(body.projectId);
+
+		const project = getProjectById(body.projectId);
+		equal(project?.name, "Imported Project");
+		equal(project?.ownerId, "user-1");
+
+		equal(
+			await files.getDocumentContent(`project/${body.projectId}/presentation.md`),
+			"# Imported",
+		);
+	});
+
+	test("rejects an unauthenticated import request", async () => {
+		const formData = new FormData();
+		formData.append("name", "Nope");
+		formData.append("file", await buildZipFile("export.zip", [{ name: "a.md", content: "# A" }]));
+
+		const response = await app.request("/import", { method: "POST", body: formData });
+		equal(response.status, 401);
+	});
+
+	test("rejects an import zip containing a disallowed file type and creates no project", async () => {
+		const formData = new FormData();
+		formData.append("name", "Bad Import");
+		formData.append(
+			"file",
+			await buildZipFile("export.zip", [
+				{ name: "presentation.md", content: "# Slide" },
+				{ name: "payload.exe", content: "evil" },
+			]),
+		);
+
+		const response = await app.request("/import", {
+			method: "POST",
+			headers: { "x-test-user-id": "user-1" },
+			body: formData,
+		});
+
+		equal(response.status, 400);
+		const body = (await response.json()) as { error?: string };
+		ok(body.error?.toLowerCase().includes("file type not allowed"));
+	});
+
+	test("cleans up the imported directory when creating the project record fails", async () => {
+		const presentationsDir = join(tempDir, "presentations");
+		const entriesBefore = await readdir(presentationsDir);
+
+		const formData = new FormData();
+		formData.append("name", "Orphan Candidate");
+		formData.append(
+			"file",
+			await buildZipFile("export.zip", [{ name: "presentation.md", content: "# Slide" }]),
+		);
+
+		const response = await app.request("/import", {
+			method: "POST",
+			// This user has no row in the `user` table, so createProject's ownerId
+			// foreign key fails after the staged directory has already been committed.
+			headers: { "x-test-user-id": "user-without-db-row" },
+			body: formData,
+		});
+
+		equal(response.status, 400);
+
+		const entriesAfter = await readdir(presentationsDir);
+		deepEqual(entriesAfter.sort(), entriesBefore.sort());
 	});
 });
