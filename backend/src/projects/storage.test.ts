@@ -171,9 +171,11 @@ describe("project storage", () => {
 
 		test("opens a stored file as a readable stream", async () => {
 			await files.saveProjectFile("ops-proj", "stream.txt", new TextEncoder().encode("streamed"));
-			const stream = await files.openProjectFile("ops-proj", "stream.txt");
-			ok(stream);
-			equal((await readAll(stream)).toString("utf8"), "streamed");
+			const opened = await files.openProjectFile("ops-proj", "stream.txt");
+			ok(opened);
+			equal(opened.size, 8);
+			ok(opened.mtimeMs > 0);
+			equal((await readAll(opened.stream)).toString("utf8"), "streamed");
 			equal(await files.openProjectFile("ops-proj", "missing.txt"), undefined);
 		});
 	});

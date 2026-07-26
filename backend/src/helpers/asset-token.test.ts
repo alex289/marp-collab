@@ -16,6 +16,10 @@ describe("asset-token", () => {
 		equal(verifyAssetToken(token, "project-1"), true);
 	});
 
+	test("signAssetToken is stable across requests so asset URLs stay cacheable", () => {
+		equal(signAssetToken("project-1"), signAssetToken("project-1"));
+	});
+
 	test("verifyAssetToken rejects a token for a different project", () => {
 		const token = signAssetToken("project-1");
 		equal(verifyAssetToken(token, "project-2"), false);

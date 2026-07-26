@@ -69,6 +69,8 @@ const staticSrcDoc = `<!doctype html>
         var MAX_ZOOM = 4;
         // Set once the parent hands over a MessagePort (see 'init-port' below).
         var port = null;
+        var lastHtml = null;
+        var lastCss = null;
         // Thumbnail frames (e.g. the next-slide preview) opt out of zoom, laser
         // pointer and key forwarding via the 'presentation-config' message.
         var interactive = true;
@@ -164,6 +166,13 @@ const staticSrcDoc = `<!doctype html>
         // Re-renders the slide deck in place (on markdown/theme changes) while
         // keeping the current slide index and resetting zoom, like a fresh load.
         function updateContent(html, css) {
+          // Rebuilding the deck recreates every image element, so skip pushes
+          // that would paint exactly what is already on screen.
+          if (html === lastHtml && css === lastCss) {
+            return;
+          }
+          lastHtml = html;
+          lastCss = css;
           document.getElementById('marp-theme').textContent = css;
           content.innerHTML = html;
           slides = collectSlides();

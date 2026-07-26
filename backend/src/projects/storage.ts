@@ -270,22 +270,33 @@ export async function readProjectFile(
 	}
 }
 
+export type OpenedProjectFile = {
+	stream: Readable;
+	size: number;
+	mtimeMs: number;
+};
+
 export async function openProjectFile(
 	projectId: string,
 	fileId: string,
-): Promise<Readable | undefined> {
+): Promise<OpenedProjectFile | undefined> {
 	const filePath = resolveProjectFilePath(projectId, fileId);
 	if (!filePath) {
 		return undefined;
 	}
 
+	let fileStat: Stats;
 	try {
-		await stat(filePath);
+		fileStat = await stat(filePath);
 	} catch {
 		return undefined;
 	}
 
-	return createReadStream(filePath);
+	return {
+		stream: createReadStream(filePath),
+		size: fileStat.size,
+		mtimeMs: fileStat.mtimeMs,
+	};
 }
 
 function isValidProjectBasename(name: string): boolean {
