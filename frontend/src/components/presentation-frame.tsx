@@ -1,6 +1,5 @@
 import { renderMarp } from "@/lib/marp";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useKeyHold } from "@tanstack/react-hotkeys";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import marpitSvgPolyfillScript from "@marp-team/marpit-svg-polyfill/lib/polyfill.browser.js?raw";
 
@@ -13,6 +12,10 @@ type PresentationFrameProps = {
 	assetRevision?: number;
 	assetToken?: string;
 	onMetaChange?: (meta: { active: number; total: number }) => void;
+	zoomState?: ZoomState;
+	onZoomChange?: (state: ZoomState) => void;
+	laserState?: LaserState;
+	onLaserChange?: (state: LaserState) => void;
 	showSpeakerNotes?: boolean;
 	className?: string;
 };
@@ -65,6 +68,8 @@ const staticSrcDoc = `<!doctype html>
         // the frame to slide 0 until the parent next navigates.
         var desired = 0;
         var zoom = 1;
+        var zoomOriginX = 50;
+        var zoomOriginY = 50;
         var MIN_ZOOM = 1;
         var MAX_ZOOM = 4;
         // Set once the parent hands over a MessagePort (see 'init-port' below).
@@ -93,15 +98,30 @@ const staticSrcDoc = `<!doctype html>
 
         function applyZoom() {
           var slide = slides[active];
-          if (slide) slide.style.setProperty('transform', 'scale(' + zoom + ')', 'important');
+          if (!slide) return;
+          slide.style.transformOrigin = zoomOriginX + '% ' + zoomOriginY + '%';
+          slide.style.setProperty('transform', 'scale(' + zoom + ')', 'important');
+        }
+
+        // Reports the current zoom/origin to the parent so it can be broadcast to
+        // other presentation windows (see the presenter/viewer window split).
+        function reportZoom() {
+          if (!port) return;
+          port.postMessage({
+            type: 'presentation-zoom-report',
+            zoom: zoom,
+            originX: zoomOriginX,
+            originY: zoomOriginY,
+          });
         }
 
         function resetZoom() {
           zoom = 1;
-          var slide = slides[active];
-          if (slide) slide.style.transformOrigin = '';
+          zoomOriginX = 50;
+          zoomOriginY = 50;
           applyZoom();
           window.scrollTo(0, 0);
+          reportZoom();
         }
 
         function report() {
@@ -146,7 +166,12 @@ const staticSrcDoc = `<!doctype html>
 
         function apply(index) {
           var next = clamp(index);
-          if (next !== active) zoom = 1;
+          var zoomReset = next !== active;
+          if (zoomReset) {
+            zoom = 1;
+            zoomOriginX = 50;
+            zoomOriginY = 50;
+          }
           active = next;
           slides.forEach(function (slide, i) {
             if (i === active) {
@@ -161,6 +186,7 @@ const staticSrcDoc = `<!doctype html>
             }
           });
           report();
+          if (zoomReset) reportZoom();
         }
 
         // Re-renders the slide deck in place (on markdown/theme changes) while
@@ -177,7 +203,10 @@ const staticSrcDoc = `<!doctype html>
           content.innerHTML = html;
           slides = collectSlides();
           zoom = 1;
+          zoomOriginX = 50;
+          zoomOriginY = 50;
           apply(desired);
+          reportZoom();
         }
 
         window.addEventListener('resize', function () {
@@ -194,14 +223,14 @@ const staticSrcDoc = `<!doctype html>
           var slide = slides[active];
           if (slide) {
             var rect = slide.getBoundingClientRect();
-            var originX = ((e.clientX - rect.left) / rect.width) * 100;
-            var originY = ((e.clientY - rect.top) / rect.height) * 100;
-            slide.style.transformOrigin = originX + '% ' + originY + '%';
+            zoomOriginX = ((e.clientX - rect.left) / rect.width) * 100;
+            zoomOriginY = ((e.clientY - rect.top) / rect.height) * 100;
           }
 
           var delta = -e.deltaY * 0.005;
           zoom = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, zoom * (1 + delta)));
           applyZoom();
+          reportZoom();
         }, { passive: false });
 
         window.addEventListener('dblclick', function (e) {
@@ -236,9 +265,11 @@ const staticSrcDoc = `<!doctype html>
         window.addEventListener('keyup', forwardKey('keyup'));
 
         // Laser pointer: while Shift is held, replace the cursor with a glowing
-        // red dot. The parent syncs the held state via 'presentation-laser'
-        // messages; mousemove's shiftKey keeps it accurate while the pointer
-        // moves inside this frame.
+        // red dot. Position is tracked in local pixels for zero-latency feedback
+        // in this window, and reported to the parent as a percentage of the
+        // active slide's bounds (see reportLaser/sendLaserReport) so other
+        // presentation windows (e.g. the viewer on a second monitor) can render
+        // it correctly regardless of their own size/resolution.
         var laser = document.createElement('div');
         laser.style.cssText = 'position:fixed;left:-8px;top:-8px;width:16px;height:16px;border-radius:50%;background:radial-gradient(circle, #ff6b6b 0%, #f00 45%, rgba(255,0,0,0) 72%);box-shadow:0 0 14px 5px rgba(255,0,0,0.55);pointer-events:none;z-index:2147483647;display:none;';
         document.body.appendChild(laser);
@@ -246,6 +277,9 @@ const staticSrcDoc = `<!doctype html>
         var laserActive = false;
         var laserX = -1;
         var laserY = -1;
+        var lastLaserReportTime = 0;
+        var laserReportTimer = null;
+        var LASER_REPORT_INTERVAL_MS = 50;
 
         function updateLaser() {
           var visible = laserActive && laserX >= 0;
@@ -255,18 +289,57 @@ const staticSrcDoc = `<!doctype html>
           document.body.style.cursor = laserActive ? 'none' : '';
         }
 
+        function sendLaserReport() {
+          if (!port) return;
+          var visible = laserActive && laserX >= 0;
+          var xPercent = -1;
+          var yPercent = -1;
+          var slide = slides[active];
+          if (visible && slide) {
+            var rect = slide.getBoundingClientRect();
+            xPercent = ((laserX - rect.left) / rect.width) * 100;
+            yPercent = ((laserY - rect.top) / rect.height) * 100;
+          }
+          port.postMessage({
+            type: 'presentation-laser-report',
+            active: visible,
+            xPercent: xPercent,
+            yPercent: yPercent,
+          });
+        }
+
+        // Throttles reports so continuous mousemove doesn't flood the
+        // awareness/WebSocket channel with a message per pixel.
+        function reportLaser() {
+          var now = Date.now();
+          var elapsed = now - lastLaserReportTime;
+          if (elapsed >= LASER_REPORT_INTERVAL_MS) {
+            lastLaserReportTime = now;
+            sendLaserReport();
+            return;
+          }
+          if (laserReportTimer) return;
+          laserReportTimer = setTimeout(function () {
+            laserReportTimer = null;
+            lastLaserReportTime = Date.now();
+            sendLaserReport();
+          }, LASER_REPORT_INTERVAL_MS - elapsed);
+        }
+
         window.addEventListener('mousemove', function (e) {
           if (!interactive) return;
           laserX = e.clientX;
           laserY = e.clientY;
           laserActive = e.shiftKey;
           updateLaser();
+          reportLaser();
         });
 
         document.addEventListener('mouseleave', function () {
           laserX = -1;
           laserY = -1;
           updateLaser();
+          sendLaserReport();
         });
 
         function handlePortMessage(event) {
@@ -284,7 +357,26 @@ const staticSrcDoc = `<!doctype html>
           }
           if (data.type === 'presentation-laser') {
             laserActive = !!data.active;
+            if (laserActive) {
+              var slide = slides[active];
+              if (slide && typeof data.xPercent === 'number' && data.xPercent >= 0) {
+                var rect = slide.getBoundingClientRect();
+                laserX = rect.left + (data.xPercent / 100) * rect.width;
+                laserY = rect.top + (data.yPercent / 100) * rect.height;
+              } else {
+                laserActive = false;
+              }
+            }
             updateLaser();
+            return;
+          }
+          if (data.type === 'presentation-zoom') {
+            zoom = Number(data.zoom) || 1;
+            zoomOriginX = Number(data.originX);
+            zoomOriginY = Number(data.originY);
+            if (!isFinite(zoomOriginX)) zoomOriginX = 50;
+            if (!isFinite(zoomOriginY)) zoomOriginY = 50;
+            applyZoom();
             return;
           }
           if (data.type === 'marp-update') {
@@ -312,6 +404,12 @@ const staticSrcDoc = `<!doctype html>
   </body>
 </html>`;
 
+export type ZoomState = { zoom: number; originX: number; originY: number };
+export type LaserState = { active: boolean; xPercent: number; yPercent: number };
+
+const DEFAULT_ZOOM_STATE: ZoomState = { zoom: 1, originX: 50, originY: 50 };
+const DEFAULT_LASER_STATE: LaserState = { active: false, xPercent: -1, yPercent: -1 };
+
 type SlideFrameProps = {
 	title: string;
 	html: string;
@@ -319,7 +417,14 @@ type SlideFrameProps = {
 	slideIndex: number;
 	/** Non-interactive frames (thumbnails) skip zoom, laser pointer and key forwarding. */
 	interactive?: boolean;
-	isLaserActive?: boolean;
+	/** Zoom to apply, e.g. mirroring another presentation window's zoom. */
+	zoomState?: ZoomState;
+	/** Called when this frame's own zoom changes (user scroll/dblclick). */
+	onZoomChange?: (state: ZoomState) => void;
+	/** Laser pointer state to apply, e.g. mirroring another presentation window's cursor. */
+	laserState?: LaserState;
+	/** Called when this frame's own laser pointer changes (user holds Shift + moves mouse). */
+	onLaserChange?: (state: LaserState) => void;
 	onMetaChange?: (meta: { active: number; total: number }) => void;
 	className?: string;
 };
@@ -330,7 +435,10 @@ function SlideFrame({
 	css,
 	slideIndex,
 	interactive = true,
-	isLaserActive = false,
+	zoomState = DEFAULT_ZOOM_STATE,
+	onZoomChange,
+	laserState = DEFAULT_LASER_STATE,
+	onLaserChange,
 	onMetaChange,
 	className,
 }: SlideFrameProps) {
@@ -340,17 +448,24 @@ function SlideFrame({
 	const portRef = useRef<MessagePort | null>(null);
 	const [iframeReady, setIframeReady] = useState(false);
 	const slideIndexRef = useRef(slideIndex);
-	const isLaserActiveRef = useRef(isLaserActive);
+	const zoomStateRef = useRef(zoomState);
+	const laserStateRef = useRef(laserState);
 	const interactiveRef = useRef(interactive);
 	const onMetaChangeRef = useRef(onMetaChange);
+	const onZoomChangeRef = useRef(onZoomChange);
+	const onLaserChangeRef = useRef(onLaserChange);
 
 	useEffect(() => {
 		slideIndexRef.current = slideIndex;
 	}, [slideIndex]);
 
 	useEffect(() => {
-		isLaserActiveRef.current = isLaserActive;
-	}, [isLaserActive]);
+		zoomStateRef.current = zoomState;
+	}, [zoomState]);
+
+	useEffect(() => {
+		laserStateRef.current = laserState;
+	}, [laserState]);
 
 	useEffect(() => {
 		interactiveRef.current = interactive;
@@ -359,6 +474,14 @@ function SlideFrame({
 	useEffect(() => {
 		onMetaChangeRef.current = onMetaChange;
 	}, [onMetaChange]);
+
+	useEffect(() => {
+		onZoomChangeRef.current = onZoomChange;
+	}, [onZoomChange]);
+
+	useEffect(() => {
+		onLaserChangeRef.current = onLaserChange;
+	}, [onLaserChange]);
 
 	const handlePortMessage = useCallback((event: MessageEvent) => {
 		const payload = event.data;
@@ -370,6 +493,26 @@ function SlideFrame({
 			onMetaChangeRef.current?.({
 				active: Number(payload.active) || 0,
 				total: Number(payload.total) || 1,
+			});
+			return;
+		}
+
+		if (payload.type === "presentation-zoom-report") {
+			const originX = Number(payload.originX);
+			const originY = Number(payload.originY);
+			onZoomChangeRef.current?.({
+				zoom: Number(payload.zoom) || 1,
+				originX: Number.isFinite(originX) ? originX : 50,
+				originY: Number.isFinite(originY) ? originY : 50,
+			});
+			return;
+		}
+
+		if (payload.type === "presentation-laser-report") {
+			onLaserChangeRef.current?.({
+				active: !!payload.active,
+				xPercent: Number(payload.xPercent),
+				yPercent: Number(payload.yPercent),
 			});
 			return;
 		}
@@ -396,7 +539,7 @@ function SlideFrame({
 		channel.port1.onmessage = handlePortMessage;
 		iframeRef.current?.contentWindow?.postMessage({ type: "init-port" }, "*", [channel.port2]);
 		// The fresh document has no content yet; resync it with the presenter's
-		// current slide/laser state once the first marp-update arrives.
+		// current slide/zoom/laser state once the first marp-update arrives.
 		portRef.current.postMessage({
 			type: "presentation-config",
 			interactive: interactiveRef.current,
@@ -406,8 +549,16 @@ function SlideFrame({
 			index: slideIndexRef.current,
 		});
 		portRef.current.postMessage({
+			type: "presentation-zoom",
+			zoom: zoomStateRef.current.zoom,
+			originX: zoomStateRef.current.originX,
+			originY: zoomStateRef.current.originY,
+		});
+		portRef.current.postMessage({
 			type: "presentation-laser",
-			active: isLaserActiveRef.current,
+			active: laserStateRef.current.active,
+			xPercent: laserStateRef.current.xPercent,
+			yPercent: laserStateRef.current.yPercent,
 		});
 		setIframeReady(true);
 	}, [handlePortMessage]);
@@ -433,10 +584,21 @@ function SlideFrame({
 
 	useEffect(() => {
 		portRef.current?.postMessage({
-			type: "presentation-laser",
-			active: isLaserActive,
+			type: "presentation-zoom",
+			zoom: zoomState.zoom,
+			originX: zoomState.originX,
+			originY: zoomState.originY,
 		});
-	}, [isLaserActive]);
+	}, [zoomState]);
+
+	useEffect(() => {
+		portRef.current?.postMessage({
+			type: "presentation-laser",
+			active: laserState.active,
+			xPercent: laserState.xPercent,
+			yPercent: laserState.yPercent,
+		});
+	}, [laserState]);
 
 	return (
 		<iframe
@@ -459,13 +621,13 @@ export function PresentationFrame({
 	assetRevision = 0,
 	assetToken,
 	onMetaChange,
+	zoomState,
+	onZoomChange,
+	laserState,
+	onLaserChange,
 	showSpeakerNotes = false,
 	className,
 }: PresentationFrameProps) {
-	// Shift held anywhere (iframe key events are forwarded to this document) turns
-	// the cursor into a laser pointer on the active slide.
-	const isLaserActive = useKeyHold("Shift");
-
 	const rendered = useMemo(() => {
 		// Project themes are registered on the shared Marp instance; this invalidates stale renders.
 		void themeRevision;
@@ -491,7 +653,10 @@ export function PresentationFrame({
 			html={rendered.html}
 			css={rendered.css}
 			slideIndex={slideIndex}
-			isLaserActive={isLaserActive}
+			zoomState={zoomState}
+			onZoomChange={onZoomChange}
+			laserState={laserState}
+			onLaserChange={onLaserChange}
 			onMetaChange={onMetaChange}
 			className={
 				showSpeakerNotes
