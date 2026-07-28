@@ -20,7 +20,7 @@ For breaking changes or major new features, open an issue beforehand to discuss 
 
 | Tool                           | Version       | Purpose         |
 | ------------------------------ | ------------- | --------------- |
-| [Node.js](https://nodejs.org/) | 24.x or 25.x  | Runtime         |
+| [Node.js](https://nodejs.org/) | 24.x or 26.x  | Runtime         |
 | [pnpm](https://pnpm.io/)       | 11.x or newer | Package manager |
 
 ### Setting up the development environment
@@ -40,4 +40,4 @@ A Docker Compose file is provided for running the full stack locally:
 docker compose -f docker-compose.dev.yml up --build
 ```
 
-The hub service will be available at `http://localhost:8787`.
+The app will be available at `http://localhost:8787`.
