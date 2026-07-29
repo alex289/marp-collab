@@ -16,8 +16,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:
-      hasChangesets: ${{ steps.changesets.outputs.hasChangesets }}
-      publishedPackages: ${{ steps.changesets.outputs.publishedPackages  }}
+      version: ${{ steps.released.outputs.version }}
     permissions:
       contents: write
       pull-requests: write
@@ -47,6 +46,15 @@ jobs:
           title: "chore(release): Version packages"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Empty unless this push merged a release PR, i.e. unless `changeset tag`
+      # actually created a tag. Drives the semver Docker tags below.
+      - name: Resolve released version
+        id: released
+        env:
+          PUBLISHED_PACKAGES: ${{ steps.changesets.outputs.publishedPackages }}
+        run: |
+          echo "version=$(jq -r 'first(.[]?.version) // ""' <<<"${PUBLISHED_PACKAGES:-[]}")" >> "$GITHUB_OUTPUT"
 
   release:
     name: Publish Docker Images
@@ -81,11 +89,10 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository_owner }}/marp-collab
           tags: |
-            type=semver,pattern={{version}},value=${{ needs.release-please.outputs.tag-name }},enable=${{ needs.release-please.outputs.new-release-created == 'true' }}
-            type=semver,pattern={{major}}.{{minor}}.{{patch}},value=${{ needs.release-please.outputs.tag-name }},enable=${{ needs.release-please.outputs.new-release-created == 'true' }}
-            type=semver,pattern={{major}}.{{minor}},value=${{ needs.release-please.outputs.tag-name }},enable=${{ needs.release-please.outputs.new-release-created == 'true' }}
-            type=semver,pattern={{major}},value=${{ needs.release-please.outputs.tag-name }},enable=${{ needs.release-please.outputs.new-release-created == 'true' }}
-            type=raw,value=latest,enable=${{ needs.release-please.outputs.new-release-created == 'true' }}
+            type=semver,pattern={{version}},value=${{ needs.prepare-release.outputs.version }},enable=${{ needs.prepare-release.outputs.version != '' }}
+            type=semver,pattern={{major}}.{{minor}},value=${{ needs.prepare-release.outputs.version }},enable=${{ needs.prepare-release.outputs.version != '' }}
+            type=semver,pattern={{major}},value=${{ needs.prepare-release.outputs.version }},enable=${{ needs.prepare-release.outputs.version != '' }}
+            type=raw,value=latest,enable=${{ needs.prepare-release.outputs.version != '' }}
             type=raw,value=main
 
       - name: Build and push marp-collab image
