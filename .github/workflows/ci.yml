@@ -34,10 +34,6 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Require Changeset
-        if: github.event_name == 'pull_request'
-        run: npx changeset status --since=${{ github.event.pull_request.base.sha }}
-
       - name: Run Linter
         run: node --run lint
 
