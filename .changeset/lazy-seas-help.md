@@ -2,4 +2,4 @@
 "marp-collab": minor
 ---
 
-Initial changeset release
+Initial release

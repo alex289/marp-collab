@@ -11,7 +11,6 @@ permissions:
   contents: read
 
 jobs:
-  # Check if a release PR is needed and create it or if a release PR was merged
   prepare-release:
     name: Prepare Release PR
     runs-on: ubuntu-latest
@@ -24,7 +23,7 @@ jobs:
       pull-requests: write
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Set up pnpm
         uses: pnpm/action-setup@0ebf47130e4866e96fce0953f49152a61190b271 # v6.0.9
@@ -36,10 +35,10 @@ jobs:
           cache: "pnpm"
 
       - name: Install dependencies
-        run: pnpm install --frozen-lockfile && cd backend && pnpm rebuild better-sqlite3
+        run: pnpm install --frozen-lockfile
 
       - name: Create Release Pull Request
-        uses: changesets/action@c48e67d110a68bc90ccf1098e9646092baacaa87
+        uses: changesets/action@a45c4d594aa4e2c509dc14a9f2b3b67ba3780d0d # v1.9.0
         id: changesets
         with:
           publish: npx @changesets/cli tag
@@ -48,11 +47,6 @@ jobs:
           title: "chore(release): Version packages"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Print Changesets Outputs
-        run: |
-          echo "Has Changesets: ${{ steps.changesets.outputs.hasChangesets }}"
-          echo "Published Packages: ${{ steps.changesets.outputs.publishedPackages }}"
 
   release:
     name: Publish Docker Images
