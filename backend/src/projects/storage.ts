@@ -270,22 +270,33 @@ export async function readProjectFile(
 	}
 }
 
+export type OpenedProjectFile = {
+	stream: Readable;
+	size: number;
+	mtimeMs: number;
+};
+
 export async function openProjectFile(
 	projectId: string,
 	fileId: string,
-): Promise<Readable | undefined> {
+): Promise<OpenedProjectFile | undefined> {
 	const filePath = resolveProjectFilePath(projectId, fileId);
 	if (!filePath) {
 		return undefined;
 	}
 
+	let fileStat: Stats;
 	try {
-		await stat(filePath);
+		fileStat = await stat(filePath);
 	} catch {
 		return undefined;
 	}
 
-	return createReadStream(filePath);
+	return {
+		stream: createReadStream(filePath),
+		size: fileStat.size,
+		mtimeMs: fileStat.mtimeMs,
+	};
 }
 
 function isValidProjectBasename(name: string): boolean {
@@ -519,4 +530,32 @@ export async function deleteProjectFile(projectId: string, fileId: string): Prom
 	}
 
 	return true;
+}
+
+export async function deleteProjectDirectory(projectId: string): Promise<void> {
+	if (!isValidProjectId(projectId)) {
+		throw new Error(`Invalid project id: ${projectId}`);
+	}
+
+	await rm(resolve(presentationsDir, projectId), { recursive: true, force: true });
+}
+
+export async function commitStagedProjectDirectory(
+	stagingId: string,
+	projectId: string,
+): Promise<void> {
+	if (!isValidProjectId(stagingId) || !isValidProjectId(projectId)) {
+		throw new Error("Invalid project id");
+	}
+
+	const sourceDir = resolve(presentationsDir, stagingId);
+	const destDir = resolve(presentationsDir, projectId);
+	if (
+		!sourceDir.startsWith(presentationsDir + sep) ||
+		!destDir.startsWith(presentationsDir + sep)
+	) {
+		throw new Error("Path traversal detected");
+	}
+
+	await rename(sourceDir, destDir);
 }

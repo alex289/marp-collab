@@ -2,7 +2,8 @@ import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState }
 import { EditorState, Prec } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 import { indentWithTab } from "@codemirror/commands";
-import { markdown } from "@codemirror/lang-markdown";
+import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
+import { yamlFrontmatter } from "@codemirror/lang-yaml";
 import { css } from "@codemirror/lang-css";
 import { basicSetup } from "codemirror";
 import type { Awareness } from "y-protocols/awareness.js";
@@ -77,6 +78,13 @@ function getEditorStats(view: EditorView): EditorStats {
 		cursorColumn: cursor - cursorLine.from + 1,
 		slides,
 	};
+}
+
+// Marp slides open with YAML frontmatter, which plain CommonMark parses as a setext
+// heading (`marp: true` underlined by `---`), so the whole block came out styled as an
+// H2. The GFM base additionally covers the tables and strikethrough that Marp renders.
+function marpMarkdown() {
+	return yamlFrontmatter({ content: markdown({ base: markdownLanguage }) });
 }
 
 const editorTheme = EditorView.theme({
@@ -225,7 +233,7 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 			return;
 		}
 
-		const languageExtension = label?.endsWith(".css") ? css() : markdown();
+		const languageExtension = label?.endsWith(".css") ? css() : marpMarkdown();
 
 		const state = EditorState.create({
 			// oxlint-disable-next-line no-base-to-string

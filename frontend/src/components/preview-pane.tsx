@@ -132,6 +132,8 @@ const staticSrcDoc = `<!doctype html>
 
       // Set once the parent hands over a MessagePort (see 'init-port' below).
       var port = null;
+      var lastHtml = null;
+      var lastCss = null;
 
       function handlePortMessage(e) {
         if (!e.data) return;
@@ -150,6 +152,11 @@ const staticSrcDoc = `<!doctype html>
           return;
         }
         if (e.data.type !== 'marp-update') return;
+        // Rebuilding the body recreates every image element, so skip pushes that
+        // would paint exactly what is already on screen.
+        if (!e.data.scrollToTop && e.data.html === lastHtml && e.data.css === lastCss) return;
+        lastHtml = e.data.html;
+        lastCss = e.data.css;
         document.getElementById('marp-styles').textContent = e.data.css;
         document.body.innerHTML = e.data.html;
         if (e.data.scrollToTop) {

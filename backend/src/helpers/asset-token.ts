@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 
-export const ASSET_TOKEN_TTL_SECONDS = 5 * 60;
+export const ASSET_TOKEN_TTL_SECONDS = 30 * 60;
 
 let cachedSecret: string | null = null;
 
@@ -27,12 +27,30 @@ function sign(payload: string): string {
 }
 
 /**
+ * Rounds the expiry up onto a fixed grid so every request within the same
+ * window signs a byte-identical token. Asset URLs embed the token, so an
+ * expiry taken straight from the clock would hand out a different URL for the
+ * same image on every refresh — busting the browser cache and making images
+ * visibly reload. The trade-off is that a token stays valid for between one
+ * and two TTLs.
+ */
+function quantizedExpiry(ttlSeconds: number): number {
+	const now = Date.now();
+	const ttlMs = ttlSeconds * 1000;
+	if (ttlMs <= 0) {
+		return now + ttlMs;
+	}
+
+	return Math.ceil((now + ttlMs) / ttlMs) * ttlMs;
+}
+
+/**
  * Signs a short-lived, read-only, project-scoped token for loading project
  * assets (images, fonts, theme CSS) from contexts that can't send the
  * session cookie, e.g. the sandboxed presentation/preview iframes.
  */
 export function signAssetToken(projectId: string, ttlSeconds = ASSET_TOKEN_TTL_SECONDS): string {
-	const payload = JSON.stringify({ projectId, expires: Date.now() + ttlSeconds * 1000 });
+	const payload = JSON.stringify({ projectId, expires: quantizedExpiry(ttlSeconds) });
 	const encodedPayload = Buffer.from(payload).toString("base64url");
 	return `${encodedPayload}.${sign(payload)}`;
 }

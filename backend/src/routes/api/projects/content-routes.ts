@@ -43,6 +43,17 @@ import {
 
 const app = new Hono<{ Variables: ProjectRouteVariables }>();
 
+/** True when the client already holds the current representation of a file. */
+function isFresh(ifNoneMatch: string | undefined, etag: string): boolean {
+	if (!ifNoneMatch) {
+		return false;
+	}
+
+	return ifNoneMatch
+		.split(",")
+		.some((candidate) => candidate.trim() === etag || candidate.trim() === "*");
+}
+
 app.get("/:projectId/files", async (c) => {
 	const { projectId } = c.req.param();
 	return c.json({ files: await listProjectContent(projectId) });
@@ -163,14 +174,25 @@ app.get("/:projectId/files/:fileId{.+}", async (c) => {
 		return c.text(content);
 	}
 
-	const readStream = await openProjectFile(projectId, fileId);
-	if (!readStream) {
+	const file = await openProjectFile(projectId, fileId);
+	if (!file) {
 		return c.json({ error: "File not found" }, 404);
 	}
 
+	const readStream = file.stream;
+	const etag = `W/"${file.size.toString(16)}-${Math.floor(file.mtimeMs).toString(16)}"`;
+
 	c.header("Content-Type", getMimeType(fileId));
 	c.header("Content-Disposition", "attachment");
-	c.header("Cache-Control", "no-cache");
+	c.header("ETag", etag);
+	c.header("Last-Modified", new Date(Math.floor(file.mtimeMs / 1000) * 1000).toUTCString());
+	// The preview and presentation iframes rebuild their DOM on every content push,
+	// so each image element is recreated constantly. Rendered asset URLs carry a ?v=
+	// version that the client bumps whenever the project's file list changes, so they
+	// can be cached outright — otherwise every rebuild refetches and the images
+	// visibly reload. Unversioned callers keep revalidating, which the ETag answers
+	// with a 304 instead of a full download.
+	c.header("Cache-Control", c.req.query("v") ? "private, max-age=300" : "no-cache");
 	// Requested from sandboxed preview/presentation iframes (opaque Origin), which the
 	// default same-origin CORP header blocks in Firefox. Access is already gated by
 	// project auth or the signed asset token, so relaxing CORP here is safe.
@@ -178,6 +200,11 @@ app.get("/:projectId/files/:fileId{.+}", async (c) => {
 	// @font-face (and other CSS url()) resources are always fetched in CORS mode by
 	// spec, so the opaque-origin iframe also needs an explicit ACAO header.
 	c.header("Access-Control-Allow-Origin", "*");
+
+	if (isFresh(c.req.header("if-none-match"), etag)) {
+		readStream.destroy();
+		return c.body(null, 304);
+	}
 
 	return stream(c, async (s) => {
 		s.onAbort(() => {

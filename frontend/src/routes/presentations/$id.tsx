@@ -74,6 +74,12 @@ type PresentationAwarenessState = {
 	blanked: boolean;
 	updatedAt: number;
 	userId: string;
+	zoom: number;
+	zoomOriginX: number;
+	zoomOriginY: number;
+	laserActive: boolean;
+	laserXPercent: number;
+	laserYPercent: number;
 };
 
 function parsePresentationAwarenessState(data: unknown): PresentationAwarenessState | null {
@@ -88,7 +94,18 @@ function parsePresentationAwarenessState(data: unknown): PresentationAwarenessSt
 		!Number.isFinite(payload.slideIndex) ||
 		typeof payload.updatedAt !== "number" ||
 		!Number.isFinite(payload.updatedAt) ||
-		typeof payload.userId !== "string"
+		typeof payload.userId !== "string" ||
+		typeof payload.zoom !== "number" ||
+		!Number.isFinite(payload.zoom) ||
+		typeof payload.zoomOriginX !== "number" ||
+		!Number.isFinite(payload.zoomOriginX) ||
+		typeof payload.zoomOriginY !== "number" ||
+		!Number.isFinite(payload.zoomOriginY) ||
+		typeof payload.laserActive !== "boolean" ||
+		typeof payload.laserXPercent !== "number" ||
+		!Number.isFinite(payload.laserXPercent) ||
+		typeof payload.laserYPercent !== "number" ||
+		!Number.isFinite(payload.laserYPercent)
 	) {
 		return null;
 	}
@@ -100,6 +117,12 @@ function parsePresentationAwarenessState(data: unknown): PresentationAwarenessSt
 		blanked: payload.blanked === true,
 		updatedAt: payload.updatedAt,
 		userId: payload.userId,
+		zoom: payload.zoom,
+		zoomOriginX: payload.zoomOriginX,
+		zoomOriginY: payload.zoomOriginY,
+		laserActive: payload.laserActive,
+		laserXPercent: payload.laserXPercent,
+		laserYPercent: payload.laserYPercent,
 	};
 }
 
@@ -216,6 +239,8 @@ function RouteComponent() {
 	const assetToken = useAssetToken(id);
 	const [slideIndex, setSlideIndex] = useState(0);
 	const [isBlanked, setIsBlanked] = useState(false);
+	const [zoomState, setZoomState] = useState({ zoom: 1, originX: 50, originY: 50 });
+	const [laserState, setLaserState] = useState({ active: false, xPercent: -1, yPercent: -1 });
 	const [cursorLine, setCursorLine] = useState(1);
 	const [startedAt, setStartedAt] = useState(() => Date.now());
 	const [now, setNow] = useState(() => Date.now());
@@ -881,6 +906,38 @@ function RouteComponent() {
 				return newestState.blanked;
 			});
 
+			setZoomState((current) => {
+				if (
+					current.zoom === newestState.zoom &&
+					current.originX === newestState.zoomOriginX &&
+					current.originY === newestState.zoomOriginY
+				) {
+					return current;
+				}
+				suppressNextSlideAwarenessUpdateRef.current = true;
+				return {
+					zoom: newestState.zoom,
+					originX: newestState.zoomOriginX,
+					originY: newestState.zoomOriginY,
+				};
+			});
+
+			setLaserState((current) => {
+				if (
+					current.active === newestState.laserActive &&
+					current.xPercent === newestState.laserXPercent &&
+					current.yPercent === newestState.laserYPercent
+				) {
+					return current;
+				}
+				suppressNextSlideAwarenessUpdateRef.current = true;
+				return {
+					active: newestState.laserActive,
+					xPercent: newestState.laserXPercent,
+					yPercent: newestState.laserYPercent,
+				};
+			});
+
 			const nextSlideIndex = Math.min(newestState.slideIndex, maxSlideIndex);
 			setSlideIndex((current) => {
 				if (
@@ -941,14 +998,22 @@ function RouteComponent() {
 			blanked: isBlanked,
 			updatedAt,
 			userId: presenceUser.userId,
+			zoom: zoomState.zoom,
+			zoomOriginX: zoomState.originX,
+			zoomOriginY: zoomState.originY,
+			laserActive: laserState.active,
+			laserXPercent: laserState.xPercent,
+			laserYPercent: laserState.yPercent,
 		} satisfies PresentationAwarenessState);
 	}, [
 		collab.awareness,
 		isBlanked,
 		isPresentation,
+		laserState,
 		presenceUser.userId,
 		selectedFile?.id,
 		selectedFile?.type,
+		zoomState,
 		slideIndex,
 	]);
 
@@ -1046,6 +1111,10 @@ function RouteComponent() {
 				onMetaChange={({ active }) => {
 					setSlideIndex(active);
 				}}
+				zoomState={zoomState}
+				onZoomChange={setZoomState}
+				laserState={laserState}
+				onLaserChange={setLaserState}
 				showSpeakerNotes={!isViewer}
 				className="h-full w-full"
 			/>
