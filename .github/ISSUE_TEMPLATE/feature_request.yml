@@ -1,7 +1,7 @@
 name: 🚀 Feature
 description: Suggest a new feature or enhancement
 title: "🚀 Feature: "
-type: "Feature"
+labels: ["enhancement"]
 body:
   - type: markdown
     attributes:
