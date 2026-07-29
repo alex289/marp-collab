@@ -5,6 +5,8 @@ on:
     branches:
       - "main"
   pull_request:
+    branches:
+      - "main"
   schedule:
     - cron: "42 4 * * 3" # Every Wednesday at 4:42am
 
