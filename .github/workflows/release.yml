@@ -7,9 +7,6 @@ on:
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}-main
 
-permissions:
-  contents: read
-
 jobs:
   prepare-release:
     name: Prepare Release PR
@@ -40,7 +37,7 @@ jobs:
         uses: changesets/action@a45c4d594aa4e2c509dc14a9f2b3b67ba3780d0d # v1.9.0
         id: changesets
         with:
-          publish: npx @changesets/cli tag
+          publish: pnpm changeset tag
           createGithubReleases: true
           commit: "chore(release): Version packages"
           title: "chore(release): Version packages"
@@ -105,7 +102,7 @@ jobs:
           context: .
           file: Dockerfile
           push: true
-          platforms: linux/amd64
+          platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
           annotations: ${{ steps.meta.outputs.annotations }}
