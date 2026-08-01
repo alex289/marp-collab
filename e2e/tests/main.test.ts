@@ -178,13 +178,13 @@ test.describe("Presentation lifecycle", () => {
 		await createPresentation(page, "Table View Test");
 		await page.goto("/");
 
-		await page.getByRole("button", { name: "Table view" }).click();
+		await page.getByRole("button", { name: "Table view", exact: true }).click();
 
 		const table = page.getByRole("table", { name: "Presentations" });
 		await expect(table).toBeVisible();
 		await expect(table.getByRole("link", { name: "Table View Test" })).toBeVisible();
 
-		await page.getByRole("button", { name: "Grid view" }).click();
+		await page.getByRole("button", { name: "Grid view", exact: true }).click();
 		await expect(table).not.toBeVisible();
 		await expect(page.getByRole("link", { name: "Open Table View Test" })).toBeVisible();
 	});
