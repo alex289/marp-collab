@@ -5,6 +5,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { renderMarp } from "@/lib/marp";
 import { useTheme } from "./theme-provider";
 import marpitSvgPolyfillScript from "@marp-team/marpit-svg-polyfill/lib/polyfill.browser.js?raw";
+import { toast } from "sonner";
 
 type PreviewPaneProps = {
 	markdown: string;
@@ -213,9 +214,13 @@ export const PreviewPane = ({
 			return;
 		}
 
-		await navigator.clipboard.writeText(label);
-		setCopiedLabel(true);
-		window.setTimeout(() => setCopiedLabel(false), 1200);
+		try {
+			await navigator.clipboard.writeText(label);
+			setCopiedLabel(true);
+			window.setTimeout(() => setCopiedLabel(false), 1200);
+		} catch {
+			toast.error("Failed to copy file name to clipboard");
+		}
 	};
 
 	const rendered = useMemo(() => {
