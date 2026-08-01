@@ -173,6 +173,22 @@ test.describe("Presentation lifecycle", () => {
 		await expect(page).toHaveTitle(`${PRESENTATION_NAME} - MarpCollab`);
 	});
 
+	test("switches between the project grid and data table", async ({ page }) => {
+		await page.goto("/");
+		await createPresentation(page, "Table View Test");
+		await page.goto("/");
+
+		await page.getByRole("button", { name: "Table view" }).click();
+
+		const table = page.getByRole("table", { name: "Presentations" });
+		await expect(table).toBeVisible();
+		await expect(table.getByRole("link", { name: "Table View Test" })).toBeVisible();
+
+		await page.getByRole("button", { name: "Grid view" }).click();
+		await expect(table).not.toBeVisible();
+		await expect(page.getByRole("link", { name: "Open Table View Test" })).toBeVisible();
+	});
+
 	test("create dialog validates required name", async ({ page }) => {
 		await page.goto("/");
 

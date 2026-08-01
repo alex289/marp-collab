@@ -1,6 +1,7 @@
 import { CreatePresentationDialog } from "@/components/dialog/create-presentation";
 import { LoadingScreen } from "@/components/loading-screen";
 import Navbar from "@/components/navbar";
+import { ProjectDataTable } from "@/components/project-data-table";
 import { Card, CardAction, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
@@ -11,11 +12,13 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { API_URL } from "@/lib/config";
 import { fetcher } from "@/lib/fetcher";
 import { filterAndSortProjects, type ProjectSortOption } from "@/lib/project-list";
 import type { Project, SharedProject } from "@/lib/types";
 import { Link, createFileRoute } from "@tanstack/react-router";
+import { LayoutGridIcon, TablePropertiesIcon } from "lucide-react";
 import { useState } from "react";
 import useSWR from "swr";
 import { DeleteProjectDialog } from "@/components/dialog/delete-project";
@@ -25,9 +28,12 @@ export const Route = createFileRoute("/")({
 	component: RootComponent,
 });
 
+type ProjectView = "grid" | "table";
+
 function RootComponent() {
 	const [query, setQuery] = useState("");
 	const [sortOption, setSortOption] = useState<ProjectSortOption>("created");
+	const [view, setView] = useState<ProjectView>("grid");
 	const { data, isLoading } = useSWR<{
 		projects: Project[];
 		sharedProjects: SharedProject[];
@@ -75,25 +81,46 @@ function RootComponent() {
 							aria-label="Search presentations"
 							className="sm:max-w-sm"
 						/>
-						<Select
-							value={sortOption}
-							onValueChange={(value) => {
-								if (value === "created" || value === "updated" || value === "alphabetical") {
-									setSortOption(value);
-								}
-							}}
-						>
-							<SelectTrigger className="w-full sm:w-44" aria-label="Sort presentations">
-								<SelectValue />
-							</SelectTrigger>
-							<SelectContent>
-								<SelectGroup>
-									<SelectItem value="created">Last created</SelectItem>
-									<SelectItem value="updated">Last updated</SelectItem>
-									<SelectItem value="alphabetical">Alphabetical</SelectItem>
-								</SelectGroup>
-							</SelectContent>
-						</Select>
+						<div className="flex w-full items-center gap-2 sm:ml-auto sm:w-auto">
+							<Select
+								value={sortOption}
+								onValueChange={(value) => {
+									if (value === "created" || value === "updated" || value === "alphabetical") {
+										setSortOption(value);
+									}
+								}}
+							>
+								<SelectTrigger className="flex-1 sm:w-44" aria-label="Sort presentations">
+									<SelectValue />
+								</SelectTrigger>
+								<SelectContent>
+									<SelectGroup>
+										<SelectItem value="created">Last created</SelectItem>
+										<SelectItem value="updated">Last updated</SelectItem>
+										<SelectItem value="alphabetical">Alphabetical</SelectItem>
+									</SelectGroup>
+								</SelectContent>
+							</Select>
+							<ToggleGroup
+								value={[view]}
+								onValueChange={(value) => {
+									const nextView = value[0];
+									if (nextView === "grid" || nextView === "table") {
+										setView(nextView);
+									}
+								}}
+								variant="outline"
+								spacing={0}
+								aria-label="Presentation view"
+							>
+								<ToggleGroupItem value="grid" aria-label="Grid view">
+									<LayoutGridIcon />
+								</ToggleGroupItem>
+								<ToggleGroupItem value="table" aria-label="Table view">
+									<TablePropertiesIcon />
+								</ToggleGroupItem>
+							</ToggleGroup>
+						</div>
 					</div>
 				) : null}
 				{projects.length === 0 ? (
@@ -104,6 +131,8 @@ function RootComponent() {
 					<p className="text-muted-foreground text-sm">
 						{hasQuery ? "No presentations match your search." : "No presentations found."}
 					</p>
+				) : view === "table" ? (
+					<ProjectDataTable type="owned" projects={visibleProjects} />
 				) : (
 					<div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
 						{visibleProjects.map((project) => (
@@ -123,6 +152,8 @@ function RootComponent() {
 									? "No shared presentations match your search."
 									: "No shared presentations found."}
 							</p>
+						) : view === "table" ? (
+							<ProjectDataTable type="shared" projects={visibleSharedProjects} />
 						) : (
 							<div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
 								{visibleSharedProjects.map((project) => (
