@@ -7,10 +7,13 @@ import { useAuthSync } from "@/hooks/use-auth-sync";
 import { useHealthCheck } from "@/hooks/use-health-check";
 import useIsUserOffline from "@/hooks/use-is-user-offline";
 import { authClient } from "@/lib/auth-client";
-import { Outlet, createRootRoute, redirect } from "@tanstack/react-router";
+import { HeadContent, Outlet, createRootRoute, redirect } from "@tanstack/react-router";
 import { HomeIcon, ServerCrashIcon, WifiOffIcon } from "lucide-react";
 
 export const Route = createRootRoute({
+	head: () => ({
+		meta: [{ title: "Marp Collab" }],
+	}),
 	beforeLoad: async ({ location }) => {
 		const { data: session } = await authClient.getSession();
 
@@ -50,12 +53,15 @@ export const Route = createRootRoute({
 
 function RootWrapper() {
 	return (
-		<ThemeProvider defaultTheme="system" storageKey="marp-collab-theme">
-			<TooltipProvider>
-				<RootComponent />
-			</TooltipProvider>
-			<Toaster />
-		</ThemeProvider>
+		<>
+			<HeadContent />
+			<ThemeProvider defaultTheme="system" storageKey="marp-collab-theme">
+				<TooltipProvider>
+					<RootComponent />
+				</TooltipProvider>
+				<Toaster />
+			</ThemeProvider>
+		</>
 	);
 }
 

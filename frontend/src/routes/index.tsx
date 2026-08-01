@@ -79,6 +79,19 @@ function RootComponent() {
 					</>
 				)}
 			</div>
+			<footer className="mt-auto px-6 py-4 text-end text-xs text-muted-foreground">
+				<a
+					className="hover:underline"
+					href={
+						"https://github.com/alex289/marp-collab/releases/tag/marp-collab%40" +
+						__MARP_COLLAB_VERSION__
+					}
+					target="_blank"
+					rel="noopener noreferrer"
+				>
+					Marp Collab v{__MARP_COLLAB_VERSION__}
+				</a>
+			</footer>
 		</div>
 	);
 }

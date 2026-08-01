@@ -15,7 +15,8 @@ import type { DeckFile } from "@/lib/types";
 import Navbar from "@/components/navbar";
 import { PresenceAvatars } from "@/components/presence-avatars";
 import { PresentationActions } from "@/components/presentation-actions";
-import { useProject } from "@/lib/project";
+import { ManageProjectCollaborator } from "@/components/dialog/manage-project-collaborator";
+import { getProject } from "@/lib/project";
 import { useHotkeys } from "@tanstack/react-hotkeys";
 import { PresentationFrame } from "@/components/presentation-frame";
 import { Button } from "@/components/ui/button";
@@ -67,6 +68,13 @@ const searchValidator = z.object({
 	file: z.optional(z.string()),
 	fullscreen: z.optional(z.boolean()),
 });
+
+type PresentationSearch = {
+	mode?: "present" | "viewer";
+	file?: string;
+	fullscreen?: boolean;
+	slide?: number;
+};
 
 type PresentationAwarenessState = {
 	fileId: string;
@@ -141,11 +149,10 @@ function normalizeSearchSlide(slide: unknown) {
 }
 
 export const Route = createFileRoute("/presentations/$id")({
-	component: RouteComponent,
 	params: {
 		parse: throw404OnError((data) => paramsValidator.parse(data)),
 	},
-	validateSearch: (search) => {
+	validateSearch: (search): PresentationSearch => {
 		const slide = normalizeSearchSlide((search as { slide?: unknown }).slide);
 
 		return {
@@ -153,6 +160,11 @@ export const Route = createFileRoute("/presentations/$id")({
 			...(slide === null ? {} : { slide }),
 		};
 	},
+	loader: ({ params }) => getProject(params.id),
+	head: ({ loaderData }) => ({
+		meta: loaderData ? [{ title: `${loaderData.project.name} - MarpCollab` }] : undefined,
+	}),
+	component: RouteComponent,
 });
 
 const SIDEBAR_DEFAULT_WIDTH = 304;
@@ -195,8 +207,9 @@ function RouteComponent() {
 	const search = Route.useSearch();
 	const navigate = Route.useNavigate();
 	const presenceUser = usePresenceUser(session?.user ?? null);
-	const { project } = useProject(id);
+	const { project } = Route.useLoaderData();
 	const [selectedFile, setSelectedFile] = useState<DeckFile | null>(null);
+
 	const projectPresenceAwareness = useProjectPresence(
 		id,
 		session?.user ?? null,
@@ -1299,6 +1312,7 @@ function RouteComponent() {
 							awareness={projectPresenceAwareness}
 							onParticipantClick={handleParticipantClick}
 						/>
+						<ManageProjectCollaborator projectId={id} />
 						<PresentationActions
 							projectId={id}
 							selectedFileId={previewFile?.id ?? null}
@@ -1399,7 +1413,6 @@ function RouteComponent() {
 						awareness={collab.awareness}
 						undoManager={collab.undoManager}
 						readOnly={collab.readOnly}
-						projectId={id}
 						onCursorLineChange={setCursorLine}
 					/>
 				</Suspense>

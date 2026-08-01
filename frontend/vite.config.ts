@@ -1,10 +1,15 @@
 import path from "path";
+import { readFileSync } from "node:fs";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { defineConfig } from "vite";
 import { compression } from "vite-plugin-compression2";
 import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import { VitePWA } from "vite-plugin-pwa";
+
+const { version: appVersion } = JSON.parse(
+	readFileSync(new URL("../package.json", import.meta.url), "utf8"),
+) as { version: string };
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => ({
@@ -65,6 +70,9 @@ export default defineConfig(({ mode }) => ({
 		alias: {
 			"@": path.resolve(__dirname, "./src"),
 		},
+	},
+	define: {
+		__MARP_COLLAB_VERSION__: JSON.stringify(appVersion),
 	},
 	server: {
 		allowedHosts: true,
