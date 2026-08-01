@@ -141,8 +141,9 @@ export function ManageProjectCollaborator({ projectId }: { projectId: string }) 
 					render={
 						<DialogTrigger
 							render={
-								<Button type="button" variant="outline" size="icon-sm" aria-label="Share document">
+								<Button type="button" variant="ghost" size="sm" aria-label="Share document">
 									<Share />
+									<span className="max-sm:sr-only">Share</span>
 								</Button>
 							}
 						/>

@@ -1,4 +1,9 @@
 import { test, expect, type Page } from "@playwright/test";
+import { readFileSync } from "node:fs";
+
+const { version: APP_VERSION } = JSON.parse(
+	readFileSync(new URL("../../package.json", import.meta.url), "utf8"),
+) as { version: string };
 
 const PRESENTATION_NAME = "E2E Test Presentation";
 const MARKDOWN_FILE_NAME = "slides.md";
@@ -140,6 +145,7 @@ test.describe("Dashboard", () => {
 		await expect(page.getByRole("heading", { name: "Presentations" })).toBeVisible();
 		await expect(page.getByText("No presentations yet")).toBeVisible();
 		await expect(page.getByRole("button", { name: "Create Presentation" })).toBeVisible();
+		await expect(page.getByText(`Marp Collab v${APP_VERSION}`)).toBeVisible();
 	});
 });
 
@@ -164,6 +170,7 @@ test.describe("Presentation lifecycle", () => {
 		await expect(page).toHaveURL(/\/presentations\/.+/);
 
 		await waitForSidebar(page);
+		await expect(page).toHaveTitle(`${PRESENTATION_NAME} - MarpCollab`);
 	});
 
 	test("create dialog validates required name", async ({ page }) => {
@@ -244,9 +251,7 @@ test.describe("Editor page — file management", () => {
 
 	test("editor layout is visible with sidebar and panes", async ({ page }) => {
 		await expect(page.getByRole("button", { name: "presentation.md" })).toBeVisible();
-		await expect(
-			page.locator('[data-slot="card-title"]').filter({ hasText: "Editor" }),
-		).toBeVisible();
+		await expect(page.locator(".cm-editor")).toBeVisible();
 		await expect(page.locator('iframe[title="Marp preview"]')).toBeVisible();
 	});
 
@@ -623,9 +628,7 @@ test.describe("Presentation mode", () => {
 
 		await page.getByRole("button", { name: "End presentation" }).click();
 		await expect(page).not.toHaveURL(/mode=present/);
-		await expect(
-			page.locator('[data-slot="card-title"]').filter({ hasText: "Editor" }),
-		).toBeVisible();
+		await expect(page.locator(".cm-editor")).toBeVisible();
 	});
 
 	test("Escape key exits presentation mode", async ({ page }) => {
