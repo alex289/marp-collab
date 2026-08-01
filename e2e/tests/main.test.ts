@@ -1,4 +1,9 @@
 import { test, expect, type Page } from "@playwright/test";
+import { readFileSync } from "node:fs";
+
+const { version: APP_VERSION } = JSON.parse(
+	readFileSync(new URL("../../package.json", import.meta.url), "utf8"),
+) as { version: string };
 
 const PRESENTATION_NAME = "E2E Test Presentation";
 const MARKDOWN_FILE_NAME = "slides.md";
@@ -140,6 +145,7 @@ test.describe("Dashboard", () => {
 		await expect(page.getByRole("heading", { name: "Presentations" })).toBeVisible();
 		await expect(page.getByText("No presentations yet")).toBeVisible();
 		await expect(page.getByRole("button", { name: "Create Presentation" })).toBeVisible();
+		await expect(page.getByText(`Marp Collab v${APP_VERSION}`)).toBeVisible();
 	});
 });
 
@@ -164,6 +170,7 @@ test.describe("Presentation lifecycle", () => {
 		await expect(page).toHaveURL(/\/presentations\/.+/);
 
 		await waitForSidebar(page);
+		await expect(page).toHaveTitle(`${PRESENTATION_NAME} - MarpCollab`);
 	});
 
 	test("create dialog validates required name", async ({ page }) => {
@@ -244,9 +251,7 @@ test.describe("Editor page — file management", () => {
 
 	test("editor layout is visible with sidebar and panes", async ({ page }) => {
 		await expect(page.getByRole("button", { name: "presentation.md" })).toBeVisible();
-		await expect(
-			page.locator('[data-slot="card-title"]').filter({ hasText: "Editor" }),
-		).toBeVisible();
+		await expect(page.locator(".cm-editor")).toBeVisible();
 		await expect(page.locator('iframe[title="Marp preview"]')).toBeVisible();
 	});
 
@@ -531,7 +536,7 @@ test.describe("Editor: content editing", () => {
 		await expect.poll(() => getPreviewSectionBackground(page)).toBe("rgb(1, 2, 3)");
 
 		await page.getByRole("button", { name: "live-theme.css" }).click();
-		await expect(page.getByText("CSS", { exact: true })).toBeVisible();
+		await expect(editor).toContainText("background: rgb(1, 2, 3)");
 		await editor.click();
 		await page.keyboard.press("ControlOrMeta+A");
 		await page.keyboard.type(
@@ -607,7 +612,7 @@ test.describe("Presentation mode", () => {
 
 		await waitForSidebar(page);
 
-		await page.getByRole("button", { name: "Start presentation" }).click();
+		await page.getByRole("button", { name: "Start" }).click();
 		await expect(page).toHaveURL(/mode=present/);
 
 		await expect(page.getByRole("button", { name: "End presentation" })).toBeVisible();
@@ -623,9 +628,7 @@ test.describe("Presentation mode", () => {
 
 		await page.getByRole("button", { name: "End presentation" }).click();
 		await expect(page).not.toHaveURL(/mode=present/);
-		await expect(
-			page.locator('[data-slot="card-title"]').filter({ hasText: "Editor" }),
-		).toBeVisible();
+		await expect(page.locator(".cm-editor")).toBeVisible();
 	});
 
 	test("Escape key exits presentation mode", async ({ page }) => {
@@ -634,11 +637,11 @@ test.describe("Presentation mode", () => {
 		await createPresentation(page, "Escape Test");
 		await page.waitForURL(/\/presentations\/.+/);
 
-		await expect(page.getByRole("button", { name: "Start presentation" })).toBeVisible({
+		await expect(page.getByRole("button", { name: "Start" })).toBeVisible({
 			timeout: 10_000,
 		});
 
-		await page.getByRole("button", { name: "Start presentation" }).click();
+		await page.getByRole("button", { name: "Start" }).click();
 		await expect(page).toHaveURL(/mode=present/);
 		await expect(page.getByRole("button", { name: "End presentation" })).toBeVisible();
 
@@ -977,7 +980,7 @@ test.describe("Presentation mode: slide counter and timer", () => {
 		await page.keyboard.press("ControlOrMeta+A");
 		await page.keyboard.type("# Slide 1\n\n---\n\n# Slide 2\n\n---\n\n# Slide 3");
 
-		await page.getByRole("button", { name: "Start presentation" }).click();
+		await page.getByRole("button", { name: "Start" }).click();
 		await expect(page).toHaveURL(/mode=present/);
 		await expect(page.getByRole("button", { name: "Next" })).toBeEnabled({ timeout: 15_000 });
 	});

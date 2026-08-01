@@ -3,6 +3,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "./ui/label";
 import { updateProject, useProject } from "@/lib/project";
+import { useRouter } from "@tanstack/react-router";
 
 type ProjectNameSettingProps = {
 	projectId: string;
@@ -10,6 +11,7 @@ type ProjectNameSettingProps = {
 
 export const ProjectNameSetting = ({ projectId }: ProjectNameSettingProps) => {
 	const { project, isProjectOwner: isOwner, mutate } = useProject(projectId);
+	const router = useRouter();
 
 	const [name, setName] = useState("");
 	const [saving, setSaving] = useState(false);
@@ -42,6 +44,7 @@ export const ProjectNameSetting = ({ projectId }: ProjectNameSettingProps) => {
 		}
 
 		await mutate();
+		await router.invalidate();
 	};
 
 	return (

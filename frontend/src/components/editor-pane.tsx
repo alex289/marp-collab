@@ -18,32 +18,18 @@ import type { Awareness } from "y-protocols/awareness.js";
 import * as Y from "yjs";
 import { yCollab, yUndoManagerKeymap } from "y-codemirror.next";
 import { Badge } from "@/components/ui/badge";
-import {
-	Card,
-	CardAction,
-	CardContent,
-	CardDescription,
-	CardHeader,
-	CardTitle,
-} from "@/components/ui/card";
+import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import {
-	Check,
-	Copy,
-	FileText,
-	Loader2Icon,
-	Maximize2,
-	WandSparkles,
-	WrapText,
-} from "lucide-react";
+import { FileText, Loader2Icon, Maximize2, WandSparkles, WrapText } from "lucide-react";
 import { useTheme } from "./theme-provider";
 import { vsCodeLight } from "@fsegurai/codemirror-theme-vscode-light";
 import { vsCodeDark } from "@fsegurai/codemirror-theme-vscode-dark";
-import { ManageProjectCollaborator } from "./dialog/manage-project-collaborator";
 import { toast } from "sonner";
 import { useHotkey } from "@tanstack/react-hotkeys";
 import { countMarpSlides } from "@/lib/slide-count";
+import { cn } from "@/lib/utils";
 
 type EditorPaneProps = {
 	label: string | null;
@@ -51,7 +37,6 @@ type EditorPaneProps = {
 	awareness: Awareness | null;
 	undoManager: Y.UndoManager | null;
 	readOnly: boolean;
-	projectId: string;
 	onCursorLineChange?: (line: number) => void;
 };
 
@@ -232,7 +217,7 @@ const editorTheme = EditorView.theme({
 });
 
 export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function EditorPane(
-	{ label, yText, awareness, undoManager, readOnly, projectId, onCursorLineChange },
+	{ label, yText, awareness, undoManager, readOnly, onCursorLineChange },
 	ref,
 ) {
 	const mountRef = useRef<HTMLDivElement | null>(null);
@@ -240,7 +225,6 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 	const [stats, setStats] = useState<EditorStats>(emptyStats);
 	const [wrapEnabled, setWrapEnabled] = useState(true);
 	const [isFocused, setIsFocused] = useState(false);
-	const [copiedLabel, setCopiedLabel] = useState(false);
 	const [isFormatting, setIsFormatting] = useState(false);
 	const handleFormatRef = useRef<() => void>(() => undefined);
 	const { resolvedTheme } = useTheme();
@@ -256,16 +240,6 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 
 		return "Markdown";
 	}, [label]);
-
-	const copyLabel = async () => {
-		if (!label) {
-			return;
-		}
-
-		await navigator.clipboard.writeText(label);
-		setCopiedLabel(true);
-		window.setTimeout(() => setCopiedLabel(false), 1200);
-	};
 
 	const handleFormat = useCallback(async () => {
 		const view = viewRef.current;
@@ -435,80 +409,6 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 					: "flex h-full min-h-0 flex-col gap-0 overflow-hidden rounded-none py-0 ring-0"
 			}
 		>
-			<CardHeader className="shrink-0 border-b border-border px-3 py-2">
-				<div className="flex min-w-0 items-start gap-3">
-					<div className="min-w-0">
-						<CardTitle className="flex min-w-0 items-center gap-2">
-							<span className="truncate">Editor</span>
-							<Badge variant="outline">{fileKind}</Badge>
-						</CardTitle>
-						<CardDescription className="mt-1 flex min-w-0 items-center gap-2 font-mono text-[11px]">
-							<span className="truncate">{label ?? "No file selected"}</span>
-							{label ? (
-								<Tooltip>
-									<TooltipTrigger
-										render={
-											<Button
-												type="button"
-												variant="ghost"
-												size="icon-xs"
-												aria-label="Copy file name"
-												onClick={copyLabel}
-											>
-												{copiedLabel ? <Check /> : <Copy />}
-											</Button>
-										}
-									/>
-									<TooltipContent>{copiedLabel ? "Copied!" : "Copy file name"}</TooltipContent>
-								</Tooltip>
-							) : null}
-						</CardDescription>
-					</div>
-				</div>
-				<CardAction>
-					<div className="flex items-center gap-2">
-						{readOnly ? <Badge variant="outline">Read-only</Badge> : null}
-						<ManageProjectCollaborator projectId={projectId} />
-						<Tooltip>
-							<TooltipTrigger
-								render={
-									<Button
-										type="button"
-										variant={wrapEnabled ? "secondary" : "outline"}
-										size="icon-sm"
-										aria-label={wrapEnabled ? "Disable line wrapping" : "Enable line wrapping"}
-										onClick={() => setWrapEnabled((current) => !current)}
-									>
-										<WrapText />
-									</Button>
-								}
-							/>
-							<TooltipContent>
-								<span>{wrapEnabled ? "Disable line wrapping" : "Enable line wrapping"}</span>
-							</TooltipContent>
-						</Tooltip>
-						<Tooltip>
-							<TooltipTrigger
-								render={
-									<Button
-										type="button"
-										variant={isFocused ? "secondary" : "outline"}
-										size="icon-sm"
-										aria-label={isFocused ? "Exit focus mode" : "Enter focus mode"}
-										onClick={() => setIsFocused((current) => !current)}
-									>
-										<Maximize2 />
-									</Button>
-								}
-							/>
-							<TooltipContent>
-								<span>{isFocused ? "Exit focus mode" : "Enter focus mode"}</span>
-							</TooltipContent>
-						</Tooltip>
-					</div>
-				</CardAction>
-			</CardHeader>
-
 			<CardContent className="relative min-h-0 flex-1 p-0">
 				{yText ? (
 					<div ref={mountRef} className="h-full" />
@@ -522,18 +422,21 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 				)}
 			</CardContent>
 
-			<div className="flex shrink-0 items-center justify-between gap-3 border-t border-border bg-background px-3 py-1">
-				<div>
-					<div
-						className={`${isFocused ? "flex" : "hidden 2xl:flex"} min-w-0 flex-wrap items-center gap-3 font-mono text-[11px] text-muted-foreground`}
-					>
-						<span>{stats.words.toLocaleString()} words</span>
-						<span>{stats.chars.toLocaleString()} chars</span>
-						{fileKind === "Markdown" ? <span>{stats.slides.toLocaleString()} slides</span> : null}
-					</div>
+			<Separator />
+			<CardFooter className="h-7 shrink-0 gap-3 bg-background px-2 py-1">
+				<div
+					className={cn(
+						"min-w-0 flex-wrap items-center gap-3 font-mono text-[11px] text-muted-foreground",
+						isFocused ? "flex" : "hidden 2xl:flex",
+					)}
+				>
+					<span>{stats.words.toLocaleString()} words</span>
+					<span>{stats.chars.toLocaleString()} chars</span>
+					{fileKind === "Markdown" ? <span>{stats.slides.toLocaleString()} slides</span> : null}
 				</div>
-				<div className="flex items-center gap-3">
-					<span className="font-mono text-[11px] text-muted-foreground">
+				<div className="ml-auto flex shrink-0 items-center gap-1">
+					{readOnly ? <Badge variant="outline">Read-only</Badge> : null}
+					<span className="mr-1 font-mono text-[11px] text-muted-foreground">
 						Ln {stats.cursorLine}, Col {stats.cursorColumn}
 					</span>
 					<Tooltip>
@@ -555,8 +458,44 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 							<span>Format document (Shift-Alt-F)</span>
 						</TooltipContent>
 					</Tooltip>
+					<Tooltip>
+						<TooltipTrigger
+							render={
+								<Button
+									type="button"
+									variant={wrapEnabled ? "secondary" : "outline"}
+									size="icon-sm"
+									aria-label={wrapEnabled ? "Disable line wrapping" : "Enable line wrapping"}
+									onClick={() => setWrapEnabled((current) => !current)}
+								>
+									<WrapText />
+								</Button>
+							}
+						/>
+						<TooltipContent>
+							<span>{wrapEnabled ? "Disable line wrapping" : "Enable line wrapping"}</span>
+						</TooltipContent>
+					</Tooltip>
+					<Tooltip>
+						<TooltipTrigger
+							render={
+								<Button
+									type="button"
+									variant={isFocused ? "secondary" : "outline"}
+									size="icon-sm"
+									aria-label={isFocused ? "Exit focus mode" : "Enter focus mode"}
+									onClick={() => setIsFocused((current) => !current)}
+								>
+									<Maximize2 />
+								</Button>
+							}
+						/>
+						<TooltipContent>
+							<span>{isFocused ? "Exit focus mode" : "Enter focus mode"}</span>
+						</TooltipContent>
+					</Tooltip>
 				</div>
-			</div>
+			</CardFooter>
 		</Card>
 	);
 });
