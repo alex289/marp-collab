@@ -20,7 +20,7 @@ header: "![](theme/whs-logo.svg)"
 
 <!-- _class: title-page -->
 
-<!-- Name -->
+<!-- presenter: Name -->
 
 <!--
 - Bei Fragen gerne reinrufen
@@ -35,7 +35,7 @@ header: "![](theme/whs-logo.svg)"
 
 ---
 
-<!-- Name -->
+<!-- presenter: Name -->
 
 # Inhaltsverzeichnis
 
