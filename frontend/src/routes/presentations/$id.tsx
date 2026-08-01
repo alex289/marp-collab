@@ -353,10 +353,7 @@ function RouteComponent() {
 			}
 
 			const destination = getParentFolderPath(selectedFile.id);
-			const { uploadedFiles, failures } = await uploadFiles(
-				imageFiles,
-				destination || undefined,
-			);
+			const { uploadedFiles, failures } = await uploadFiles(imageFiles, destination || undefined);
 			const images = uploadedFiles.map((file) => {
 				const relativePath =
 					destination && file.id.startsWith(`${destination}/`)
