@@ -30,6 +30,8 @@ export type SharedProject = {
 	userId: string;
 	readOnly: boolean;
 	createdAt: Date;
+	projectCreatedAt: Date;
+	updatedAt: Date;
 	userName: string;
 	ownerName: string;
 };

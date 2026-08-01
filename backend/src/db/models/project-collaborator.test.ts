@@ -80,6 +80,14 @@ describe("project-collaborator model", () => {
 		ok(collabs.some((c) => c.projectId === "proj-1"));
 	});
 
+	test("project collaboration details include the project timestamps", () => {
+		const collab = models
+			.getCollaborationsByUserId("collab-1")
+			.find((entry) => entry.projectId === "proj-1");
+		ok(collab?.projectCreatedAt instanceof Date);
+		ok(collab?.updatedAt instanceof Date);
+	});
+
 	test("getCollaborationsByUserId returns empty array for unknown user", () => {
 		deepEqual(models.getCollaborationsByUserId("nobody"), []);
 	});

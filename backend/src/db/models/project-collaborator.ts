@@ -9,6 +9,8 @@ export type ProjectMembership = {
 
 export type ProjectCollaborator = ProjectMembership & {
 	projectName: string;
+	projectCreatedAt: Date;
+	updatedAt: Date;
 	userName: string;
 	ownerName: string;
 };
@@ -22,6 +24,8 @@ type ProjectMembershipRow = {
 
 type ProjectCollaboratorRow = ProjectMembershipRow & {
 	projectName: string;
+	projectCreatedAt: string;
+	updatedAt: string;
 	userName: string;
 	ownerName: string;
 };
@@ -39,6 +43,8 @@ function rowToProjectCollaborator(row: ProjectCollaboratorRow): ProjectCollabora
 	return {
 		...rowToProjectMembership(row),
 		projectName: row.projectName,
+		projectCreatedAt: new Date(row.projectCreatedAt),
+		updatedAt: new Date(row.updatedAt),
 		userName: row.userName,
 		ownerName: row.ownerName,
 	};
@@ -46,7 +52,7 @@ function rowToProjectCollaborator(row: ProjectCollaboratorRow): ProjectCollabora
 
 const preparedStatements = {
 	getCollaboratorsByProjectId: db.prepare(`
-        select projectId, userId, readOnly, pc.createdAt, u.name as userName, p.name as projectName, owner.name as ownerName
+		select projectId, userId, readOnly, pc.createdAt, p.createdAt as projectCreatedAt, p.updatedAt, u.name as userName, p.name as projectName, owner.name as ownerName
         from project_collaborator pc
 		join user u on userId = u.id
 		join project p on projectId = p.id
@@ -55,7 +61,7 @@ const preparedStatements = {
         order by pc.createdAt asc
     `),
 	getCollaborationsByUserId: db.prepare(`
-        select projectId, userId, readOnly, pc.createdAt, u.name as userName, p.name as projectName, owner.name as ownerName
+		select projectId, userId, readOnly, pc.createdAt, p.createdAt as projectCreatedAt, p.updatedAt, u.name as userName, p.name as projectName, owner.name as ownerName
 		from project_collaborator pc
 		join user u on userId = u.id
 		join project p on projectId = p.id
