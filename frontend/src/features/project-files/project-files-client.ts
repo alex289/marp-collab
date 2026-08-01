@@ -10,6 +10,7 @@ export function getProjectFilesErrorMessage(error: unknown, fallback: string): s
 
 export type UploadProjectFilesResult = {
 	uploadedAny: boolean;
+	uploadedFiles: DeckFile[];
 	failures: string[];
 };
 
@@ -57,6 +58,7 @@ export function createProjectFilesClient(fetcher: FetchLike = fetch): ProjectFil
 
 		async upload(projectId, files, destination) {
 			let uploadedAny = false;
+			const uploadedFiles: DeckFile[] = [];
 			const failures: string[] = [];
 
 			for (const file of files) {
@@ -79,13 +81,15 @@ export function createProjectFilesClient(fetcher: FetchLike = fetch): ProjectFil
 						continue;
 					}
 
+					const payload = (await response.json()) as { file: DeckFile };
+					uploadedFiles.push(payload.file);
 					uploadedAny = true;
 				} catch {
 					failures.push(`${file.name}: An unexpected error occurred`);
 				}
 			}
 
-			return { uploadedAny, failures };
+			return { uploadedAny, uploadedFiles, failures };
 		},
 
 		async delete(projectId, file) {
