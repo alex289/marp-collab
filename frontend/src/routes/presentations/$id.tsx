@@ -22,10 +22,7 @@ import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import type {
-	EditorPaneHandle,
-	MarkdownImageUploadResult,
-} from "@/components/editor-pane";
+import type { EditorPaneHandle, MarkdownImageUploadResult } from "@/components/editor-pane";
 import { SearchPanel } from "@/components/search-panel";
 import { findTextMatches, replaceTextRange, type TextSearchMatch } from "@/lib/text-search";
 import { OutlinePanel } from "@/components/outline-panel";
@@ -226,7 +223,7 @@ function RouteComponent() {
 		presenceAwareness: projectPresenceAwareness,
 		currentUserId: presenceUser.userId,
 	});
-	const { files, isLoading } = projectFiles;
+	const { files, isLoading, uploadFiles } = projectFiles;
 	const collab = useCollabDocument(
 		selectedFile?.type === "markdown" ? (selectedFile.documentName ?? null) : null,
 		session?.user ?? null,
@@ -356,7 +353,7 @@ function RouteComponent() {
 			}
 
 			const destination = getParentFolderPath(selectedFile.id);
-			const { uploadedFiles, failures } = await projectFiles.uploadFiles(
+			const { uploadedFiles, failures } = await uploadFiles(
 				imageFiles,
 				destination || undefined,
 			);
@@ -375,7 +372,7 @@ function RouteComponent() {
 
 			return { images, failures };
 		},
-		[projectFiles.uploadFiles, selectedFile],
+		[uploadFiles, selectedFile],
 	);
 
 	const isPresentation = search.mode === "present" || search.mode === "viewer";

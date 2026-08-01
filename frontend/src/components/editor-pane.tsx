@@ -370,9 +370,7 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 						});
 						currentView.focus();
 					} catch (error) {
-						toast.error(
-							error instanceof Error ? error.message : "Could not upload dropped images",
-						);
+						toast.error(error instanceof Error ? error.message : "Could not upload dropped images");
 					}
 				})();
 
@@ -446,6 +444,7 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 		awareness,
 		undoManager,
 		label,
+		fileKind,
 		resolvedTheme,
 		wrapEnabled,
 		readOnly,
