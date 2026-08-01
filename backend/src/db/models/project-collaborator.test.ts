@@ -51,14 +51,14 @@ describe("project-collaborator model", () => {
 		equal(collab!.readOnly, false);
 	});
 
-	test("createdAt is deserialized as a Date object", () => {
+	test("sharedAt is deserialized as a Date object", () => {
 		const collab = models.getCollaborator("proj-1", "collab-1");
-		ok(collab!.createdAt instanceof Date);
+		ok(collab!.sharedAt instanceof Date);
 	});
 
 	test("getCollaborator returns only Membership detail fields", () => {
 		const collab = models.getCollaborator("proj-1", "collab-1");
-		deepEqual(Object.keys(collab!).sort(), ["createdAt", "projectId", "readOnly", "userId"]);
+		deepEqual(Object.keys(collab!).sort(), ["projectId", "readOnly", "sharedAt", "userId"]);
 	});
 
 	test("getCollaborator returns undefined for unknown pair", () => {

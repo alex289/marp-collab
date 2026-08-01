@@ -3,7 +3,7 @@ import { RenameProjectDialog } from "@/components/dialog/rename-project";
 import { DataTable } from "@/components/data-table";
 import type { Project, SharedProject } from "@/lib/types";
 import { Link } from "@tanstack/react-router";
-import type { ColumnDef } from "@tanstack/react-table";
+import type { ColumnDef, OnChangeFn, SortingState } from "@tanstack/react-table";
 
 type ProjectTableRow = {
 	id: string;
@@ -14,9 +14,13 @@ type ProjectTableRow = {
 	project?: Project;
 };
 
-type ProjectDataTableProps =
+type ProjectDataTableProps = (
 	| { type: "owned"; projects: Project[] }
-	| { type: "shared"; projects: SharedProject[] };
+	| { type: "shared"; projects: SharedProject[] }
+) & {
+	onSortingChange: OnChangeFn<SortingState>;
+	sorting: SortingState;
+};
 
 const dateFormatter = new Intl.DateTimeFormat(undefined, { dateStyle: "medium" });
 
@@ -99,6 +103,8 @@ export function ProjectDataTable(props: ProjectDataTableProps) {
 				data={rows}
 				getRowId={(row) => row.id}
 				label="Presentations"
+				onSortingChange={props.onSortingChange}
+				sorting={props.sorting}
 			/>
 		);
 	}
@@ -117,6 +123,8 @@ export function ProjectDataTable(props: ProjectDataTableProps) {
 			data={rows}
 			getRowId={(row) => row.id}
 			label="Shared presentations"
+			onSortingChange={props.onSortingChange}
+			sorting={props.sorting}
 		/>
 	);
 }

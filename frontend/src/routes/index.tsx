@@ -18,6 +18,7 @@ import { fetcher } from "@/lib/fetcher";
 import { filterAndSortProjects, type ProjectSortOption } from "@/lib/project-list";
 import type { Project, SharedProject } from "@/lib/types";
 import { Link, createFileRoute } from "@tanstack/react-router";
+import type { OnChangeFn, SortingState } from "@tanstack/react-table";
 import { LayoutGridIcon, TablePropertiesIcon } from "lucide-react";
 import { useState } from "react";
 import useSWR from "swr";
@@ -30,9 +31,28 @@ export const Route = createFileRoute("/")({
 
 type ProjectView = "grid" | "table";
 
+const tableSortingByOption: Record<ProjectSortOption, SortingState> = {
+	alphabetical: [{ id: "name", desc: false }],
+	created: [{ id: "createdAt", desc: true }],
+	updated: [{ id: "updatedAt", desc: true }],
+};
+
+const sortOptionByColumn: Record<string, ProjectSortOption> = {
+	name: "alphabetical",
+	createdAt: "created",
+	updatedAt: "updated",
+};
+
+const sortSelectItems = [
+	{ value: "created", label: "Last created" },
+	{ value: "updated", label: "Last updated" },
+	{ value: "alphabetical", label: "Alphabetical" },
+];
+
 function RootComponent() {
 	const [query, setQuery] = useState("");
 	const [sortOption, setSortOption] = useState<ProjectSortOption>("created");
+	const [tableSorting, setTableSorting] = useState<SortingState>(tableSortingByOption.created);
 	const [view, setView] = useState<ProjectView>("grid");
 	const { data, isLoading } = useSWR<{
 		projects: Project[];
@@ -58,6 +78,19 @@ function RootComponent() {
 	);
 	const hasPresentations = projects.length > 0 || sharedProjects.length > 0;
 	const hasQuery = query.trim().length > 0;
+	const handleSortOptionChange = (value: ProjectSortOption) => {
+		setSortOption(value);
+		setTableSorting(tableSortingByOption[value]);
+	};
+	const handleTableSortingChange: OnChangeFn<SortingState> = (updater) => {
+		const nextSorting = typeof updater === "function" ? updater(tableSorting) : updater;
+		const nextSortOption = sortOptionByColumn[nextSorting[0]?.id];
+
+		setTableSorting(nextSorting);
+		if (nextSortOption) {
+			setSortOption(nextSortOption);
+		}
+	};
 
 	if (isLoading) {
 		return <LoadingScreen />;
@@ -83,10 +116,11 @@ function RootComponent() {
 						/>
 						<div className="flex w-full items-center gap-2 sm:ml-auto sm:w-auto">
 							<Select
+								items={sortSelectItems}
 								value={sortOption}
 								onValueChange={(value) => {
 									if (value === "created" || value === "updated" || value === "alphabetical") {
-										setSortOption(value);
+										handleSortOptionChange(value);
 									}
 								}}
 							>
@@ -95,9 +129,11 @@ function RootComponent() {
 								</SelectTrigger>
 								<SelectContent>
 									<SelectGroup>
-										<SelectItem value="created">Last created</SelectItem>
-										<SelectItem value="updated">Last updated</SelectItem>
-										<SelectItem value="alphabetical">Alphabetical</SelectItem>
+										{sortSelectItems.map((item) => (
+											<SelectItem key={item.value} value={item.value}>
+												{item.label}
+											</SelectItem>
+										))}
 									</SelectGroup>
 								</SelectContent>
 							</Select>
@@ -132,7 +168,12 @@ function RootComponent() {
 						{hasQuery ? "No presentations match your search." : "No presentations found."}
 					</p>
 				) : view === "table" ? (
-					<ProjectDataTable type="owned" projects={visibleProjects} />
+					<ProjectDataTable
+						type="owned"
+						projects={visibleProjects}
+						onSortingChange={handleTableSortingChange}
+						sorting={tableSorting}
+					/>
 				) : (
 					<div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
 						{visibleProjects.map((project) => (
@@ -153,7 +194,12 @@ function RootComponent() {
 									: "No shared presentations found."}
 							</p>
 						) : view === "table" ? (
-							<ProjectDataTable type="shared" projects={visibleSharedProjects} />
+							<ProjectDataTable
+								type="shared"
+								projects={visibleSharedProjects}
+								onSortingChange={handleTableSortingChange}
+								sorting={tableSorting}
+							/>
 						) : (
 							<div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
 								{visibleSharedProjects.map((project) => (
