@@ -2,10 +2,14 @@ import useSWR from "swr";
 import { API_URL } from "./config";
 import { fetcher } from "./fetcher";
 
-type ProjectResponse = {
+export type ProjectResponse = {
 	project: { id: string; name: string };
 	isOwner: boolean;
 };
+
+export function getProject(id: string) {
+	return fetcher<ProjectResponse>(`${API_URL}/projects/${id}`);
+}
 
 export function useProject(id: string) {
 	const { data, mutate } = useSWR<ProjectResponse>(`${API_URL}/projects/${id}`, fetcher);

@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { MinusIcon, PlusIcon } from "lucide-react";
+import { Check, Copy, MinusIcon, PlusIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { renderMarp } from "@/lib/marp";
 import { useTheme } from "./theme-provider";
 import marpitSvgPolyfillScript from "@marp-team/marpit-svg-polyfill/lib/polyfill.browser.js?raw";
+import { toast } from "sonner";
 
 type PreviewPaneProps = {
 	markdown: string;
@@ -198,6 +199,7 @@ export const PreviewPane = ({
 	const prevFileKeyRef = useRef<string | null>(null);
 	const [zoomPercent, setZoomPercent] = useState(100);
 	const onSlideDoubleClickRef = useRef(onSlideDoubleClick);
+	const [copiedLabel, setCopiedLabel] = useState(false);
 
 	useEffect(() => {
 		onSlideDoubleClickRef.current = onSlideDoubleClick;
@@ -206,6 +208,20 @@ export const PreviewPane = ({
 	const sendZoom = useCallback((action: "in" | "out" | "reset") => {
 		portRef.current?.postMessage({ type: "marp-zoom", action });
 	}, []);
+
+	const copyLabel = async () => {
+		if (!label) {
+			return;
+		}
+
+		try {
+			await navigator.clipboard.writeText(label);
+			setCopiedLabel(true);
+			window.setTimeout(() => setCopiedLabel(false), 1200);
+		} catch {
+			toast.error("Failed to copy file name to clipboard");
+		}
+	};
 
 	const rendered = useMemo(() => {
 		// Project themes are registered on the shared Marp instance; this invalidates stale renders.
@@ -325,6 +341,22 @@ export const PreviewPane = ({
 			<div className="flex shrink-0 items-center justify-between gap-2 border-b border-border bg-background px-3 py-1.5">
 				<span className="truncate text-xs text-muted-foreground">
 					{label ? `Active file: ${label}` : "No file selected"}
+					<Tooltip>
+						<TooltipTrigger
+							render={
+								<Button
+									type="button"
+									variant="ghost"
+									size="icon-xs"
+									aria-label="Copy file name"
+									onClick={copyLabel}
+								>
+									{copiedLabel ? <Check /> : <Copy />}
+								</Button>
+							}
+						/>
+						<TooltipContent>{copiedLabel ? "Copied!" : "Copy file name"}</TooltipContent>
+					</Tooltip>
 				</span>
 				<div className="flex shrink-0 items-center gap-0.5">
 					<Tooltip>

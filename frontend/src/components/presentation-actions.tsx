@@ -73,9 +73,6 @@ export const PresentationActions = ({
 		}
 	}, [projectId, selectedFileId, isExportingPdf, project?.name]);
 
-	// Both buttons always render and only toggle `disabled`: swapping between a
-	// placeholder and the button pair lets React reuse the first DOM node, so a
-	// click resolved against "Start presentation" can land on "Export PDF".
 	return (
 		<>
 			<Button
@@ -85,7 +82,7 @@ export const PresentationActions = ({
 				onClick={() => void handleExportPdf()}
 			>
 				{isExportingPdf ? <Loader2Icon className="animate-spin" /> : <FileDownIcon />}
-				<span className="max-sm:sr-only">Export PDF</span>
+				<span className="max-sm:sr-only">PDF</span>
 			</Button>
 			<Button
 				variant="ghost"
@@ -94,7 +91,7 @@ export const PresentationActions = ({
 				onClick={() => void handleStartPresentation()}
 			>
 				<PresentationIcon />
-				<span className="max-sm:sr-only">Start presentation</span>
+				<span className="max-sm:sr-only">Start</span>
 			</Button>
 		</>
 	);
