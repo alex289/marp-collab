@@ -37,7 +37,13 @@ type EditorPaneProps = {
 	awareness: Awareness | null;
 	undoManager: Y.UndoManager | null;
 	readOnly: boolean;
+	onUploadImages?: (files: File[]) => Promise<MarkdownImageUploadResult>;
 	onCursorLineChange?: (line: number) => void;
+};
+
+export type MarkdownImageUploadResult = {
+	images: Array<{ alt: string; path: string }>;
+	failures: string[];
 };
 
 export type EditorPaneHandle = {
@@ -217,7 +223,7 @@ const editorTheme = EditorView.theme({
 });
 
 export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function EditorPane(
-	{ label, yText, awareness, undoManager, readOnly, onCursorLineChange },
+	{ label, yText, awareness, undoManager, readOnly, onUploadImages, onCursorLineChange },
 	ref,
 ) {
 	const mountRef = useRef<HTMLDivElement | null>(null);
@@ -227,6 +233,7 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 	const [isFocused, setIsFocused] = useState(false);
 	const [isFormatting, setIsFormatting] = useState(false);
 	const handleFormatRef = useRef<() => void>(() => undefined);
+	const uploadImagesRef = useRef(onUploadImages);
 	const { resolvedTheme } = useTheme();
 
 	const fileKind = useMemo(() => {
@@ -285,12 +292,91 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 	}, [handleFormat]);
 
 	useEffect(() => {
+		uploadImagesRef.current = onUploadImages;
+	}, [onUploadImages]);
+
+	useEffect(() => {
 		if (!mountRef.current || !yText || !awareness || !undoManager) {
 			setStats(emptyStats);
 			return;
 		}
 
 		const languageExtension = label?.endsWith(".css") ? css() : marpMarkdown();
+		const imageDropExtension = EditorView.domEventHandlers({
+			dragover(event) {
+				const dataTransfer = event.dataTransfer;
+				if (readOnly || fileKind !== "Markdown" || !uploadImagesRef.current || !dataTransfer) {
+					return false;
+				}
+
+				const items = Array.from(dataTransfer.items);
+				const hasImage = items.some(
+					(item) => item.kind === "file" && item.type.startsWith("image/"),
+				);
+				if (!hasImage) {
+					return false;
+				}
+
+				event.preventDefault();
+				dataTransfer.dropEffect = "copy";
+				return true;
+			},
+			drop(event, view) {
+				if (readOnly || fileKind !== "Markdown" || !uploadImagesRef.current) {
+					return false;
+				}
+
+				const droppedFiles = Array.from(event.dataTransfer?.files ?? []);
+				const imageFiles = droppedFiles.filter((file) => file.type.startsWith("image/"));
+				if (imageFiles.length === 0) {
+					return false;
+				}
+
+				event.preventDefault();
+				const droppedPosition =
+					view.posAtCoords({ x: event.clientX, y: event.clientY }) ??
+					view.state.selection.main.head;
+				const droppedLine = view.state.doc.lineAt(droppedPosition).number;
+
+				if (imageFiles.length !== droppedFiles.length) {
+					toast.warning("Only image files can be dropped into the Markdown editor.");
+				}
+
+				void (async () => {
+					try {
+						const { images, failures } = await uploadImagesRef.current!(imageFiles);
+						if (failures.length > 0) {
+							toast.error("Some images could not be uploaded", {
+								description: failures.join("\n"),
+							});
+						}
+
+						const currentView = viewRef.current;
+						if (currentView !== view || images.length === 0) {
+							return;
+						}
+
+						const targetLine = currentView.state.doc.line(
+							Math.min(droppedLine, currentView.state.doc.lines),
+						);
+						const markdown = `${images
+							.map((image) => `![${image.alt}](${image.path})`)
+							.join("\n")}\n`;
+						const cursor = targetLine.from + markdown.length;
+						currentView.dispatch({
+							changes: { from: targetLine.from, insert: markdown },
+							selection: { anchor: cursor },
+							effects: EditorView.scrollIntoView(cursor, { y: "center" }),
+						});
+						currentView.focus();
+					} catch (error) {
+						toast.error(error instanceof Error ? error.message : "Could not upload dropped images");
+					}
+				})();
+
+				return true;
+			},
+		});
 
 		const state = EditorState.create({
 			// oxlint-disable-next-line no-base-to-string
@@ -325,6 +411,7 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 				]),
 				EditorState.readOnly.of(readOnly),
 				EditorView.editable.of(!readOnly),
+				imageDropExtension,
 				yCollab(yText, awareness, { undoManager }),
 				EditorView.updateListener.of((update) => {
 					if (update.docChanged || update.selectionSet) {
@@ -357,6 +444,7 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 		awareness,
 		undoManager,
 		label,
+		fileKind,
 		resolvedTheme,
 		wrapEnabled,
 		readOnly,
