@@ -1460,6 +1460,10 @@ function RouteComponent() {
 					<EditorPane
 						ref={editorPaneRef}
 						label={selectedFile?.label ?? null}
+						fileId={selectedFile?.id ?? null}
+						files={files}
+						themeNames={themeNames}
+						projectThemes={projectThemes}
 						yText={collab.yText}
 						awareness={collab.awareness}
 						undoManager={collab.undoManager}
