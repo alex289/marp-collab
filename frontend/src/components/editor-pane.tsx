@@ -10,8 +10,6 @@ import {
 import { EditorState, Prec } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 import { indentWithTab } from "@codemirror/commands";
-import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
-import { yamlFrontmatter } from "@codemirror/lang-yaml";
 import { css } from "@codemirror/lang-css";
 import { forceLinting, linter, lintGutter, type Diagnostic } from "@codemirror/lint";
 import { basicSetup } from "codemirror";
@@ -32,11 +30,21 @@ import { useHotkey } from "@tanstack/react-hotkeys";
 import { findMissingAssetReferences } from "@/lib/asset-diagnostics";
 import { countMarpSlides } from "@/lib/slide-count";
 import { cn } from "@/lib/utils";
+import type { DeckFile } from "@/lib/types";
+import type { ProjectTheme } from "@/lib/project-themes";
+import {
+	createEditorCompletionSource,
+	type EditorCompletionConfig,
+} from "@/features/editor/completions";
+import { marpMarkdown } from "@/features/editor/language";
 
 type EditorPaneProps = {
 	label: string | null;
 	fileId: string | null;
 	projectFileIds: readonly string[];
+	files: DeckFile[];
+	themeNames: string[];
+	projectThemes: ProjectTheme[];
 	yText: Y.Text | null;
 	awareness: Awareness | null;
 	undoManager: Y.UndoManager | null;
@@ -89,13 +97,6 @@ function getEditorStats(view: EditorView): EditorStats {
 		cursorColumn: cursor - cursorLine.from + 1,
 		slides,
 	};
-}
-
-// Marp slides open with YAML frontmatter, which plain CommonMark parses as a setext
-// heading (`marp: true` underlined by `---`), so the whole block came out styled as an
-// H2. The GFM base additionally covers the tables and strikethrough that Marp renders.
-function marpMarkdown() {
-	return yamlFrontmatter({ content: markdown({ base: markdownLanguage }) });
 }
 
 let prettierModulesPromise: Promise<{
@@ -224,6 +225,54 @@ const editorTheme = EditorView.theme({
 	".cm-searchMatch-selected": {
 		backgroundColor: "color-mix(in oklab, var(--primary) 45%, transparent)",
 	},
+	".cm-tooltip-autocomplete": {
+		border: "1px solid var(--border)",
+		borderRadius: "var(--radius-md)",
+		backgroundColor: "var(--popover)",
+		color: "var(--popover-foreground)",
+		boxShadow: "var(--shadow-lg)",
+		fontFamily: "'Geist Variable', sans-serif",
+		overflow: "hidden",
+	},
+	".cm-tooltip-autocomplete > ul": {
+		fontFamily: "inherit",
+		maxHeight: "min(320px, 40vh)",
+	},
+	".cm-tooltip-autocomplete > ul > li": {
+		padding: "4px 8px",
+	},
+	".cm-tooltip-autocomplete > ul > li[aria-selected]": {
+		backgroundColor: "color-mix(in oklab, var(--primary) 30%, var(--popover))",
+		color: "var(--accent-foreground)",
+	},
+	".cm-completionLabel": {
+		fontFamily: "'Geist Mono Variable', monospace",
+	},
+	".cm-completionDetail": {
+		color: "var(--muted-foreground)",
+		fontStyle: "normal",
+		marginLeft: "12px",
+	},
+	".cm-completionInfo": {
+		border: "1px solid var(--border)",
+		borderRadius: "var(--radius-md)",
+		backgroundColor: "var(--popover)",
+		color: "var(--popover-foreground)",
+		boxShadow: "var(--shadow-lg)",
+		fontFamily: "'Geist Variable', sans-serif",
+		fontSize: "12px",
+		lineHeight: "1.45",
+		padding: "8px 10px",
+	},
+	".cm-completionSection": {
+		backgroundColor: "var(--muted)",
+		color: "var(--muted-foreground)",
+		fontSize: "10px",
+		fontWeight: "600",
+		letterSpacing: "0.04em",
+		padding: "3px 8px",
+		textTransform: "uppercase",
+	},
 });
 
 export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function EditorPane(
@@ -231,6 +280,9 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 		label,
 		fileId,
 		projectFileIds,
+		files,
+		themeNames,
+		projectThemes,
 		yText,
 		awareness,
 		undoManager,
@@ -263,6 +315,24 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 
 		return "Markdown";
 	}, [label]);
+	const completionConfigRef = useRef<EditorCompletionConfig>({
+		fileKind: "markdown",
+		currentFileId: null,
+		files: [],
+		themeNames: [],
+		projectThemes: [],
+	});
+	completionConfigRef.current = {
+		fileKind: fileKind === "CSS" ? "css" : "markdown",
+		currentFileId: fileId,
+		files,
+		themeNames,
+		projectThemes,
+	};
+	const completionSource = useMemo(
+		() => createEditorCompletionSource(() => completionConfigRef.current),
+		[],
+	);
 
 	const handleFormat = useCallback(async () => {
 		const view = viewRef.current;
@@ -426,6 +496,7 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 				languageExtension,
 				assetReferenceLinter,
 				lintGutter(),
+				EditorState.languageData.of(() => [{ autocomplete: completionSource }]),
 				Prec.highest(
 					keymap.of([
 						{
@@ -491,6 +562,7 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 		wrapEnabled,
 		readOnly,
 		onCursorLineChange,
+		completionSource,
 	]);
 
 	useImperativeHandle(ref, () => ({

@@ -1438,6 +1438,9 @@ function RouteComponent() {
 						label={selectedFile?.label ?? null}
 						fileId={selectedFile?.id ?? null}
 						projectFileIds={projectFileIds}
+						files={files}
+						themeNames={themeNames}
+						projectThemes={projectThemes}
 						yText={collab.yText}
 						awareness={collab.awareness}
 						undoManager={collab.undoManager}
