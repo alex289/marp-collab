@@ -13,6 +13,7 @@ import { indentWithTab } from "@codemirror/commands";
 import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
 import { yamlFrontmatter } from "@codemirror/lang-yaml";
 import { css } from "@codemirror/lang-css";
+import { forceLinting, linter, lintGutter, type Diagnostic } from "@codemirror/lint";
 import { basicSetup } from "codemirror";
 import type { Awareness } from "y-protocols/awareness.js";
 import * as Y from "yjs";
@@ -28,11 +29,14 @@ import { vsCodeLight } from "@fsegurai/codemirror-theme-vscode-light";
 import { vsCodeDark } from "@fsegurai/codemirror-theme-vscode-dark";
 import { toast } from "sonner";
 import { useHotkey } from "@tanstack/react-hotkeys";
+import { findMissingAssetReferences } from "@/lib/asset-diagnostics";
 import { countMarpSlides } from "@/lib/slide-count";
 import { cn } from "@/lib/utils";
 
 type EditorPaneProps = {
 	label: string | null;
+	fileId: string | null;
+	projectFileIds: readonly string[];
 	yText: Y.Text | null;
 	awareness: Awareness | null;
 	undoManager: Y.UndoManager | null;
@@ -223,11 +227,22 @@ const editorTheme = EditorView.theme({
 });
 
 export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function EditorPane(
-	{ label, yText, awareness, undoManager, readOnly, onUploadImages, onCursorLineChange },
+	{
+		label,
+		fileId,
+		projectFileIds,
+		yText,
+		awareness,
+		undoManager,
+		readOnly,
+		onUploadImages,
+		onCursorLineChange,
+	},
 	ref,
 ) {
 	const mountRef = useRef<HTMLDivElement | null>(null);
 	const viewRef = useRef<EditorView | null>(null);
+	const projectFileIdsRef = useRef(projectFileIds);
 	const [stats, setStats] = useState<EditorStats>(emptyStats);
 	const [wrapEnabled, setWrapEnabled] = useState(true);
 	const [isFocused, setIsFocused] = useState(false);
@@ -235,6 +250,7 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 	const handleFormatRef = useRef<() => void>(() => undefined);
 	const uploadImagesRef = useRef(onUploadImages);
 	const { resolvedTheme } = useTheme();
+	projectFileIdsRef.current = projectFileIds;
 
 	const fileKind = useMemo(() => {
 		if (!label) {
@@ -296,12 +312,35 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 	}, [onUploadImages]);
 
 	useEffect(() => {
-		if (!mountRef.current || !yText || !awareness || !undoManager) {
+		const view = viewRef.current;
+		if (view) {
+			forceLinting(view);
+		}
+	}, [projectFileIds]);
+
+	useEffect(() => {
+		if (!mountRef.current || !fileId || !yText || !awareness || !undoManager) {
 			setStats(emptyStats);
 			return;
 		}
 
-		const languageExtension = label?.endsWith(".css") ? css() : marpMarkdown();
+		const documentKind = fileKind === "CSS" ? "css" : "markdown";
+		const languageExtension = documentKind === "css" ? css() : marpMarkdown();
+		const assetReferenceLinter = linter((view) => {
+			const diagnostics: Diagnostic[] = findMissingAssetReferences(
+				view.state.doc.toString(),
+				fileId,
+				documentKind,
+				new Set(projectFileIdsRef.current),
+			).map((reference) => ({
+				from: reference.from,
+				to: reference.to,
+				severity: "warning",
+				source: "Project files",
+				message: `File not found in project: ${reference.resolvedPath}`,
+			}));
+			return diagnostics;
+		});
 		const imageDropExtension = EditorView.domEventHandlers({
 			dragover(event) {
 				const dataTransfer = event.dataTransfer;
@@ -385,6 +424,8 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 				basicSetup,
 				EditorState.tabSize.of(2),
 				languageExtension,
+				assetReferenceLinter,
+				lintGutter(),
 				Prec.highest(
 					keymap.of([
 						{
@@ -444,6 +485,7 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 		awareness,
 		undoManager,
 		label,
+		fileId,
 		fileKind,
 		resolvedTheme,
 		wrapEnabled,
