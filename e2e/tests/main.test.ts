@@ -995,7 +995,7 @@ test.describe("Presentation mode: slide counter and timer", () => {
 		await editor.click();
 		await page.keyboard.press("ControlOrMeta+A");
 		await page.keyboard.type(
-			"<!-- presenter: Alice -->\n\n<!-- Open with the key point -->\n\n# Slide 1\n\n---\n\n<!-- presenter: Bob -->\n\n# Slide 2\n\n---\n\n<!-- presenter: Bob -->\n\n# Slide 3",
+			"<!-- presenter: Test User -->\n\n<!-- Open with the key point -->\n\n# Slide 1\n\n---\n\n<!-- presenter: Bob -->\n\n# Slide 2\n\n---\n\n<!-- presenter: Bob -->\n\n# Slide 3",
 		);
 
 		await page.getByRole("button", { name: "Start" }).click();
@@ -1018,7 +1018,8 @@ test.describe("Presentation mode: slide counter and timer", () => {
 	test("shows the current presenter and an upcoming handoff", async ({ page }) => {
 		const presenter = page.getByLabel("Presenter");
 
-		await expect(presenter.getByText("Alice")).toBeVisible();
+		await expect(presenter.getByText("Test User")).toBeVisible();
+		await expect(presenter.getByRole("img", { name: "Test User avatar" })).toBeVisible();
 		await expect(presenter.getByText("Up next")).toBeVisible();
 		await expect(presenter.getByText("Bob")).toBeVisible();
 		await expect(page.getByText("Open with the key point")).toBeVisible();

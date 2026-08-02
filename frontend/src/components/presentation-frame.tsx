@@ -1,9 +1,15 @@
 import { renderMarp } from "@/lib/marp";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import marpitSvgPolyfillScript from "@marp-team/marpit-svg-polyfill/lib/polyfill.browser.js?raw";
 import { ArrowRightIcon, Mic2Icon } from "lucide-react";
-import { getNextPresenterChange, parseSlidePresenterComments } from "@/lib/presenter-comments";
+import {
+	findPresenterImage,
+	getNextPresenterChange,
+	parseSlidePresenterComments,
+	type PresenterUser,
+} from "@/lib/presenter-comments";
 
 type PresentationFrameProps = {
 	markdown: string;
@@ -18,6 +24,7 @@ type PresentationFrameProps = {
 	onZoomChange?: (state: ZoomState) => void;
 	laserState?: LaserState;
 	onLaserChange?: (state: LaserState) => void;
+	presenterUsers?: readonly PresenterUser[];
 	showSpeakerNotes?: boolean;
 	className?: string;
 };
@@ -627,6 +634,7 @@ export function PresentationFrame({
 	onZoomChange,
 	laserState,
 	onLaserChange,
+	presenterUsers = [],
 	showSpeakerNotes = false,
 	className,
 }: PresentationFrameProps) {
@@ -650,6 +658,7 @@ export function PresentationFrame({
 		activeComments.presenter,
 		nextComments.presenter,
 	);
+	const activePresenterImage = findPresenterImage(activeComments.presenter, presenterUsers);
 	const hasSpeakerNotes = activeComments.speakerNotes.length > 0;
 	// Marp returns one comment bucket per slide, so this doubles as the slide count.
 	const hasNextSlide = slideIndex + 1 < rendered.comments.length;
@@ -693,9 +702,17 @@ export function PresentationFrame({
 							<div className="pointer-events-none absolute -top-12 -right-10 size-32 rounded-full bg-primary/10 blur-2xl" />
 							<CardContent className="relative px-4 py-4">
 								<div className="flex items-center gap-3">
-									<div className="flex size-10 shrink-0 items-center justify-center rounded-full bg-primary text-primary-foreground shadow-sm">
-										<Mic2Icon className="size-5" aria-hidden />
-									</div>
+									<Avatar size="lg" className="shadow-sm after:border-primary/20">
+										{activePresenterImage && (
+											<AvatarImage
+												src={activePresenterImage}
+												alt={`${activeComments.presenter} avatar`}
+											/>
+										)}
+										<AvatarFallback className="bg-primary text-primary-foreground">
+											<Mic2Icon className="size-5" aria-hidden />
+										</AvatarFallback>
+									</Avatar>
 									<div className="min-w-0">
 										<p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
 											Now presenting

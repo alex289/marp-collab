@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { getNextPresenterChange, parseSlidePresenterComments } from "./presenter-comments.ts";
+import {
+	findPresenterImage,
+	getNextPresenterChange,
+	parseSlidePresenterComments,
+} from "./presenter-comments.ts";
 
 test("uses an explicit presenter comment as metadata", () => {
 	assert.deepEqual(
@@ -30,4 +34,19 @@ test("detects a presenter handoff on the next slide", () => {
 	assert.equal(getNextPresenterChange("Alice", "Bob"), "Bob");
 	assert.equal(getNextPresenterChange("Alice", "alice"), null);
 	assert.equal(getNextPresenterChange("Alice", null), null);
+});
+
+test("finds an image belonging to the named presenter", () => {
+	assert.equal(
+		findPresenterImage("ALICE", [
+			{ name: "Bob", image: "bob.png" },
+			{ name: "Alice", image: "alice.png" },
+		]),
+		"alice.png",
+	);
+});
+
+test("returns no presenter image when the user has none or is unknown", () => {
+	assert.equal(findPresenterImage("Alice", [{ name: "Alice", image: null }]), null);
+	assert.equal(findPresenterImage("Alice", [{ name: "Bob", image: "bob.png" }]), null);
 });

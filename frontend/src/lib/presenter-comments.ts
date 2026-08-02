@@ -3,6 +3,11 @@ export type SlidePresenterComments = {
 	speakerNotes: string[];
 };
 
+export type PresenterUser = {
+	name: string;
+	image: string | null;
+};
+
 /**
  * A `presenter: Name` HTML comment identifies the slide's presenter.
  * All other comments remain available as speaker notes.
@@ -47,4 +52,21 @@ export function getNextPresenterChange(
 	return currentPresenter.localeCompare(nextPresenter, undefined, { sensitivity: "base" }) === 0
 		? null
 		: nextPresenter;
+}
+
+/** Finds the profile image of a known user whose name matches the presenter marker. */
+export function findPresenterImage(
+	presenter: string | null,
+	users: readonly PresenterUser[],
+): string | null {
+	if (!presenter) {
+		return null;
+	}
+
+	return (
+		users.find(
+			(user) =>
+				user.image && user.name.localeCompare(presenter, undefined, { sensitivity: "base" }) === 0,
+		)?.image ?? null
+	);
 }

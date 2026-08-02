@@ -19,11 +19,11 @@ describe("project-collaborator model", () => {
 
 		const now = new Date().toISOString();
 		db.prepare(
-			"insert into user (id, name, email, emailVerified, createdAt, updatedAt) values (?, ?, ?, ?, ?, ?)",
-		).run("owner-1", "Owner", "owner@example.com", 1, now, now);
+			"insert into user (id, name, email, emailVerified, image, createdAt, updatedAt) values (?, ?, ?, ?, ?, ?, ?)",
+		).run("owner-1", "Owner", "owner@example.com", 1, "owner.png", now, now);
 		db.prepare(
-			"insert into user (id, name, email, emailVerified, createdAt, updatedAt) values (?, ?, ?, ?, ?, ?)",
-		).run("collab-1", "Collaborator", "collab@example.com", 1, now, now);
+			"insert into user (id, name, email, emailVerified, image, createdAt, updatedAt) values (?, ?, ?, ?, ?, ?, ?)",
+		).run("collab-1", "Collaborator", "collab@example.com", 1, "collaborator.png", now, now);
 		db.prepare(
 			"insert into project (id, name, createdAt, updatedAt, ownerId) values (?, ?, ?, ?, ?)",
 		).run("proj-1", "Test Project", now, now, "owner-1");
@@ -69,6 +69,12 @@ describe("project-collaborator model", () => {
 	test("getCollaboratorsByProjectId returns collaborators for the project", () => {
 		const collabs = models.getCollaboratorsByProjectId("proj-1");
 		ok(collabs.some((c) => c.userId === "collab-1"));
+	});
+
+	test("project collaboration details include stored user images", () => {
+		const collab = models.getCollaboratorsByProjectId("proj-1")[0];
+		equal(collab?.userImage, "collaborator.png");
+		equal(collab?.ownerImage, "owner.png");
 	});
 
 	test("getCollaboratorsByProjectId returns empty array for unknown project", () => {
