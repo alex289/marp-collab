@@ -128,6 +128,9 @@ importers:
       '@codemirror/lang-yaml':
         specifier: ^6.1.3
         version: 6.1.3
+      '@codemirror/lint':
+        specifier: ^6.9.7
+        version: 6.9.7
       '@codemirror/state':
         specifier: ^6.7.1
         version: 6.7.1

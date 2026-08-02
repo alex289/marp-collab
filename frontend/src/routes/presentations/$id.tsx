@@ -229,6 +229,10 @@ function RouteComponent() {
 		currentUserId: presenceUser.userId,
 	});
 	const { files, isLoading, presenceByFileId, uploadFiles } = projectFiles;
+	const projectFileIds = useMemo(
+		() => files.filter((file) => file.type !== "folder").map((file) => file.id),
+		[files],
+	);
 	const { data: collaboratorsData } = useSWR<{ collaborators: SharedProject[] }>(
 		`${API_URL}/projects/${id}/collaborators`,
 		fetcher,
@@ -1461,6 +1465,7 @@ function RouteComponent() {
 						ref={editorPaneRef}
 						label={selectedFile?.label ?? null}
 						fileId={selectedFile?.id ?? null}
+						projectFileIds={projectFileIds}
 						files={files}
 						themeNames={themeNames}
 						projectThemes={projectThemes}
