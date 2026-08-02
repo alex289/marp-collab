@@ -13,6 +13,7 @@ import {
 	extractThemeClassNames,
 	type EditorCompletionConfig,
 } from "./completions.ts";
+import { marpMarkdown } from "./language.ts";
 
 const files: DeckFile[] = [
 	{ id: "decks/talk.md", label: "talk.md", type: "markdown" },
@@ -55,6 +56,24 @@ test("completes Marp directive names in YAML frontmatter", () => {
 	assert.equal(result.options.find((option) => option.label === "paginate")?.apply, "paginate: ");
 });
 
+test("keeps spot directives out of frontmatter suggestions", () => {
+	const result = complete("---\n", markdownConfig, true);
+	assert.ok(result);
+	assert.ok(result.options.some((option) => option.label === "backgroundColor"));
+	assert.ok(!result.options.some((option) => option.label.startsWith("_")));
+	assert.equal(complete("---\n_backgroundColor: wh"), null);
+});
+
+test("limits HTML comment directive suggestions to local and spot directives", () => {
+	const result = complete("<!-- ", markdownConfig, true);
+	assert.ok(result);
+	assert.ok(result.options.some((option) => option.label === "backgroundColor"));
+	assert.ok(result.options.some((option) => option.label === "_backgroundColor"));
+	assert.ok(!result.options.some((option) => option.label === "theme"));
+	assert.ok(!result.options.some((option) => option.label === "size"));
+	assert.equal(complete("<!-- theme: wh"), null);
+});
+
 test("completes dynamic theme names as directive values", () => {
 	const result = complete("---\ntheme: wh");
 	assert.ok(result);
@@ -80,6 +99,26 @@ test("completes spot directives and CSS-derived class names in comments", () => 
 test("completes CSS-derived class names in inline HTML", () => {
 	const result = complete('<div class="ti');
 	assert.ok(result?.options.some((option) => option.label === "title-page"));
+});
+
+test("only completes HTML tags allowed by Marp", () => {
+	const result = complete("<");
+	assert.ok(result);
+	assert.ok(result.options.some((option) => option.label === "div"));
+	assert.ok(result.options.some((option) => option.label === "img"));
+	assert.ok(!result.options.some((option) => option.label === "script"));
+	assert.ok(!result.options.some((option) => option.label === "iframe"));
+});
+
+test("replaces CodeMirror's broad Markdown HTML completion source", () => {
+	const source = createEditorCompletionSource(() => markdownConfig);
+	const state = EditorState.create({
+		doc: "<",
+		extensions: [marpMarkdown(), EditorState.languageData.of(() => [{ autocomplete: source }])],
+	});
+	const sources = state.languageDataAt<CompletionSource>("autocomplete", state.doc.length);
+
+	assert.deepEqual(sources, [source]);
 });
 
 test("completes image paths relative to the current Markdown file", () => {
@@ -174,8 +213,9 @@ test("adds project completions without replacing CodeMirror CSS completions", ()
 test("extracts class names only from CSS selector preludes", () => {
 	assert.deepEqual(
 		extractThemeClassNames(`
+			/* .commented-out { content: "}"; } */
 			section.hero, .card:hover { background: url("image.with-dots.png"); }
-			@media print { section.print-only { color: white; } }
+			@media print { section.print-only { content: "{ .not-a-selector }"; } }
 		`),
 		["hero", "card", "print-only"],
 	);

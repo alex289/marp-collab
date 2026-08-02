@@ -10,8 +10,6 @@ import {
 import { EditorState, Prec } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 import { indentWithTab } from "@codemirror/commands";
-import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
-import { yamlFrontmatter } from "@codemirror/lang-yaml";
 import { css } from "@codemirror/lang-css";
 import { basicSetup } from "codemirror";
 import type { Awareness } from "y-protocols/awareness.js";
@@ -36,6 +34,7 @@ import {
 	createEditorCompletionSource,
 	type EditorCompletionConfig,
 } from "@/features/editor/completions";
+import { marpMarkdown } from "@/features/editor/language";
 
 type EditorPaneProps = {
 	label: string | null;
@@ -89,13 +88,6 @@ function getEditorStats(view: EditorView): EditorStats {
 		cursorColumn: cursor - cursorLine.from + 1,
 		slides,
 	};
-}
-
-// Marp slides open with YAML frontmatter, which plain CommonMark parses as a setext
-// heading (`marp: true` underlined by `---`), so the whole block came out styled as an
-// H2. The GFM base additionally covers the tables and strikethrough that Marp renders.
-function marpMarkdown() {
-	return yamlFrontmatter({ content: markdown({ base: markdownLanguage }) });
 }
 
 let prettierModulesPromise: Promise<{
@@ -241,7 +233,7 @@ const editorTheme = EditorView.theme({
 		padding: "4px 8px",
 	},
 	".cm-tooltip-autocomplete > ul > li[aria-selected]": {
-		backgroundColor: "var(--accent)",
+		backgroundColor: "color-mix(in oklab, var(--primary) 30%, var(--popover))",
 		color: "var(--accent-foreground)",
 	},
 	".cm-completionLabel": {

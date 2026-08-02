@@ -7,6 +7,7 @@ import type {
 } from "@codemirror/autocomplete";
 import type { DeckFile } from "../../lib/types.ts";
 import type { ProjectTheme } from "../../lib/project-themes.ts";
+import { MARP_ALLOWED_HTML_TAGS } from "../../lib/marp-html.ts";
 
 export type EditorCompletionConfig = {
 	fileKind: "markdown" | "css";
@@ -27,6 +28,7 @@ type DirectiveDefinition = {
 const marpSection: CompletionSection = { name: "Marp", rank: 1 };
 const projectSection: CompletionSection = { name: "Project", rank: 1 };
 const selectorSection: CompletionSection = { name: "Marp selectors", rank: 1 };
+const htmlSection: CompletionSection = { name: "Marp HTML", rank: 1 };
 
 const directives: DirectiveDefinition[] = [
 	{
@@ -190,15 +192,16 @@ export function relativeProjectPath(currentFileId: string | null, targetFileId: 
 
 export function extractThemeClassNames(css: string): string[] {
 	const classes: string[] = [];
+	const scannableCss = maskCssCommentsAndStrings(css);
 	const openingBraceRegex = /\{/g;
-	let openingBrace = openingBraceRegex.exec(css);
+	let openingBrace = openingBraceRegex.exec(scannableCss);
 
 	while (openingBrace) {
 		const boundary = Math.max(
-			css.lastIndexOf("{", openingBrace.index - 1),
-			css.lastIndexOf("}", openingBrace.index - 1),
+			scannableCss.lastIndexOf("{", openingBrace.index - 1),
+			scannableCss.lastIndexOf("}", openingBrace.index - 1),
 		);
-		const selector = css.slice(boundary + 1, openingBrace.index).trim();
+		const selector = scannableCss.slice(boundary + 1, openingBrace.index).trim();
 		if (!selector.startsWith("@")) {
 			const classRegex = /\.(-?[_a-zA-Z]+[_a-zA-Z0-9-]*)/g;
 			let classMatch = classRegex.exec(selector);
@@ -209,7 +212,7 @@ export function extractThemeClassNames(css: string): string[] {
 				classMatch = classRegex.exec(selector);
 			}
 		}
-		openingBrace = openingBraceRegex.exec(css);
+		openingBrace = openingBraceRegex.exec(scannableCss);
 	}
 
 	return unique(classes);
@@ -261,7 +264,7 @@ function directiveKeyCompletion(context: CompletionContext): CompletionResult | 
 
 	const options: Completion[] = [];
 	for (const directive of directives) {
-		if (!frontmatter && directive.frontmatterOnly) {
+		if (!frontmatter && (directive.frontmatterOnly || directive.scope === "global")) {
 			continue;
 		}
 		options.push({
@@ -272,7 +275,7 @@ function directiveKeyCompletion(context: CompletionContext): CompletionResult | 
 			info: directive.info,
 			section: marpSection,
 		});
-		if (directive.scope === "local") {
+		if (!frontmatter && directive.scope === "local") {
 			options.push({
 				label: `_${directive.name}`,
 				apply: `_${directive.name}: `,
@@ -354,6 +357,15 @@ function directiveValueCompletion(
 	if (!match?.[1]) {
 		return null;
 	}
+	const normalizedName = match[1].replace(/^_/, "");
+	const definition = directives.find((directive) => directive.name === normalizedName);
+	if (
+		!definition ||
+		(frontmatter && match[1].startsWith("_")) ||
+		(!frontmatter && definition.scope === "global")
+	) {
+		return null;
+	}
 
 	let typed = match[2] ?? "";
 	const options = valueOptions(match[1], config);
@@ -361,7 +373,7 @@ function directiveValueCompletion(
 		return null;
 	}
 
-	if (match[1].replace(/^_/, "") === "class") {
+	if (normalizedName === "class") {
 		typed = /[\w-]*$/.exec(typed)?.[0] ?? typed;
 	}
 
@@ -526,6 +538,56 @@ function htmlClassCompletion(
 	};
 }
 
+function isInsideMarkdownFence(context: CompletionContext): boolean {
+	const { doc } = context.state;
+	const cursorLine = doc.lineAt(context.pos).number;
+	let fence: { marker: "`" | "~"; length: number } | null = null;
+
+	for (let lineNumber = 1; lineNumber <= cursorLine; lineNumber += 1) {
+		const match = /^\s{0,3}(`{3,}|~{3,})/.exec(doc.line(lineNumber).text);
+		const marker = match?.[1];
+		if (!marker) {
+			continue;
+		}
+
+		const markerCharacter = marker[0] as "`" | "~";
+		if (!fence) {
+			fence = { marker: markerCharacter, length: marker.length };
+		} else if (markerCharacter === fence.marker && marker.length >= fence.length) {
+			fence = null;
+		}
+	}
+
+	return fence !== null;
+}
+
+function htmlTagCompletion(context: CompletionContext): CompletionResult | null {
+	const beforeCursor = context.state.sliceDoc(0, context.pos);
+	if (
+		beforeCursor.lastIndexOf("<!--") > beforeCursor.lastIndexOf("-->") ||
+		isInsideMarkdownFence(context)
+	) {
+		return null;
+	}
+
+	const match = /<([A-Za-z][\w-]*)?$/.exec(lineBeforeCursor(context));
+	if (!match) {
+		return null;
+	}
+
+	const typed = match[1] ?? "";
+	return {
+		from: context.pos - typed.length,
+		options: MARP_ALLOWED_HTML_TAGS.map((tag) => ({
+			label: tag,
+			type: "type",
+			detail: "allowed by Marp",
+			section: htmlSection,
+		})),
+		validFor: /^[\w-]*$/,
+	};
+}
+
 function cssThemeMarkerCompletion(
 	context: CompletionContext,
 	config: EditorCompletionConfig,
@@ -560,11 +622,9 @@ function cssThemeMarkerCompletion(
 }
 
 function cssBraceDepth(source: string): number {
-	const withoutCommentsAndStrings = source
-		.replace(/\/\*[\s\S]*?\*\//g, "")
-		.replace(/(["'])(?:\\.|(?!\1).)*\1/g, "");
+	const scannableCss = maskCssCommentsAndStrings(source);
 	let depth = 0;
-	for (const char of withoutCommentsAndStrings) {
+	for (const char of scannableCss) {
 		if (char === "{") {
 			depth += 1;
 		}
@@ -573,6 +633,62 @@ function cssBraceDepth(source: string): number {
 		}
 	}
 	return depth;
+}
+
+function maskCssCommentsAndStrings(source: string): string {
+	const masked = source.split("");
+	const mask = (index: number) => {
+		if (masked[index] !== "\n" && masked[index] !== "\r") {
+			masked[index] = " ";
+		}
+	};
+
+	let index = 0;
+	while (index < source.length) {
+		if (source[index] === "/" && source[index + 1] === "*") {
+			mask(index);
+			mask(index + 1);
+			index += 2;
+			while (index < source.length) {
+				const closesComment = source[index] === "*" && source[index + 1] === "/";
+				mask(index);
+				if (closesComment) {
+					mask(index + 1);
+					index += 2;
+					break;
+				}
+				index += 1;
+			}
+			continue;
+		}
+
+		const quote = source[index];
+		if (quote === '"' || quote === "'") {
+			mask(index);
+			index += 1;
+			while (index < source.length) {
+				if (source[index] === "\\") {
+					mask(index);
+					if (index + 1 < source.length) {
+						mask(index + 1);
+					}
+					index += 2;
+					continue;
+				}
+				const closesString = source[index] === quote;
+				mask(index);
+				index += 1;
+				if (closesString) {
+					break;
+				}
+			}
+			continue;
+		}
+
+		index += 1;
+	}
+
+	return masked.join("");
 }
 
 function cssSelectorCompletion(
@@ -615,6 +731,7 @@ function markdownCompletion(
 	return (
 		pathCompletion(config, markdownPathContext(context)) ??
 		htmlClassCompletion(context, config) ??
+		htmlTagCompletion(context) ??
 		directiveValueCompletion(context, config) ??
 		directiveKeyCompletion(context)
 	);
