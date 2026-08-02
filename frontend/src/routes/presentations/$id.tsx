@@ -227,6 +227,10 @@ function RouteComponent() {
 		currentUserId: presenceUser.userId,
 	});
 	const { files, isLoading, uploadFiles } = projectFiles;
+	const projectFileIds = useMemo(
+		() => files.filter((file) => file.type !== "folder").map((file) => file.id),
+		[files],
+	);
 	const collab = useCollabDocument(
 		selectedFile?.type === "markdown" ? (selectedFile.documentName ?? null) : null,
 		session?.user ?? null,
@@ -1433,6 +1437,7 @@ function RouteComponent() {
 						ref={editorPaneRef}
 						label={selectedFile?.label ?? null}
 						fileId={selectedFile?.id ?? null}
+						projectFileIds={projectFileIds}
 						files={files}
 						themeNames={themeNames}
 						projectThemes={projectThemes}
