@@ -463,12 +463,18 @@ test.describe("Editor: content editing", () => {
 		});
 	});
 
-	test("drop an image into the editor and insert it at the dropped line", async ({ page }) => {
+	test("drop an image into the editor, use an image folder, and insert it at the dropped line", async ({
+		page,
+	}) => {
 		await page.goto("/");
 
 		await createPresentation(page, "Editor Image Drop Test");
 		await page.waitForURL(/\/presentations\/.+/);
 		await waitForSidebar(page);
+		await page.getByRole("button", { name: "New folder" }).click();
+		await page.getByLabel("Folder name").fill("assets");
+		await page.getByRole("button", { name: "Create" }).click();
+		await expect(page.getByRole("dialog")).not.toBeVisible();
 
 		const editor = page.locator(".cm-content");
 		await expect(editor).toBeVisible({ timeout: 10_000 });
@@ -482,13 +488,14 @@ test.describe("Editor: content editing", () => {
 			content: "image data",
 		});
 
+		await page.getByRole("button", { name: "assets", exact: true }).click();
 		await expect(page.getByRole("button", { name: "dropped-image.png" })).toBeVisible({
 			timeout: 5_000,
 		});
 		const lines = page.locator(".cm-line");
 		await expect(lines).toHaveCount(4);
 		await expect(lines.nth(0)).toHaveText("# Before");
-		await expect(lines.nth(1)).toHaveText("![dropped-image](dropped-image.png)");
+		await expect(lines.nth(1)).toHaveText("![dropped-image](assets/dropped-image.png)");
 		await expect(lines.nth(2)).toHaveText("Drop target");
 		await expect(lines.nth(3)).toHaveText("After");
 	});

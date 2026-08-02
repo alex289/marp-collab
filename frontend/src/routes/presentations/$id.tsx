@@ -39,7 +39,10 @@ import { upsertProjectTheme, type ProjectTheme } from "@/lib/project-themes";
 import { API_URL } from "@/lib/config";
 import { releaseWakeLock, requestWakeLock } from "@/lib/wake-lock";
 import { useProjectFilesWorkspace } from "@/features/project-files/use-project-files-workspace";
-import { getParentFolderPath } from "@/features/project-files/file-tree";
+import {
+	getImageUploadDestination,
+	getMarkdownRelativeFilePath,
+} from "@/features/project-files/image-upload-paths";
 import {
 	ChevronLeftIcon,
 	ChevronRightIcon,
@@ -352,13 +355,10 @@ function RouteComponent() {
 				return { images: [], failures: ["Images can only be inserted into a Markdown file."] };
 			}
 
-			const destination = getParentFolderPath(selectedFile.id);
+			const destination = getImageUploadDestination(files, selectedFile.id);
 			const { uploadedFiles, failures } = await uploadFiles(imageFiles, destination || undefined);
 			const images = uploadedFiles.map((file) => {
-				const relativePath =
-					destination && file.id.startsWith(`${destination}/`)
-						? file.id.slice(destination.length + 1)
-						: file.id;
+				const relativePath = getMarkdownRelativeFilePath(selectedFile.id, file.id);
 				const fileName = relativePath.split("/").at(-1) ?? relativePath;
 
 				return {
@@ -369,7 +369,7 @@ function RouteComponent() {
 
 			return { images, failures };
 		},
-		[uploadFiles, selectedFile],
+		[files, uploadFiles, selectedFile],
 	);
 
 	const isPresentation = search.mode === "present" || search.mode === "viewer";
