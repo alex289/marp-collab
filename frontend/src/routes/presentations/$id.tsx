@@ -240,21 +240,22 @@ function RouteComponent() {
 	const storedCollaborators = collaboratorsData?.collaborators;
 	const presenterUsers = useMemo(() => {
 		const otherUsers = selectedFile ? (presenceByFileId.get(selectedFile.id) ?? []) : [];
-		const owner = storedCollaborators?.[0];
 
 		return [
 			{ name: presenceUser.userName, image: presenceUser.image },
 			...otherUsers.map((user) => ({ name: user.name, image: user.image })),
+			{ name: project.ownerName, image: project.ownerImage },
 			...(storedCollaborators ?? []).map((user) => ({
 				name: user.userName,
 				image: user.userImage,
 			})),
-			...(owner ? [{ name: owner.ownerName, image: owner.ownerImage }] : []),
 		];
 	}, [
 		presenceByFileId,
 		presenceUser.image,
 		presenceUser.userName,
+		project.ownerImage,
+		project.ownerName,
 		selectedFile,
 		storedCollaborators,
 	]);

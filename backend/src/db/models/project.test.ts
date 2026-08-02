@@ -19,8 +19,8 @@ describe("project model", () => {
 
 		const now = new Date().toISOString();
 		db.prepare(
-			"insert into user (id, name, email, emailVerified, createdAt, updatedAt) values (?, ?, ?, ?, ?, ?)",
-		).run("user-1", "Test User", "test@example.com", 1, now, now);
+			"insert into user (id, name, email, emailVerified, image, createdAt, updatedAt) values (?, ?, ?, ?, ?, ?, ?)",
+		).run("user-1", "Test User", "test@example.com", 1, "owner.png", now, now);
 
 		models = await import("./project.ts");
 	});
@@ -38,6 +38,8 @@ describe("project model", () => {
 		equal(project!.id, "proj-1");
 		equal(project!.name, "Test Project");
 		equal(project!.ownerId, "user-1");
+		equal(project!.ownerName, "Test User");
+		equal(project!.ownerImage, "owner.png");
 	});
 
 	test("getProjectById returns undefined for unknown id", () => {

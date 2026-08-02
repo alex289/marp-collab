@@ -14,7 +14,6 @@ export type ProjectCollaborator = ProjectMembership & {
 	userName: string;
 	userImage: string | null;
 	ownerName: string;
-	ownerImage: string | null;
 };
 
 type ProjectMembershipRow = {
@@ -31,7 +30,6 @@ type ProjectCollaboratorRow = ProjectMembershipRow & {
 	userName: string;
 	userImage: string | null;
 	ownerName: string;
-	ownerImage: string | null;
 };
 
 function rowToProjectMembership(row: ProjectMembershipRow): ProjectMembership {
@@ -52,13 +50,12 @@ function rowToProjectCollaborator(row: ProjectCollaboratorRow): ProjectCollabora
 		userName: row.userName,
 		userImage: row.userImage,
 		ownerName: row.ownerName,
-		ownerImage: row.ownerImage,
 	};
 }
 
 const preparedStatements = {
 	getCollaboratorsByProjectId: db.prepare(`
-		select projectId, userId, readOnly, pc.createdAt as sharedAt, p.createdAt as projectCreatedAt, p.updatedAt, u.name as userName, u.image as userImage, p.name as projectName, owner.name as ownerName, owner.image as ownerImage
+		select projectId, userId, readOnly, pc.createdAt as sharedAt, p.createdAt as projectCreatedAt, p.updatedAt, u.name as userName, u.image as userImage, p.name as projectName, owner.name as ownerName
         from project_collaborator pc
 		join user u on userId = u.id
 		join project p on projectId = p.id
@@ -67,7 +64,7 @@ const preparedStatements = {
         order by pc.createdAt asc
     `),
 	getCollaborationsByUserId: db.prepare(`
-		select projectId, userId, readOnly, pc.createdAt as sharedAt, p.createdAt as projectCreatedAt, p.updatedAt, u.name as userName, u.image as userImage, p.name as projectName, owner.name as ownerName, owner.image as ownerImage
+		select projectId, userId, readOnly, pc.createdAt as sharedAt, p.createdAt as projectCreatedAt, p.updatedAt, u.name as userName, u.image as userImage, p.name as projectName, owner.name as ownerName
 		from project_collaborator pc
 		join user u on userId = u.id
 		join project p on projectId = p.id

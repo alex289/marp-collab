@@ -65,6 +65,11 @@ describe("projects routes", () => {
 			name: "Upload Project",
 			ownerId: "user-1",
 		});
+		projectModel.createProject({
+			id: "owner-only-proj",
+			name: "Owner-only Project",
+			ownerId: "user-1",
+		});
 		db.prepare(
 			"insert into project_collaborator (projectId, userId, readOnly, createdAt) values (?, ?, ?, ?)",
 		).run("upload-proj", "route-writer", 0, now);
@@ -261,7 +266,20 @@ describe("projects routes", () => {
 		});
 	});
 
-	test("lists stored collaborator and owner avatars", async () => {
+	test("returns the project owner's profile without collaborators", async () => {
+		const response = await app.request("/owner-only-proj", {
+			headers: { "x-test-user-id": "user-1" },
+		});
+
+		equal(response.status, 200);
+		const body = (await response.json()) as {
+			project: { ownerName: string; ownerImage: string | null };
+		};
+		equal(body.project.ownerName, "Test User");
+		equal(body.project.ownerImage, "owner.png");
+	});
+
+	test("lists stored collaborator avatars", async () => {
 		const response = await app.request("/upload-proj/collaborators", {
 			headers: { "x-test-user-id": "user-1" },
 		});
@@ -271,14 +289,12 @@ describe("projects routes", () => {
 			collaborators: Array<{
 				userId: string;
 				userImage: string | null;
-				ownerImage: string | null;
 			}>;
 		};
 		const writer = body.collaborators.find(
 			(collaborator) => collaborator.userId === "route-writer",
 		);
 		equal(writer?.userImage, "writer.png");
-		equal(writer?.ownerImage, "owner.png");
 	});
 
 	test("rejects a delete from a non-owner collaborator without touching project files", async () => {

@@ -1,9 +1,10 @@
 import useSWR from "swr";
 import { API_URL } from "./config";
 import { fetcher } from "./fetcher";
+import type { Project } from "./types";
 
 export type ProjectResponse = {
-	project: { id: string; name: string };
+	project: Project;
 	isOwner: boolean;
 };
 

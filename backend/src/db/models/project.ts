@@ -6,6 +6,8 @@ export type Project = {
 	createdAt: Date;
 	updatedAt: Date;
 	ownerId: string;
+	ownerName: string;
+	ownerImage: string | null;
 };
 
 type ProjectRow = {
@@ -14,6 +16,8 @@ type ProjectRow = {
 	createdAt: string;
 	updatedAt: string;
 	ownerId: string;
+	ownerName: string;
+	ownerImage: string | null;
 };
 
 function rowToProject(row: ProjectRow): Project {
@@ -23,20 +27,26 @@ function rowToProject(row: ProjectRow): Project {
 		createdAt: new Date(row.createdAt),
 		updatedAt: new Date(row.updatedAt),
 		ownerId: row.ownerId,
+		ownerName: row.ownerName,
+		ownerImage: row.ownerImage,
 	};
 }
 
 const preparedStatements = {
 	getProjectById: db.prepare(`
-        select id, name, createdAt, updatedAt, ownerId
-        from project
-        where id = ?
+		select p.id, p.name, p.createdAt, p.updatedAt, p.ownerId,
+			owner.name as ownerName, owner.image as ownerImage
+		from project p
+		join user owner on p.ownerId = owner.id
+		where p.id = ?
     `),
 	getProjectsByOwnerId: db.prepare(`
-        select id, name, createdAt, updatedAt, ownerId
-        from project
-        where ownerId = ?
-        order by createdAt desc
+		select p.id, p.name, p.createdAt, p.updatedAt, p.ownerId,
+			owner.name as ownerName, owner.image as ownerImage
+		from project p
+		join user owner on p.ownerId = owner.id
+		where p.ownerId = ?
+		order by p.createdAt desc
     `),
 	createProject: db.prepare(`
         insert into project (id, name, createdAt, updatedAt, ownerId)
@@ -66,7 +76,7 @@ export function getProjectsByOwnerId(ownerId: string): Project[] {
 	return rows.map(rowToProject);
 }
 
-export function createProject(project: Omit<Project, "createdAt" | "updatedAt">) {
+export function createProject(project: Pick<Project, "id" | "name" | "ownerId">) {
 	const now = new Date().toISOString();
 	return preparedStatements.createProject.run(project.id, project.name, now, now, project.ownerId);
 }

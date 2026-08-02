@@ -74,7 +74,6 @@ describe("project-collaborator model", () => {
 	test("project collaboration details include stored user images", () => {
 		const collab = models.getCollaboratorsByProjectId("proj-1")[0];
 		equal(collab?.userImage, "collaborator.png");
-		equal(collab?.ownerImage, "owner.png");
 	});
 
 	test("getCollaboratorsByProjectId returns empty array for unknown project", () => {

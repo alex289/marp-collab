@@ -22,6 +22,8 @@ export type Project = {
 	createdAt: Date;
 	updatedAt: Date;
 	ownerId: string;
+	ownerName: string;
+	ownerImage: string | null;
 };
 
 export type SharedProject = {
@@ -35,5 +37,4 @@ export type SharedProject = {
 	userName: string;
 	userImage: string | null;
 	ownerName: string;
-	ownerImage: string | null;
 };
