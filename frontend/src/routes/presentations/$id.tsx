@@ -22,7 +22,7 @@ import { Button } from "@/components/ui/button";
 import { ButtonGroup } from "@/components/ui/button-group";
 import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import type { EditorPaneHandle } from "@/components/editor-pane";
+import type { EditorPaneHandle, MarkdownImageUploadResult } from "@/components/editor-pane";
 import { SearchPanel } from "@/components/search-panel";
 import { findTextMatches, replaceTextRange, type TextSearchMatch } from "@/lib/text-search";
 import { OutlinePanel } from "@/components/outline-panel";
@@ -39,6 +39,10 @@ import { upsertProjectTheme, type ProjectTheme } from "@/lib/project-themes";
 import { API_URL } from "@/lib/config";
 import { releaseWakeLock, requestWakeLock } from "@/lib/wake-lock";
 import { useProjectFilesWorkspace } from "@/features/project-files/use-project-files-workspace";
+import {
+	getImageUploadDestination,
+	getMarkdownRelativeFilePath,
+} from "@/features/project-files/image-upload-paths";
 import {
 	ChevronLeftIcon,
 	ChevronRightIcon,
@@ -222,7 +226,7 @@ function RouteComponent() {
 		presenceAwareness: projectPresenceAwareness,
 		currentUserId: presenceUser.userId,
 	});
-	const { files, isLoading } = projectFiles;
+	const { files, isLoading, uploadFiles } = projectFiles;
 	const collab = useCollabDocument(
 		selectedFile?.type === "markdown" ? (selectedFile.documentName ?? null) : null,
 		session?.user ?? null,
@@ -344,6 +348,29 @@ function RouteComponent() {
 			);
 		});
 	}, []);
+
+	const uploadDroppedImages = useCallback(
+		async (imageFiles: File[]): Promise<MarkdownImageUploadResult> => {
+			if (!selectedFile || !isMarkdownDeckFile(selectedFile)) {
+				return { images: [], failures: ["Images can only be inserted into a Markdown file."] };
+			}
+
+			const destination = getImageUploadDestination(files, selectedFile.id);
+			const { uploadedFiles, failures } = await uploadFiles(imageFiles, destination || undefined);
+			const images = uploadedFiles.map((file) => {
+				const relativePath = getMarkdownRelativeFilePath(selectedFile.id, file.id);
+				const fileName = relativePath.split("/").at(-1) ?? relativePath;
+
+				return {
+					alt: fileName.replace(/\.[^.]+$/, ""),
+					path: relativePath,
+				};
+			});
+
+			return { images, failures };
+		},
+		[files, uploadFiles, selectedFile],
+	);
 
 	const isPresentation = search.mode === "present" || search.mode === "viewer";
 	const isViewer = search.mode === "viewer";
@@ -1413,6 +1440,7 @@ function RouteComponent() {
 						awareness={collab.awareness}
 						undoManager={collab.undoManager}
 						readOnly={collab.readOnly}
+						onUploadImages={uploadDroppedImages}
 						onCursorLineChange={setCursorLine}
 					/>
 				</Suspense>
