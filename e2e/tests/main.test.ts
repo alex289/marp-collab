@@ -89,6 +89,25 @@ async function dropFileOnEditorLine(
 	}, file);
 }
 
+async function pasteFileInEditor(
+	page: Page,
+	file: { name: string; mimeType: string; content: string },
+) {
+	await page.locator(".cm-content").evaluate((element, pastedFile) => {
+		const clipboardData = new DataTransfer();
+		clipboardData.items.add(
+			new File([pastedFile.content], pastedFile.name, { type: pastedFile.mimeType }),
+		);
+		element.dispatchEvent(
+			new ClipboardEvent("paste", {
+				bubbles: true,
+				cancelable: true,
+				clipboardData,
+			}),
+		);
+	}, file);
+}
+
 async function clickSidebarDelete(
 	page: Page,
 	itemName: string,
@@ -479,9 +498,7 @@ test.describe("Editor: content editing", () => {
 		});
 	});
 
-	test("drop an image into the editor, use an image folder, and insert it at the dropped line", async ({
-		page,
-	}) => {
+	test("drop and paste images into the editor using an image folder", async ({ page }) => {
 		await page.goto("/");
 
 		await createPresentation(page, "Editor Image Drop Test");
@@ -496,7 +513,7 @@ test.describe("Editor: content editing", () => {
 		await expect(editor).toBeVisible({ timeout: 10_000 });
 		await editor.click();
 		await page.keyboard.press("ControlOrMeta+A");
-		await page.keyboard.insertText("# Before\nDrop target\nAfter");
+		await page.keyboard.insertText("# Before\nDrop target\nPaste target\nAfter");
 
 		await dropFileOnEditorLine(page, "Drop target", {
 			name: "Dropped Image.PNG",
@@ -508,12 +525,25 @@ test.describe("Editor: content editing", () => {
 		await expect(page.getByRole("button", { name: "dropped-image.png" })).toBeVisible({
 			timeout: 5_000,
 		});
+
+		await page.locator(".cm-line").filter({ hasText: "Paste target" }).click();
+		await pasteFileInEditor(page, {
+			name: "Pasted Image.PNG",
+			mimeType: "image/png",
+			content: "pasted image data",
+		});
+
+		await expect(page.getByRole("button", { name: "pasted-image.png" })).toBeVisible({
+			timeout: 5_000,
+		});
 		const lines = page.locator(".cm-line");
-		await expect(lines).toHaveCount(4);
+		await expect(lines).toHaveCount(6);
 		await expect(lines.nth(0)).toHaveText("# Before");
 		await expect(lines.nth(1)).toHaveText("![dropped-image](assets/dropped-image.png)");
 		await expect(lines.nth(2)).toHaveText("Drop target");
-		await expect(lines.nth(3)).toHaveText("After");
+		await expect(lines.nth(3)).toHaveText("![pasted-image](assets/pasted-image.png)");
+		await expect(lines.nth(4)).toHaveText("Paste target");
+		await expect(lines.nth(5)).toHaveText("After");
 	});
 
 	test("fits the live preview slide inside a phone-width preview pane", async ({ page }) => {
