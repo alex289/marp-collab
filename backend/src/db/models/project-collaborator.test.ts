@@ -71,6 +71,18 @@ describe("project-collaborator model", () => {
 		ok(collabs.some((c) => c.userId === "collab-1"));
 	});
 
+	test("getProjectOwnerByProjectId returns the stored owner profile", () => {
+		deepEqual(models.getProjectOwnerByProjectId("proj-1"), {
+			userId: "owner-1",
+			userName: "Owner",
+			userImage: "owner.png",
+		});
+	});
+
+	test("getProjectOwnerByProjectId returns undefined for an unknown project", () => {
+		equal(models.getProjectOwnerByProjectId("nobody"), undefined);
+	});
+
 	test("project collaboration details include stored user images", () => {
 		const collab = models.getCollaboratorsByProjectId("proj-1")[0];
 		equal(collab?.userImage, "collaborator.png");

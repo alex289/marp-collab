@@ -266,17 +266,22 @@ describe("projects routes", () => {
 		});
 	});
 
-	test("returns the project owner's profile without collaborators", async () => {
-		const response = await app.request("/owner-only-proj", {
+	test("lists the project owner without collaborators", async () => {
+		const response = await app.request("/owner-only-proj/collaborators", {
 			headers: { "x-test-user-id": "user-1" },
 		});
 
 		equal(response.status, 200);
 		const body = (await response.json()) as {
-			project: { ownerName: string; ownerImage: string | null };
+			owner: { userId: string; userName: string; userImage: string | null };
+			collaborators: unknown[];
 		};
-		equal(body.project.ownerName, "Test User");
-		equal(body.project.ownerImage, "owner.png");
+		deepEqual(body.owner, {
+			userId: "user-1",
+			userName: "Test User",
+			userImage: "owner.png",
+		});
+		deepEqual(body.collaborators, []);
 	});
 
 	test("lists stored collaborator avatars", async () => {

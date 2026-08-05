@@ -7,6 +7,12 @@ export type ProjectMembership = {
 	sharedAt: Date;
 };
 
+export type ProjectOwner = {
+	userId: string;
+	userName: string;
+	userImage: string | null;
+};
+
 export type ProjectCollaborator = ProjectMembership & {
 	projectName: string;
 	projectCreatedAt: Date;
@@ -22,6 +28,8 @@ type ProjectMembershipRow = {
 	readOnly: number;
 	sharedAt: string;
 };
+
+type ProjectOwnerRow = ProjectOwner;
 
 type ProjectCollaboratorRow = ProjectMembershipRow & {
 	projectName: string;
@@ -54,6 +62,12 @@ function rowToProjectCollaborator(row: ProjectCollaboratorRow): ProjectCollabora
 }
 
 const preparedStatements = {
+	getProjectOwnerByProjectId: db.prepare(`
+		select owner.id as userId, owner.name as userName, owner.image as userImage
+		from project p
+		join user owner on p.ownerId = owner.id
+		where p.id = ?
+	`),
 	getCollaboratorsByProjectId: db.prepare(`
 		select projectId, userId, readOnly, pc.createdAt as sharedAt, p.createdAt as projectCreatedAt, p.updatedAt, u.name as userName, u.image as userImage, p.name as projectName, owner.name as ownerName
         from project_collaborator pc
@@ -91,6 +105,12 @@ const preparedStatements = {
         where projectId = ? and userId = ?
     `),
 };
+
+export function getProjectOwnerByProjectId(projectId: string): ProjectOwner | undefined {
+	return preparedStatements.getProjectOwnerByProjectId.get(projectId) as
+		| ProjectOwnerRow
+		| undefined;
+}
 
 export function getCollaboratorsByProjectId(projectId: string): ProjectCollaborator[] {
 	const rows = preparedStatements.getCollaboratorsByProjectId.all(

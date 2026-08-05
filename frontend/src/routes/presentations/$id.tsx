@@ -10,7 +10,7 @@ import {
 	usePresenceUser,
 	useProjectPresence,
 } from "@/hooks/use-collab-document";
-import type { DeckFile, SharedProject } from "@/lib/types";
+import type { DeckFile, ProjectCollaboratorsResponse } from "@/lib/types";
 import Navbar from "@/components/navbar";
 import { PresenceAvatars } from "@/components/presence-avatars";
 import { PresentationActions } from "@/components/presentation-actions";
@@ -233,10 +233,11 @@ function RouteComponent() {
 		() => files.filter((file) => file.type !== "folder").map((file) => file.id),
 		[files],
 	);
-	const { data: collaboratorsData } = useSWR<{ collaborators: SharedProject[] }>(
+	const { data: collaboratorsData } = useSWR<ProjectCollaboratorsResponse>(
 		`${API_URL}/projects/${id}/collaborators`,
 		fetcher,
 	);
+	const projectOwner = collaboratorsData?.owner;
 	const storedCollaborators = collaboratorsData?.collaborators;
 	const presenterUsers = useMemo(() => {
 		const otherUsers = selectedFile ? (presenceByFileId.get(selectedFile.id) ?? []) : [];
@@ -244,7 +245,7 @@ function RouteComponent() {
 		return [
 			{ name: presenceUser.userName, image: presenceUser.image },
 			...otherUsers.map((user) => ({ name: user.name, image: user.image })),
-			{ name: project.ownerName, image: project.ownerImage },
+			...(projectOwner ? [{ name: projectOwner.userName, image: projectOwner.userImage }] : []),
 			...(storedCollaborators ?? []).map((user) => ({
 				name: user.userName,
 				image: user.userImage,
@@ -254,8 +255,7 @@ function RouteComponent() {
 		presenceByFileId,
 		presenceUser.image,
 		presenceUser.userName,
-		project.ownerImage,
-		project.ownerName,
+		projectOwner,
 		selectedFile,
 		storedCollaborators,
 	]);
