@@ -445,9 +445,7 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 					});
 					currentView.focus();
 				} catch (error) {
-					toast.error(
-						error instanceof Error ? error.message : `Could not upload ${action} images`,
-					);
+					toast.error(error instanceof Error ? error.message : `Could not upload ${action} images`);
 				}
 			})();
 		};
