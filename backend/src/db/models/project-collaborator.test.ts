@@ -71,6 +71,18 @@ describe("project-collaborator model", () => {
 		ok(collabs.some((c) => c.userId === "collab-1"));
 	});
 
+	test("getCollaboratorsByProjectId returns only collaborator details", () => {
+		const collab = models.getCollaboratorsByProjectId("proj-1")[0];
+		deepEqual(Object.keys(collab!).sort(), [
+			"projectId",
+			"readOnly",
+			"sharedAt",
+			"userId",
+			"userImage",
+			"userName",
+		]);
+	});
+
 	test("getProjectOwnerByProjectId returns the stored owner profile", () => {
 		deepEqual(models.getProjectOwnerByProjectId("proj-1"), {
 			userId: "owner-1",
@@ -97,7 +109,7 @@ describe("project-collaborator model", () => {
 		ok(collabs.some((c) => c.projectId === "proj-1"));
 	});
 
-	test("project collaboration details include the project timestamps", () => {
+	test("shared project details include the project timestamps", () => {
 		const collab = models
 			.getCollaborationsByUserId("collab-1")
 			.find((entry) => entry.projectId === "proj-1");

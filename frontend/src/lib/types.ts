@@ -30,20 +30,23 @@ export type ProjectOwner = {
 	userImage: string | null;
 };
 
-export type SharedProject = {
+export type ProjectCollaborator = {
 	projectId: string;
-	projectName: string;
 	userId: string;
 	readOnly: boolean;
 	sharedAt: Date;
-	projectCreatedAt: Date;
-	updatedAt: Date;
 	userName: string;
 	userImage: string | null;
+};
+
+export type SharedProject = ProjectCollaborator & {
+	projectName: string;
+	projectCreatedAt: Date;
+	updatedAt: Date;
 	ownerName: string;
 };
 
 export type ProjectCollaboratorsResponse = {
 	owner: ProjectOwner;
-	collaborators: SharedProject[];
+	collaborators: ProjectCollaborator[];
 };
