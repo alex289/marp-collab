@@ -16,6 +16,83 @@ function dirOf(fileId: string): string {
 const INERT_ASSET_DATA_URI =
 	"data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==";
 
+const includeRegex = /<!--\s*@include:\s*([^\r\n]+?)\s*-->/g;
+const markdownIncludeExtensionRegex = /\.(md|markdown)$/i;
+const leadingFrontmatterRegex = /^---\r?\n[\s\S]*?\r?\n---\r?\n?/;
+const MAX_INCLUDE_DEPTH = 10;
+
+function includeError(message: string): string {
+	return `> ⚠️ **Include error:** ${message}`;
+}
+
+/**
+ * Expands `<!-- @include: file.md -->` comments by inlining the referenced
+ * project file, mirroring the frontend's include resolution so the exported
+ * PDF matches the preview.
+ */
+async function expandIncludes(
+	projectId: string,
+	markdown: string,
+	currentDir: string,
+	ancestors: ReadonlySet<string>,
+	depth: number,
+): Promise<string> {
+	const matches = Array.from(markdown.matchAll(includeRegex));
+	if (matches.length === 0) {
+		return markdown;
+	}
+
+	const parts: string[] = [];
+	let lastIndex = 0;
+
+	for (const match of matches) {
+		parts.push(markdown.slice(lastIndex, match.index));
+		lastIndex = match.index + match[0].length;
+
+		const rawPath = match[1]!;
+		const fileId = resolvePosixPath(currentDir, rawPath);
+
+		if (!markdownIncludeExtensionRegex.test(fileId)) {
+			parts.push(includeError(`only Markdown files can be included (\`${rawPath}\`)`));
+			continue;
+		}
+		if (fileId.startsWith("/") || fileId === ".." || fileId.startsWith("../")) {
+			parts.push(includeError(`invalid include path (\`${rawPath}\`)`));
+			continue;
+		}
+		if (depth >= MAX_INCLUDE_DEPTH) {
+			parts.push(includeError(`include depth limit reached (\`${rawPath}\`)`));
+			continue;
+		}
+		if (ancestors.has(fileId)) {
+			parts.push(includeError(`circular include (\`${rawPath}\`)`));
+			continue;
+		}
+
+		const content = await getDocumentContent(toDocumentName(projectId, fileId));
+		if (content === undefined) {
+			parts.push(includeError(`file not found (\`${rawPath}\`)`));
+			continue;
+		}
+
+		// Drop a leading frontmatter block so including a standalone deck
+		// doesn't inject its directives as slide content.
+		const body = content.replace(leadingFrontmatterRegex, "");
+		parts.push(
+			await expandIncludes(
+				projectId,
+				body,
+				dirOf(fileId),
+				new Set([...ancestors, fileId]),
+				depth + 1,
+			),
+		);
+	}
+
+	parts.push(markdown.slice(lastIndex));
+	return parts.join("");
+}
+
 const themeMarkerRegex = /\/\*[\s\S]*?@theme\s+([\w-]+)/;
 
 // Marpit's `@import "name";` is meant for inheriting from another registered theme by
@@ -94,10 +171,19 @@ export async function renderMarkdownForPdf(
 	projectId: string,
 	markdownFileId: string,
 ): Promise<RenderedPdfInput | undefined> {
-	const markdown = await getDocumentContent(toDocumentName(projectId, markdownFileId));
-	if (markdown === undefined) {
+	const rawMarkdown = await getDocumentContent(toDocumentName(projectId, markdownFileId));
+	if (rawMarkdown === undefined) {
 		return undefined;
 	}
+
+	const markdownDir = dirOf(markdownFileId);
+	const markdown = await expandIncludes(
+		projectId,
+		rawMarkdown,
+		markdownDir,
+		new Set([markdownFileId]),
+		0,
+	);
 
 	const assets = new Map<string, string>();
 	let assetCounter = 0;
@@ -123,8 +209,6 @@ export async function renderMarkdownForPdf(
 		}
 		return toFlatName(resolvePosixPath(dir, src));
 	}
-
-	const markdownDir = dirOf(markdownFileId);
 
 	const marp = new Marp({
 		html: {

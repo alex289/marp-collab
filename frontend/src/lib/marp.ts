@@ -18,7 +18,7 @@ function assetQuery(version: number, token: string): string {
 	return query ? `?${query}` : "";
 }
 
-function resolvePosixPath(dir: string, src: string): string {
+export function resolvePosixPath(dir: string, src: string): string {
 	const parts = (dir + src).split("/");
 	const stack: string[] = [];
 	for (const p of parts) {
