@@ -10,9 +10,8 @@ import {
 import { EditorState, Prec } from "@codemirror/state";
 import { EditorView, keymap } from "@codemirror/view";
 import { indentWithTab } from "@codemirror/commands";
-import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
-import { yamlFrontmatter } from "@codemirror/lang-yaml";
 import { css } from "@codemirror/lang-css";
+import { forceLinting, linter, lintGutter, type Diagnostic } from "@codemirror/lint";
 import { basicSetup } from "codemirror";
 import type { Awareness } from "y-protocols/awareness.js";
 import * as Y from "yjs";
@@ -28,16 +27,35 @@ import { vsCodeLight } from "@fsegurai/codemirror-theme-vscode-light";
 import { vsCodeDark } from "@fsegurai/codemirror-theme-vscode-dark";
 import { toast } from "sonner";
 import { useHotkey } from "@tanstack/react-hotkeys";
+import { findMissingAssetReferences } from "@/lib/asset-diagnostics";
 import { countMarpSlides } from "@/lib/slide-count";
 import { cn } from "@/lib/utils";
+import type { DeckFile } from "@/lib/types";
+import type { ProjectTheme } from "@/lib/project-themes";
+import {
+	createEditorCompletionSource,
+	type EditorCompletionConfig,
+} from "@/features/editor/completions";
+import { marpMarkdown } from "@/features/editor/language";
 
 type EditorPaneProps = {
 	label: string | null;
+	fileId: string | null;
+	projectFileIds: readonly string[];
+	files: DeckFile[];
+	themeNames: string[];
+	projectThemes: ProjectTheme[];
 	yText: Y.Text | null;
 	awareness: Awareness | null;
 	undoManager: Y.UndoManager | null;
 	readOnly: boolean;
+	onUploadImages?: (files: File[]) => Promise<MarkdownImageUploadResult>;
 	onCursorLineChange?: (line: number) => void;
+};
+
+export type MarkdownImageUploadResult = {
+	images: Array<{ alt: string; path: string }>;
+	failures: string[];
 };
 
 export type EditorPaneHandle = {
@@ -79,13 +97,6 @@ function getEditorStats(view: EditorView): EditorStats {
 		cursorColumn: cursor - cursorLine.from + 1,
 		slides,
 	};
-}
-
-// Marp slides open with YAML frontmatter, which plain CommonMark parses as a setext
-// heading (`marp: true` underlined by `---`), so the whole block came out styled as an
-// H2. The GFM base additionally covers the tables and strikethrough that Marp renders.
-function marpMarkdown() {
-	return yamlFrontmatter({ content: markdown({ base: markdownLanguage }) });
 }
 
 let prettierModulesPromise: Promise<{
@@ -214,20 +225,84 @@ const editorTheme = EditorView.theme({
 	".cm-searchMatch-selected": {
 		backgroundColor: "color-mix(in oklab, var(--primary) 45%, transparent)",
 	},
+	".cm-tooltip-autocomplete": {
+		border: "1px solid var(--border)",
+		borderRadius: "var(--radius-md)",
+		backgroundColor: "var(--popover)",
+		color: "var(--popover-foreground)",
+		boxShadow: "var(--shadow-lg)",
+		fontFamily: "'Geist Variable', sans-serif",
+		overflow: "hidden",
+	},
+	".cm-tooltip-autocomplete > ul": {
+		fontFamily: "inherit",
+		maxHeight: "min(320px, 40vh)",
+	},
+	".cm-tooltip-autocomplete > ul > li": {
+		padding: "4px 8px",
+	},
+	".cm-tooltip-autocomplete > ul > li[aria-selected]": {
+		backgroundColor: "color-mix(in oklab, var(--primary) 30%, var(--popover))",
+		color: "var(--accent-foreground)",
+	},
+	".cm-completionLabel": {
+		fontFamily: "'Geist Mono Variable', monospace",
+	},
+	".cm-completionDetail": {
+		color: "var(--muted-foreground)",
+		fontStyle: "normal",
+		marginLeft: "12px",
+	},
+	".cm-completionInfo": {
+		border: "1px solid var(--border)",
+		borderRadius: "var(--radius-md)",
+		backgroundColor: "var(--popover)",
+		color: "var(--popover-foreground)",
+		boxShadow: "var(--shadow-lg)",
+		fontFamily: "'Geist Variable', sans-serif",
+		fontSize: "12px",
+		lineHeight: "1.45",
+		padding: "8px 10px",
+	},
+	".cm-completionSection": {
+		backgroundColor: "var(--muted)",
+		color: "var(--muted-foreground)",
+		fontSize: "10px",
+		fontWeight: "600",
+		letterSpacing: "0.04em",
+		padding: "3px 8px",
+		textTransform: "uppercase",
+	},
 });
 
 export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function EditorPane(
-	{ label, yText, awareness, undoManager, readOnly, onCursorLineChange },
+	{
+		label,
+		fileId,
+		projectFileIds,
+		files,
+		themeNames,
+		projectThemes,
+		yText,
+		awareness,
+		undoManager,
+		readOnly,
+		onUploadImages,
+		onCursorLineChange,
+	},
 	ref,
 ) {
 	const mountRef = useRef<HTMLDivElement | null>(null);
 	const viewRef = useRef<EditorView | null>(null);
+	const projectFileIdsRef = useRef(projectFileIds);
 	const [stats, setStats] = useState<EditorStats>(emptyStats);
 	const [wrapEnabled, setWrapEnabled] = useState(true);
 	const [isFocused, setIsFocused] = useState(false);
 	const [isFormatting, setIsFormatting] = useState(false);
 	const handleFormatRef = useRef<() => void>(() => undefined);
+	const uploadImagesRef = useRef(onUploadImages);
 	const { resolvedTheme } = useTheme();
+	projectFileIdsRef.current = projectFileIds;
 
 	const fileKind = useMemo(() => {
 		if (!label) {
@@ -240,6 +315,24 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 
 		return "Markdown";
 	}, [label]);
+	const completionConfigRef = useRef<EditorCompletionConfig>({
+		fileKind: "markdown",
+		currentFileId: null,
+		files: [],
+		themeNames: [],
+		projectThemes: [],
+	});
+	completionConfigRef.current = {
+		fileKind: fileKind === "CSS" ? "css" : "markdown",
+		currentFileId: fileId,
+		files,
+		themeNames,
+		projectThemes,
+	};
+	const completionSource = useMemo(
+		() => createEditorCompletionSource(() => completionConfigRef.current),
+		[],
+	);
 
 	const handleFormat = useCallback(async () => {
 		const view = viewRef.current;
@@ -285,12 +378,114 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 	}, [handleFormat]);
 
 	useEffect(() => {
-		if (!mountRef.current || !yText || !awareness || !undoManager) {
+		uploadImagesRef.current = onUploadImages;
+	}, [onUploadImages]);
+
+	useEffect(() => {
+		const view = viewRef.current;
+		if (view) {
+			forceLinting(view);
+		}
+	}, [projectFileIds]);
+
+	useEffect(() => {
+		if (!mountRef.current || !fileId || !yText || !awareness || !undoManager) {
 			setStats(emptyStats);
 			return;
 		}
 
-		const languageExtension = label?.endsWith(".css") ? css() : marpMarkdown();
+		const documentKind = fileKind === "CSS" ? "css" : "markdown";
+		const languageExtension = documentKind === "css" ? css() : marpMarkdown();
+		const assetReferenceLinter = linter((view) => {
+			const diagnostics: Diagnostic[] = findMissingAssetReferences(
+				view.state.doc.toString(),
+				fileId,
+				documentKind,
+				new Set(projectFileIdsRef.current),
+			).map((reference) => ({
+				from: reference.from,
+				to: reference.to,
+				severity: "warning",
+				source: "Project files",
+				message: `File not found in project: ${reference.resolvedPath}`,
+			}));
+			return diagnostics;
+		});
+		const imageDropExtension = EditorView.domEventHandlers({
+			dragover(event) {
+				const dataTransfer = event.dataTransfer;
+				if (readOnly || fileKind !== "Markdown" || !uploadImagesRef.current || !dataTransfer) {
+					return false;
+				}
+
+				const items = Array.from(dataTransfer.items);
+				const hasImage = items.some(
+					(item) => item.kind === "file" && item.type.startsWith("image/"),
+				);
+				if (!hasImage) {
+					return false;
+				}
+
+				event.preventDefault();
+				dataTransfer.dropEffect = "copy";
+				return true;
+			},
+			drop(event, view) {
+				if (readOnly || fileKind !== "Markdown" || !uploadImagesRef.current) {
+					return false;
+				}
+
+				const droppedFiles = Array.from(event.dataTransfer?.files ?? []);
+				const imageFiles = droppedFiles.filter((file) => file.type.startsWith("image/"));
+				if (imageFiles.length === 0) {
+					return false;
+				}
+
+				event.preventDefault();
+				const droppedPosition =
+					view.posAtCoords({ x: event.clientX, y: event.clientY }) ??
+					view.state.selection.main.head;
+				const droppedLine = view.state.doc.lineAt(droppedPosition).number;
+
+				if (imageFiles.length !== droppedFiles.length) {
+					toast.warning("Only image files can be dropped into the Markdown editor.");
+				}
+
+				void (async () => {
+					try {
+						const { images, failures } = await uploadImagesRef.current!(imageFiles);
+						if (failures.length > 0) {
+							toast.error("Some images could not be uploaded", {
+								description: failures.join("\n"),
+							});
+						}
+
+						const currentView = viewRef.current;
+						if (currentView !== view || images.length === 0) {
+							return;
+						}
+
+						const targetLine = currentView.state.doc.line(
+							Math.min(droppedLine, currentView.state.doc.lines),
+						);
+						const markdown = `${images
+							.map((image) => `![${image.alt}](${image.path})`)
+							.join("\n")}\n`;
+						const cursor = targetLine.from + markdown.length;
+						currentView.dispatch({
+							changes: { from: targetLine.from, insert: markdown },
+							selection: { anchor: cursor },
+							effects: EditorView.scrollIntoView(cursor, { y: "center" }),
+						});
+						currentView.focus();
+					} catch (error) {
+						toast.error(error instanceof Error ? error.message : "Could not upload dropped images");
+					}
+				})();
+
+				return true;
+			},
+		});
 
 		const state = EditorState.create({
 			// oxlint-disable-next-line no-base-to-string
@@ -299,6 +494,9 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 				basicSetup,
 				EditorState.tabSize.of(2),
 				languageExtension,
+				assetReferenceLinter,
+				lintGutter(),
+				EditorState.languageData.of(() => [{ autocomplete: completionSource }]),
 				Prec.highest(
 					keymap.of([
 						{
@@ -325,6 +523,7 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 				]),
 				EditorState.readOnly.of(readOnly),
 				EditorView.editable.of(!readOnly),
+				imageDropExtension,
 				yCollab(yText, awareness, { undoManager }),
 				EditorView.updateListener.of((update) => {
 					if (update.docChanged || update.selectionSet) {
@@ -357,10 +556,13 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 		awareness,
 		undoManager,
 		label,
+		fileId,
+		fileKind,
 		resolvedTheme,
 		wrapEnabled,
 		readOnly,
 		onCursorLineChange,
+		completionSource,
 	]);
 
 	useImperativeHandle(ref, () => ({

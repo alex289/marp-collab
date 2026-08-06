@@ -66,12 +66,13 @@ test("uploads each file with the existing destination form field", async () => {
 	const client = createProjectFilesClient((input, init) => {
 		capturedInput = input;
 		capturedInit = init;
-		return Promise.resolve(new Response(null, { status: 204 }));
+		return Promise.resolve(Response.json({ file: deckFile("decks/slides.md") }));
 	});
 	const file = new File(["# Slides"], "slides.md", { type: "text/markdown" });
 
 	assert.deepEqual(await client.upload("p1", [file], "decks"), {
 		uploadedAny: true,
+		uploadedFiles: [deckFile("decks/slides.md")],
 		failures: [],
 	});
 	assert.equal(capturedInput, `${API_URL}/projects/p1/files/upload`);
@@ -98,6 +99,7 @@ test("keeps per-file upload failures instead of rejecting the batch", async () =
 		await client.upload("p1", [new File([""], "bad.exe"), new File([""], "offline.md")]),
 		{
 			uploadedAny: false,
+			uploadedFiles: [],
 			failures: ["bad.exe: Unsupported file", "offline.md: An unexpected error occurred"],
 		},
 	);
