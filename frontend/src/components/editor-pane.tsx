@@ -411,7 +411,41 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 			}));
 			return diagnostics;
 		});
-		const imageDropExtension = EditorView.domEventHandlers({
+		const uploadAndInsertImages = async (
+			view: EditorView,
+			imageFiles: File[],
+			targetLineNumber: number,
+			action: "dropped" | "pasted",
+		) => {
+			try {
+				const { images, failures } = await uploadImagesRef.current!(imageFiles);
+				if (failures.length > 0) {
+					toast.error("Some images could not be uploaded", {
+						description: failures.join("\n"),
+					});
+				}
+
+				const currentView = viewRef.current;
+				if (currentView !== view || images.length === 0) {
+					return;
+				}
+
+				const targetLine = currentView.state.doc.line(
+					Math.min(targetLineNumber, currentView.state.doc.lines),
+				);
+				const markdown = `${images.map((image) => `![${image.alt}](${image.path})`).join("\n")}\n`;
+				const cursor = targetLine.from + markdown.length;
+				currentView.dispatch({
+					changes: { from: targetLine.from, insert: markdown },
+					selection: { anchor: cursor },
+					effects: EditorView.scrollIntoView(cursor, { y: "center" }),
+				});
+				currentView.focus();
+			} catch (error) {
+				toast.error(error instanceof Error ? error.message : `Could not upload ${action} images`);
+			}
+		};
+		const imageInputExtension = EditorView.domEventHandlers({
 			dragover(event) {
 				const dataTransfer = event.dataTransfer;
 				if (readOnly || fileKind !== "Markdown" || !uploadImagesRef.current || !dataTransfer) {
@@ -451,37 +485,29 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 					toast.warning("Only image files can be dropped into the Markdown editor.");
 				}
 
-				void (async () => {
-					try {
-						const { images, failures } = await uploadImagesRef.current!(imageFiles);
-						if (failures.length > 0) {
-							toast.error("Some images could not be uploaded", {
-								description: failures.join("\n"),
-							});
-						}
+				void uploadAndInsertImages(view, imageFiles, droppedLine, "dropped");
 
-						const currentView = viewRef.current;
-						if (currentView !== view || images.length === 0) {
-							return;
-						}
+				return true;
+			},
+			paste(event, view) {
+				if (readOnly || fileKind !== "Markdown" || !uploadImagesRef.current) {
+					return false;
+				}
 
-						const targetLine = currentView.state.doc.line(
-							Math.min(droppedLine, currentView.state.doc.lines),
-						);
-						const markdown = `${images
-							.map((image) => `![${image.alt}](${image.path})`)
-							.join("\n")}\n`;
-						const cursor = targetLine.from + markdown.length;
-						currentView.dispatch({
-							changes: { from: targetLine.from, insert: markdown },
-							selection: { anchor: cursor },
-							effects: EditorView.scrollIntoView(cursor, { y: "center" }),
-						});
-						currentView.focus();
-					} catch (error) {
-						toast.error(error instanceof Error ? error.message : "Could not upload dropped images");
-					}
-				})();
+				const pastedFiles = Array.from(event.clipboardData?.files ?? []);
+				const imageFiles = pastedFiles.filter((file) => file.type.startsWith("image/"));
+				if (imageFiles.length === 0) {
+					return false;
+				}
+
+				event.preventDefault();
+				const pastedLine = view.state.doc.lineAt(view.state.selection.main.head).number;
+
+				if (imageFiles.length !== pastedFiles.length) {
+					toast.warning("Only image files can be pasted into the Markdown editor.");
+				}
+
+				void uploadAndInsertImages(view, imageFiles, pastedLine, "pasted");
 
 				return true;
 			},
@@ -523,7 +549,7 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 				]),
 				EditorState.readOnly.of(readOnly),
 				EditorView.editable.of(!readOnly),
-				imageDropExtension,
+				imageInputExtension,
 				yCollab(yText, awareness, { undoManager }),
 				EditorView.updateListener.of((update) => {
 					if (update.docChanged || update.selectionSet) {
