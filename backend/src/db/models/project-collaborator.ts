@@ -7,11 +7,21 @@ export type ProjectMembership = {
 	sharedAt: Date;
 };
 
+export type ProjectOwner = {
+	userId: string;
+	userName: string;
+	userImage: string | null;
+};
+
 export type ProjectCollaborator = ProjectMembership & {
+	userName: string;
+	userImage: string | null;
+};
+
+export type SharedProject = ProjectCollaborator & {
 	projectName: string;
 	projectCreatedAt: Date;
 	updatedAt: Date;
-	userName: string;
 	ownerName: string;
 };
 
@@ -22,11 +32,17 @@ type ProjectMembershipRow = {
 	sharedAt: string;
 };
 
+type ProjectOwnerRow = ProjectOwner;
+
 type ProjectCollaboratorRow = ProjectMembershipRow & {
+	userName: string;
+	userImage: string | null;
+};
+
+type SharedProjectRow = ProjectCollaboratorRow & {
 	projectName: string;
 	projectCreatedAt: string;
 	updatedAt: string;
-	userName: string;
 	ownerName: string;
 };
 
@@ -42,26 +58,38 @@ function rowToProjectMembership(row: ProjectMembershipRow): ProjectMembership {
 function rowToProjectCollaborator(row: ProjectCollaboratorRow): ProjectCollaborator {
 	return {
 		...rowToProjectMembership(row),
+		userName: row.userName,
+		userImage: row.userImage,
+	};
+}
+
+function rowToSharedProject(row: SharedProjectRow): SharedProject {
+	return {
+		...rowToProjectCollaborator(row),
 		projectName: row.projectName,
 		projectCreatedAt: new Date(row.projectCreatedAt),
 		updatedAt: new Date(row.updatedAt),
-		userName: row.userName,
 		ownerName: row.ownerName,
 	};
 }
 
 const preparedStatements = {
-	getCollaboratorsByProjectId: db.prepare(`
-		select projectId, userId, readOnly, pc.createdAt as sharedAt, p.createdAt as projectCreatedAt, p.updatedAt, u.name as userName, p.name as projectName, owner.name as ownerName
-        from project_collaborator pc
-		join user u on userId = u.id
-		join project p on projectId = p.id
+	getProjectOwnerByProjectId: db.prepare(`
+		select owner.id as userId, owner.name as userName, owner.image as userImage
+		from project p
 		join user owner on p.ownerId = owner.id
-        where projectId = ?
+		where p.id = ?
+	`),
+	getCollaboratorsByProjectId: db.prepare(`
+		select pc.projectId, pc.userId, pc.readOnly, pc.createdAt as sharedAt,
+			u.name as userName, u.image as userImage
+        from project_collaborator pc
+		join user u on pc.userId = u.id
+		where pc.projectId = ?
         order by pc.createdAt asc
     `),
 	getCollaborationsByUserId: db.prepare(`
-		select projectId, userId, readOnly, pc.createdAt as sharedAt, p.createdAt as projectCreatedAt, p.updatedAt, u.name as userName, p.name as projectName, owner.name as ownerName
+		select projectId, userId, readOnly, pc.createdAt as sharedAt, p.createdAt as projectCreatedAt, p.updatedAt, u.name as userName, u.image as userImage, p.name as projectName, owner.name as ownerName
 		from project_collaborator pc
 		join user u on userId = u.id
 		join project p on projectId = p.id
@@ -89,6 +117,12 @@ const preparedStatements = {
     `),
 };
 
+export function getProjectOwnerByProjectId(projectId: string): ProjectOwner | undefined {
+	return preparedStatements.getProjectOwnerByProjectId.get(projectId) as
+		| ProjectOwnerRow
+		| undefined;
+}
+
 export function getCollaboratorsByProjectId(projectId: string): ProjectCollaborator[] {
 	const rows = preparedStatements.getCollaboratorsByProjectId.all(
 		projectId,
@@ -96,9 +130,9 @@ export function getCollaboratorsByProjectId(projectId: string): ProjectCollabora
 	return rows.map(rowToProjectCollaborator);
 }
 
-export function getCollaborationsByUserId(userId: string): ProjectCollaborator[] {
-	const rows = preparedStatements.getCollaborationsByUserId.all(userId) as ProjectCollaboratorRow[];
-	return rows.map(rowToProjectCollaborator);
+export function getCollaborationsByUserId(userId: string): SharedProject[] {
+	const rows = preparedStatements.getCollaborationsByUserId.all(userId) as SharedProjectRow[];
+	return rows.map(rowToSharedProject);
 }
 
 export function getCollaborator(projectId: string, userId: string): ProjectMembership | undefined {

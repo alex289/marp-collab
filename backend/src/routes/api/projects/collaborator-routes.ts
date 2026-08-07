@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import z from "zod";
+import { getProjectOwnerByProjectId } from "../../../db/models/project-collaborator.ts";
 import {
 	addProjectCollaborator,
 	listProjectCollaborators,
@@ -16,7 +17,12 @@ const app = new Hono<{ Variables: ProjectRouteVariables }>();
 
 app.get("/:projectId/collaborators", (c) => {
 	const { projectId } = c.req.param();
-	return c.json({ collaborators: listProjectCollaborators(projectId) });
+	const owner = getProjectOwnerByProjectId(projectId);
+	if (!owner) {
+		return c.json({ error: "Project not found" }, 404);
+	}
+
+	return c.json({ owner, collaborators: listProjectCollaborators(projectId) });
 });
 
 app.post("/:projectId/collaborators", requireProjectOwner, async (c) => {

@@ -1,7 +1,15 @@
 import { renderMarp } from "@/lib/marp";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import marpitSvgPolyfillScript from "@marp-team/marpit-svg-polyfill/lib/polyfill.browser.js?raw";
+import { ArrowRightIcon, Mic2Icon } from "lucide-react";
+import {
+	findPresenterImage,
+	getNextPresenterChange,
+	parseSlidePresenterComments,
+	type PresenterUser,
+} from "@/lib/presenter-comments";
 
 type PresentationFrameProps = {
 	markdown: string;
@@ -16,6 +24,7 @@ type PresentationFrameProps = {
 	onZoomChange?: (state: ZoomState) => void;
 	laserState?: LaserState;
 	onLaserChange?: (state: LaserState) => void;
+	presenterUsers?: readonly PresenterUser[];
 	showSpeakerNotes?: boolean;
 	className?: string;
 };
@@ -625,6 +634,7 @@ export function PresentationFrame({
 	onZoomChange,
 	laserState,
 	onLaserChange,
+	presenterUsers = [],
 	showSpeakerNotes = false,
 	className,
 }: PresentationFrameProps) {
@@ -642,8 +652,14 @@ export function PresentationFrame({
 		}
 	}, [markdown, projectId, selectedFileId, themeRevision, assetRevision, assetToken]);
 
-	const activeComments = rendered.comments[slideIndex] ?? [];
-	const hasSpeakerNotes = activeComments.some((comment) => comment.trim().length > 0);
+	const activeComments = parseSlidePresenterComments(rendered.comments[slideIndex] ?? []);
+	const nextComments = parseSlidePresenterComments(rendered.comments[slideIndex + 1] ?? []);
+	const nextPresenterChange = getNextPresenterChange(
+		activeComments.presenter,
+		nextComments.presenter,
+	);
+	const activePresenterImage = findPresenterImage(activeComments.presenter, presenterUsers);
+	const hasSpeakerNotes = activeComments.speakerNotes.length > 0;
 	// Marp returns one comment bucket per slide, so this doubles as the slide count.
 	const hasNextSlide = slideIndex + 1 < rendered.comments.length;
 
@@ -677,6 +693,45 @@ export function PresentationFrame({
 					{slide}
 				</div>
 				<div className="flex min-h-0 flex-col gap-3">
+					{activeComments.presenter && (
+						<Card
+							aria-label="Presenter"
+							aria-live="polite"
+							className="relative shrink-0 overflow-hidden border-primary/20 bg-linear-to-br from-primary/15 via-card to-card py-0 shadow-2xl"
+						>
+							<div className="pointer-events-none absolute -top-12 -right-10 size-32 rounded-full bg-primary/10 blur-2xl" />
+							<CardContent className="relative px-4 py-4">
+								<div className="flex items-center gap-3">
+									<Avatar size="lg" className="shadow-sm after:border-primary/20">
+										{activePresenterImage && (
+											<AvatarImage
+												src={activePresenterImage}
+												alt={`${activeComments.presenter} avatar`}
+											/>
+										)}
+										<AvatarFallback className="bg-primary text-primary-foreground">
+											<Mic2Icon className="size-5" aria-hidden />
+										</AvatarFallback>
+									</Avatar>
+									<div className="min-w-0">
+										<p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+											Now presenting
+										</p>
+										<p className="truncate text-xl font-semibold tracking-tight">
+											{activeComments.presenter}
+										</p>
+									</div>
+								</div>
+								{nextPresenterChange && (
+									<div className="mt-4 flex items-center gap-2 rounded-md border border-primary/20 bg-primary/10 px-3 py-2 text-sm">
+										<ArrowRightIcon className="size-4 shrink-0 text-primary" aria-hidden />
+										<span className="text-muted-foreground">Up next</span>
+										<span className="truncate font-semibold">{nextPresenterChange}</span>
+									</div>
+								)}
+							</CardContent>
+						</Card>
+					)}
 					<Card className="hidden shrink-0 flex-col overflow-hidden py-0 shadow-2xl md:flex gap-0">
 						<CardHeader className="shrink-0 border-b border-border px-4 py-3">
 							<CardTitle>Next slide</CardTitle>
@@ -705,16 +760,10 @@ export function PresentationFrame({
 						<CardContent className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
 							{hasSpeakerNotes ? (
 								<div className="space-y-3 text-sm leading-6">
-									{activeComments.map((comment, index) => {
-										const trimmed = comment.trim();
-
-										if (!trimmed) {
-											return null;
-										}
-
+									{activeComments.speakerNotes.map((comment, index) => {
 										return (
-											<p className="whitespace-pre-wrap" key={`${index}-${trimmed}`}>
-												{trimmed}
+											<p className="whitespace-pre-wrap" key={`${index}-${comment}`}>
+												{comment}
 											</p>
 										);
 									})}

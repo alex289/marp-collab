@@ -10,7 +10,7 @@ import {
 	usePresenceUser,
 	useProjectPresence,
 } from "@/hooks/use-collab-document";
-import type { DeckFile } from "@/lib/types";
+import type { DeckFile, ProjectCollaboratorsResponse } from "@/lib/types";
 import Navbar from "@/components/navbar";
 import { PresenceAvatars } from "@/components/presence-avatars";
 import { PresentationActions } from "@/components/presentation-actions";
@@ -34,6 +34,7 @@ import { isEditableDeckFile, isMarkdownDeckFile } from "@/lib/file-types";
 import { PaneResizeHandle } from "@/components/pane-resize-handle";
 import { listThemeNames, rewriteCssUrls, setProjectThemes } from "@/lib/marp";
 import { useAssetToken } from "@/lib/asset-token";
+import { fetcher } from "@/lib/fetcher";
 import { applyThemeToYText, getMarkdownTheme } from "@/lib/markdown-theme";
 import { upsertProjectTheme, type ProjectTheme } from "@/lib/project-themes";
 import { API_URL } from "@/lib/config";
@@ -52,6 +53,7 @@ import {
 	PlayIcon,
 	XIcon,
 } from "lucide-react";
+import useSWR from "swr";
 
 const EditorPane = lazy(async () => {
 	const m = await import("@/components/editor-pane");
@@ -226,11 +228,37 @@ function RouteComponent() {
 		presenceAwareness: projectPresenceAwareness,
 		currentUserId: presenceUser.userId,
 	});
-	const { files, isLoading, uploadFiles } = projectFiles;
+	const { files, isLoading, presenceByFileId, uploadFiles } = projectFiles;
 	const projectFileIds = useMemo(
 		() => files.filter((file) => file.type !== "folder").map((file) => file.id),
 		[files],
 	);
+	const { data: collaboratorsData } = useSWR<ProjectCollaboratorsResponse>(
+		`${API_URL}/projects/${id}/collaborators`,
+		fetcher,
+	);
+	const projectOwner = collaboratorsData?.owner;
+	const storedCollaborators = collaboratorsData?.collaborators;
+	const presenterUsers = useMemo(() => {
+		const otherUsers = selectedFile ? (presenceByFileId.get(selectedFile.id) ?? []) : [];
+
+		return [
+			{ name: presenceUser.userName, image: presenceUser.image },
+			...otherUsers.map((user) => ({ name: user.name, image: user.image })),
+			...(projectOwner ? [{ name: projectOwner.userName, image: projectOwner.userImage }] : []),
+			...(storedCollaborators ?? []).map((user) => ({
+				name: user.userName,
+				image: user.userImage,
+			})),
+		];
+	}, [
+		presenceByFileId,
+		presenceUser.image,
+		presenceUser.userName,
+		projectOwner,
+		selectedFile,
+		storedCollaborators,
+	]);
 	const collab = useCollabDocument(
 		selectedFile?.type === "markdown" ? (selectedFile.documentName ?? null) : null,
 		session?.user ?? null,
@@ -1155,6 +1183,7 @@ function RouteComponent() {
 				onZoomChange={setZoomState}
 				laserState={laserState}
 				onLaserChange={setLaserState}
+				presenterUsers={presenterUsers}
 				showSpeakerNotes={!isViewer}
 				className="h-full w-full"
 			/>

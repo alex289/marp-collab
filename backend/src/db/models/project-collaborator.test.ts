@@ -19,11 +19,11 @@ describe("project-collaborator model", () => {
 
 		const now = new Date().toISOString();
 		db.prepare(
-			"insert into user (id, name, email, emailVerified, createdAt, updatedAt) values (?, ?, ?, ?, ?, ?)",
-		).run("owner-1", "Owner", "owner@example.com", 1, now, now);
+			"insert into user (id, name, email, emailVerified, image, createdAt, updatedAt) values (?, ?, ?, ?, ?, ?, ?)",
+		).run("owner-1", "Owner", "owner@example.com", 1, "owner.png", now, now);
 		db.prepare(
-			"insert into user (id, name, email, emailVerified, createdAt, updatedAt) values (?, ?, ?, ?, ?, ?)",
-		).run("collab-1", "Collaborator", "collab@example.com", 1, now, now);
+			"insert into user (id, name, email, emailVerified, image, createdAt, updatedAt) values (?, ?, ?, ?, ?, ?, ?)",
+		).run("collab-1", "Collaborator", "collab@example.com", 1, "collaborator.png", now, now);
 		db.prepare(
 			"insert into project (id, name, createdAt, updatedAt, ownerId) values (?, ?, ?, ?, ?)",
 		).run("proj-1", "Test Project", now, now, "owner-1");
@@ -71,6 +71,35 @@ describe("project-collaborator model", () => {
 		ok(collabs.some((c) => c.userId === "collab-1"));
 	});
 
+	test("getCollaboratorsByProjectId returns only collaborator details", () => {
+		const collab = models.getCollaboratorsByProjectId("proj-1")[0];
+		deepEqual(Object.keys(collab!).sort(), [
+			"projectId",
+			"readOnly",
+			"sharedAt",
+			"userId",
+			"userImage",
+			"userName",
+		]);
+	});
+
+	test("getProjectOwnerByProjectId returns the stored owner profile", () => {
+		deepEqual(models.getProjectOwnerByProjectId("proj-1"), {
+			userId: "owner-1",
+			userName: "Owner",
+			userImage: "owner.png",
+		});
+	});
+
+	test("getProjectOwnerByProjectId returns undefined for an unknown project", () => {
+		equal(models.getProjectOwnerByProjectId("nobody"), undefined);
+	});
+
+	test("project collaboration details include stored user images", () => {
+		const collab = models.getCollaboratorsByProjectId("proj-1")[0];
+		equal(collab?.userImage, "collaborator.png");
+	});
+
 	test("getCollaboratorsByProjectId returns empty array for unknown project", () => {
 		deepEqual(models.getCollaboratorsByProjectId("nobody"), []);
 	});
@@ -80,7 +109,7 @@ describe("project-collaborator model", () => {
 		ok(collabs.some((c) => c.projectId === "proj-1"));
 	});
 
-	test("project collaboration details include the project timestamps", () => {
+	test("shared project details include the project timestamps", () => {
 		const collab = models
 			.getCollaborationsByUserId("collab-1")
 			.find((entry) => entry.projectId === "proj-1");
