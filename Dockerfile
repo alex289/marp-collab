@@ -18,6 +18,7 @@ RUN cd backend && node --run build && cd ../frontend && node --run build
 
 FROM node:26-trixie-slim
 
+RUN mkdir -p /app/data && chown node:node /app/data
 USER node
 WORKDIR /app
 ENV NODE_ENV=production
