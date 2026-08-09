@@ -1,6 +1,6 @@
 import { DeleteProjectDialog } from "@/components/dialog/delete-project";
 import { RenameProjectDialog } from "@/components/dialog/rename-project";
-import { DataTable } from "@/components/data-table";
+import { DataTable, type DataTableFeatures } from "@/components/data-table";
 import type { Project, SharedProject } from "@/lib/types";
 import { Link } from "@tanstack/react-router";
 import type { ColumnDef, OnChangeFn, SortingState } from "@tanstack/react-table";
@@ -28,7 +28,7 @@ function formatDate(date: Date) {
 	return dateFormatter.format(new Date(date));
 }
 
-const nameColumn: ColumnDef<ProjectTableRow> = {
+const nameColumn: ColumnDef<DataTableFeatures, ProjectTableRow> = {
 	accessorKey: "name",
 	header: "Name",
 	cell: ({ row }) => (
@@ -42,19 +42,19 @@ const nameColumn: ColumnDef<ProjectTableRow> = {
 	),
 };
 
-const createdAtColumn: ColumnDef<ProjectTableRow> = {
+const createdAtColumn: ColumnDef<DataTableFeatures, ProjectTableRow> = {
 	accessorKey: "createdAt",
 	header: "Created",
 	cell: ({ row }) => formatDate(row.original.createdAt),
 };
 
-const updatedAtColumn: ColumnDef<ProjectTableRow> = {
+const updatedAtColumn: ColumnDef<DataTableFeatures, ProjectTableRow> = {
 	accessorKey: "updatedAt",
 	header: "Updated",
 	cell: ({ row }) => formatDate(row.original.updatedAt),
 };
 
-const ownedColumns: ColumnDef<ProjectTableRow>[] = [
+const ownedColumns: ColumnDef<DataTableFeatures, ProjectTableRow>[] = [
 	nameColumn,
 	createdAtColumn,
 	updatedAtColumn,
@@ -77,7 +77,7 @@ const ownedColumns: ColumnDef<ProjectTableRow>[] = [
 	},
 ];
 
-const sharedColumns: ColumnDef<ProjectTableRow>[] = [
+const sharedColumns: ColumnDef<DataTableFeatures, ProjectTableRow>[] = [
 	nameColumn,
 	{
 		accessorKey: "ownerName",

@@ -1,8 +1,13 @@
 import {
+	createSortedRowModel,
+	columnVisibilityFeature,
 	flexRender,
-	getCoreRowModel,
-	getSortedRowModel,
-	useReactTable,
+	rowSortingFeature,
+	sortFn_alphanumeric,
+	sortFn_datetime,
+	sortFn_text,
+	tableFeatures,
+	useTable,
 	type ColumnDef,
 	type OnChangeFn,
 	type RowData,
@@ -19,17 +24,30 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 
-type DataTableProps<TData extends RowData, TValue> = {
-	columns: ColumnDef<TData, TValue>[];
+export const dataTableFeatures = tableFeatures({
+	columnVisibilityFeature,
+	rowSortingFeature,
+	sortedRowModel: createSortedRowModel(),
+	sortFns: {
+		alphanumeric: sortFn_alphanumeric,
+		datetime: sortFn_datetime,
+		text: sortFn_text,
+	},
+});
+
+export type DataTableFeatures = typeof dataTableFeatures;
+
+type DataTableProps<TData extends RowData> = {
+	columns: ColumnDef<DataTableFeatures, TData>[];
 	data: TData[];
 	emptyMessage?: string;
-	getRowId?: TableOptions<TData>["getRowId"];
+	getRowId?: TableOptions<DataTableFeatures, TData>["getRowId"];
 	label: string;
 	onSortingChange?: OnChangeFn<SortingState>;
 	sorting?: SortingState;
 };
 
-export function DataTable<TData extends RowData, TValue>({
+export function DataTable<TData extends RowData>({
 	columns,
 	data,
 	emptyMessage = "No results.",
@@ -37,14 +55,13 @@ export function DataTable<TData extends RowData, TValue>({
 	label,
 	onSortingChange,
 	sorting,
-}: DataTableProps<TData, TValue>) {
-	const table = useReactTable({
+}: DataTableProps<TData>) {
+	const table = useTable({
+		features: dataTableFeatures,
 		columns,
 		data,
 		enableMultiSort: false,
 		enableSortingRemoval: false,
-		getCoreRowModel: getCoreRowModel(),
-		getSortedRowModel: getSortedRowModel(),
 		getRowId,
 		...(sorting && onSortingChange
 			? {
