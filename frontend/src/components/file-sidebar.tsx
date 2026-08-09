@@ -173,7 +173,7 @@ const MobileWorkspaceRail = ({ activePanel, setActivePanel }: MobileWorkspaceRai
 	};
 
 	return (
-		<div className="flex h-12 items-center gap-2 border-b border-sidebar-border bg-sidebar px-2 text-sidebar-foreground md:hidden">
+		<div className="flex h-12 items-center gap-2 border-b border-sidebar-border bg-sidebar px-2 text-sidebar-foreground lg:hidden">
 			<WorkspaceRailButtons activePanel={activePanel} onPanelClick={handlePanelClick} />
 		</div>
 	);
@@ -357,7 +357,7 @@ export const FileSidebar = ({
 		<SidebarProvider
 			open={sidebarOpen}
 			onOpenChange={setSidebarOpen}
-			className={cn("min-h-0 md:h-full", isResizing && "**:transition-none")}
+			className={cn("min-h-0 lg:h-full", isResizing && "**:transition-none")}
 			style={
 				{
 					"--sidebar-width": `min(${width}px, 40vw)`,

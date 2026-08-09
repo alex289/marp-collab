@@ -38,7 +38,7 @@ export const PaneResizeHandle = ({
 	};
 
 	return (
-		<div className="relative hidden xl:block">
+		<div className="relative hidden lg:block">
 			<div
 				role="separator"
 				aria-orientation="vertical"
