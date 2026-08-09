@@ -1380,8 +1380,8 @@ function RouteComponent() {
 			<main
 				ref={mainRef}
 				className={cn(
-					"grid min-h-0 flex-1 grid-cols-1 overflow-hidden max-md:grid-rows-[auto_minmax(0,3fr)_minmax(0,2fr)]",
-					"xl:grid-cols-[var(--sidebar-col)_0px_minmax(0,1fr)_0px_var(--preview-col)]",
+					"grid min-h-0 flex-1 grid-cols-1 overflow-hidden max-lg:grid-rows-[auto_minmax(0,3fr)_minmax(0,2fr)]",
+					"lg:grid-cols-[var(--sidebar-col)_0px_minmax(0,1fr)_0px_var(--preview-col)]",
 				)}
 				style={
 					{
