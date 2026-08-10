@@ -65,12 +65,19 @@ describe("projects routes", () => {
 			name: "Upload Project",
 			ownerId: "user-1",
 		});
+		projectModel.createProject({
+			id: "owner-only-proj",
+			name: "Owner-only Project",
+			ownerId: "user-1",
+		});
 		db.prepare(
 			"insert into project_collaborator (projectId, userId, readOnly, createdAt) values (?, ?, ?, ?)",
 		).run("upload-proj", "route-writer", 0, now);
 		db.prepare(
 			"insert into project_collaborator (projectId, userId, readOnly, createdAt) values (?, ?, ?, ?)",
 		).run("upload-proj", "route-reader", 1, now);
+		db.prepare("update user set image = ? where id = ?").run("owner.png", "user-1");
+		db.prepare("update user set image = ? where id = ?").run("writer.png", "route-writer");
 		await files.createProjectDir("upload-proj", "assets");
 
 		app = new Hono<{ Variables: HonoVariables }>();
@@ -257,6 +264,42 @@ describe("projects routes", () => {
 		deepEqual(await outsiderResponse.json(), {
 			error: "Project not found or access denied",
 		});
+	});
+
+	test("lists the project owner without collaborators", async () => {
+		const response = await app.request("/owner-only-proj/collaborators", {
+			headers: { "x-test-user-id": "user-1" },
+		});
+
+		equal(response.status, 200);
+		const body = (await response.json()) as {
+			owner: { userId: string; userName: string; userImage: string | null };
+			collaborators: unknown[];
+		};
+		deepEqual(body.owner, {
+			userId: "user-1",
+			userName: "Test User",
+			userImage: "owner.png",
+		});
+		deepEqual(body.collaborators, []);
+	});
+
+	test("lists stored collaborator avatars", async () => {
+		const response = await app.request("/upload-proj/collaborators", {
+			headers: { "x-test-user-id": "user-1" },
+		});
+
+		equal(response.status, 200);
+		const body = (await response.json()) as {
+			collaborators: Array<{
+				userId: string;
+				userImage: string | null;
+			}>;
+		};
+		const writer = body.collaborators.find(
+			(collaborator) => collaborator.userId === "route-writer",
+		);
+		equal(writer?.userImage, "writer.png");
 	});
 
 	test("rejects a delete from a non-owner collaborator without touching project files", async () => {

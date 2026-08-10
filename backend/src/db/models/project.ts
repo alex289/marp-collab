@@ -28,15 +28,15 @@ function rowToProject(row: ProjectRow): Project {
 
 const preparedStatements = {
 	getProjectById: db.prepare(`
-        select id, name, createdAt, updatedAt, ownerId
-        from project
-        where id = ?
+		select id, name, createdAt, updatedAt, ownerId
+		from project
+		where id = ?
     `),
 	getProjectsByOwnerId: db.prepare(`
-        select id, name, createdAt, updatedAt, ownerId
-        from project
-        where ownerId = ?
-        order by createdAt desc
+		select id, name, createdAt, updatedAt, ownerId
+		from project
+		where ownerId = ?
+		order by createdAt desc
     `),
 	createProject: db.prepare(`
         insert into project (id, name, createdAt, updatedAt, ownerId)

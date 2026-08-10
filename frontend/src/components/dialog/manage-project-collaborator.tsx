@@ -11,7 +11,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { API_URL } from "@/lib/config";
 import { fetcher } from "@/lib/fetcher";
-import type { SharedProject } from "@/lib/types";
+import type { ProjectCollaboratorsResponse } from "@/lib/types";
 import { PlusIcon, Share, Trash } from "lucide-react";
 import { useState } from "react";
 import useSWR, { useSWRConfig } from "swr";
@@ -24,8 +24,20 @@ import {
 	TableHeader,
 	TableRow,
 } from "../ui/table";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "../ui/select";
+import {
+	Select,
+	SelectContent,
+	SelectGroup,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "../ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
+
+const accessLevelSelectItems = [
+	{ value: "read-only", label: "Read Only" },
+	{ value: "full-access", label: "Full access" },
+];
 
 export function ManageProjectCollaborator({ projectId }: { projectId: string }) {
 	const { mutate } = useSWRConfig();
@@ -55,8 +67,9 @@ export function ManageProjectCollaborator({ projectId }: { projectId: string }) 
 		}
 	}
 
-	const { data, isLoading } = useSWR<{ collaborators: SharedProject[] }>(collaboratorsKey, fetcher);
+	const { data, isLoading } = useSWR<ProjectCollaboratorsResponse>(collaboratorsKey, fetcher);
 
+	const owner = data?.owner;
 	const collaborators = data?.collaborators ?? [];
 
 	async function handleAddCollaborator() {
@@ -165,12 +178,20 @@ export function ManageProjectCollaborator({ projectId }: { projectId: string }) 
 						</TableRow>
 					</TableHeader>
 					<TableBody>
+						{!isLoading && owner ? (
+							<TableRow>
+								<TableCell>{owner.userName}</TableCell>
+								<TableCell className="text-muted-foreground">Owner</TableCell>
+								<TableCell />
+							</TableRow>
+						) : null}
 						{!isLoading &&
 							collaborators?.map((collaborator) => (
 								<TableRow key={collaborator.userId}>
 									<TableCell>{collaborator.userName}</TableCell>
 									<TableCell>
 										<Select
+											items={accessLevelSelectItems}
 											value={collaborator.readOnly ? "read-only" : "full-access"}
 											disabled={updatingUserId === collaborator.userId}
 											onValueChange={(value) =>
@@ -181,8 +202,13 @@ export function ManageProjectCollaborator({ projectId }: { projectId: string }) 
 												<SelectValue placeholder="Select access level" />
 											</SelectTrigger>
 											<SelectContent>
-												<SelectItem value="read-only">Read-only</SelectItem>
-												<SelectItem value="full-access">Full access</SelectItem>
+												<SelectGroup>
+													{accessLevelSelectItems.map((item) => (
+														<SelectItem key={item.value} value={item.value}>
+															{item.label}
+														</SelectItem>
+													))}
+												</SelectGroup>
 											</SelectContent>
 										</Select>
 									</TableCell>
@@ -226,6 +252,7 @@ export function ManageProjectCollaborator({ projectId }: { projectId: string }) 
 							</TableCell>
 							<TableCell>
 								<Select
+									items={accessLevelSelectItems}
 									defaultValue="read-only"
 									value={accessLevel}
 									onValueChange={(value) => setAccessLevel(value ?? "read-only")}
@@ -235,8 +262,13 @@ export function ManageProjectCollaborator({ projectId }: { projectId: string }) 
 										<SelectValue placeholder="Select access level" />
 									</SelectTrigger>
 									<SelectContent>
-										<SelectItem value="read-only">Read-only</SelectItem>
-										<SelectItem value="full-access">Full access</SelectItem>
+										<SelectGroup>
+											{accessLevelSelectItems.map((item) => (
+												<SelectItem key={item.value} value={item.value}>
+													{item.label}
+												</SelectItem>
+											))}
+										</SelectGroup>
 									</SelectContent>
 								</Select>
 							</TableCell>

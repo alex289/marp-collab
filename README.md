@@ -6,6 +6,8 @@ Realtime collaboration editor for marp presentations<br><br>
 <a href="https://github.com/alex289/marp-collab/blob/main/LICENSE"><img alt="GitHub License" src="https://img.shields.io/github/license/alex289/marp-collab"></a>
 <a href="https://github.com/alex289/marp-collab/releases"><img alt="GitHub Release" src="https://img.shields.io/github/v/release/alex289/marp-collab"></a>
 <a href="https://github.com/alex289/marp-collab/issues"><img alt="GitHub Issues" src="https://img.shields.io/github/issues/alex289/marp-collab"></a>
+
+<img src="https://raw.githubusercontent.com/alex289/marp-collab/refs/heads/main/.github/demo.png" width="600"/>
 </div>
 
 MarpCollab is a realtime collaboration editor for [Marp](https://marp.app/) presentations. It allows multiple users to edit the same presentation simultaneously, with changes reflected in real-time.
