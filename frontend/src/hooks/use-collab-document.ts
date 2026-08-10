@@ -61,6 +61,7 @@ export const useCollabDocument = (
 	documentName: string | null,
 	sessionUser: SessionUser | null,
 	user: PresenceUser,
+	reloadKey = 0,
 	onStatelessMessage?: (payload: string) => void,
 ): CollabState => {
 	const [state, setState] = useState<CollabState>(defaultState);
@@ -126,7 +127,7 @@ export const useCollabDocument = (
 			yDoc.destroy();
 			setState(defaultState);
 		};
-	}, [documentName, user, sessionUser]);
+	}, [documentName, reloadKey, user, sessionUser]);
 
 	return state;
 };
@@ -136,9 +137,12 @@ export const useProjectPresence = (
 	sessionUser: SessionUser | null,
 	user: PresenceUser,
 	activeFileId: string | null,
+	onStatelessMessage?: (payload: string) => void,
 ): Awareness | null => {
 	const [awareness, setAwareness] = useState<Awareness | null>(null);
 	const providerRef = useRef<HocuspocusProvider | null>(null);
+	const onStatelessMessageRef = useRef(onStatelessMessage);
+	onStatelessMessageRef.current = onStatelessMessage;
 
 	useEffect(() => {
 		if (!projectId || !sessionUser) {
@@ -151,6 +155,9 @@ export const useProjectPresence = (
 			url: `${API_URL}/collab`,
 			name: `project/${projectId}/${PROJECT_PRESENCE_DOCUMENT_ID}`,
 			document: yDoc,
+			onStateless: ({ payload }: { payload: string }) => {
+				onStatelessMessageRef.current?.(payload);
+			},
 		});
 
 		providerRef.current = provider;

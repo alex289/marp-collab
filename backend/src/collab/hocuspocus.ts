@@ -13,6 +13,7 @@ import { getProjectAuthorization } from "../projects/access-policy.ts";
 import { registerProjectConnection, unregisterProjectConnection } from "./connections.ts";
 import { parseProjectDocumentName } from "../projects/document-identity.ts";
 import { logger } from "../helpers/logger.ts";
+import { isProjectGitSyncing } from "../projects/git-sync-lock.ts";
 
 type CollabContext = {
 	userId: string;
@@ -63,6 +64,9 @@ export const collabServer = new Hocuspocus({
 				throw new Error("Invalid document name");
 			}
 			const { projectId, fileId } = parsed;
+			if (isProjectGitSyncing(projectId)) {
+				throw new Error("Project is syncing with Git");
+			}
 			if (fileId !== PROJECT_PRESENCE_DOCUMENT_ID && !isEditableExtension(fileId)) {
 				throw new Error("Only text files can be opened in the editor");
 			}
