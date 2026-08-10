@@ -18,13 +18,14 @@ RUN cd backend && node --run build && cd ../frontend && node --run build
 
 FROM node:26-trixie-slim
 
-USER node
+RUN mkdir -p /app/data && chown node:node /app/data
 WORKDIR /app
 ENV NODE_ENV=production
 
 COPY --from=builder --chown=node:node /app/dist/ ./
 
 RUN echo '{ "type": "module" }' > package.json
+USER node
 
 EXPOSE 8787
 
