@@ -853,7 +853,7 @@ test.describe("Editor: settings panel", () => {
 	test("rename project from settings panel saves the new name", async ({ page }) => {
 		const input = page.getByLabel("Project name");
 		await input.fill("Settings Panel Renamed");
-		await page.getByRole("button", { name: "Save" }).click();
+		await page.getByRole("button", { name: "Save", exact: true }).click();
 		await expect(input).toHaveValue("Settings Panel Renamed", { timeout: 5_000 });
 	});
 
