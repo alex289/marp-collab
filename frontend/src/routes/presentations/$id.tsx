@@ -281,6 +281,20 @@ function RouteComponent() {
 		presenceUser,
 		collabRevision,
 	);
+	const wasGitSyncingRef = useRef(false);
+	useEffect(() => {
+		if (collab.status === "syncing") {
+			if (!wasGitSyncingRef.current) {
+				wasGitSyncingRef.current = true;
+				toast.info("This project is syncing with Git. Reconnecting once it's done…");
+			}
+			return;
+		}
+		if (wasGitSyncingRef.current && collab.status === "connected") {
+			wasGitSyncingRef.current = false;
+			toast.success("Git sync finished. You're reconnected.");
+		}
+	}, [collab.status]);
 	const [previewFile, setPreviewFile] = useState<DeckFile | null>(null);
 	const [sidebarOpen, setSidebarOpen] = useState(true);
 	const [sidebarWidth, setSidebarWidth] = useState(

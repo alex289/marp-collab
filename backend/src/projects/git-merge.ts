@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { dirname, resolve, sep } from "node:path";
-import diff3Merge from "diff3";
+import { diff3Merge } from "node-diff3";
 import git, { type WalkerEntry } from "isomorphic-git";
 import { isEditableExtension } from "../helpers/file-allowlist.ts";
 
@@ -97,7 +97,7 @@ async function findConflicts(dir: string, ours: string, theirs: string) {
 const LINEBREAKS = /^.*(?:\r?\n|$)/gm;
 
 export function mergeTextFiles(base: string, project: string, remote: string): string {
-	const result = diff3Merge(
+	const result = diff3Merge<string>(
 		project.match(LINEBREAKS) ?? [],
 		base.match(LINEBREAKS) ?? [],
 		remote.match(LINEBREAKS) ?? [],

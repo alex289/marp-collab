@@ -7,7 +7,10 @@ import {
 	flushAndCloseProjectDocuments,
 } from "../../../collab/project-events.ts";
 import { logger } from "../../../helpers/logger.ts";
-import type { ProjectRouteVariables } from "../../../middleware/project-access-middleware.ts";
+import {
+	requireProjectOwner,
+	type ProjectRouteVariables,
+} from "../../../middleware/project-access-middleware.ts";
 import { finishProjectGitSync, startProjectGitSync } from "../../../projects/git-sync-lock.ts";
 import { ProjectGitConflictError } from "../../../projects/git-merge.ts";
 import {
@@ -36,11 +39,7 @@ app.get("/:projectId/git", async (c) => {
 	return c.json(await getProjectGitConfig(c.req.param("projectId")));
 });
 
-app.put("/:projectId/git", async (c) => {
-	if (c.get("projectAccess").readOnly) {
-		return writeOnly(c);
-	}
-
+app.put("/:projectId/git", requireProjectOwner, async (c) => {
 	const parsed = gitConfigSchema.safeParse(await c.req.json());
 	if (!parsed.success) {
 		return c.json({ error: z.prettifyError(parsed.error) }, 400);

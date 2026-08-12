@@ -112,7 +112,7 @@ describe("Project Access Middleware", () => {
 		});
 		equal(nonOwner.status, 403);
 		deepEqual(await nonOwner.json(), {
-			error: "Only the project owner can manage collaborators",
+			error: "Only the project owner can perform this action",
 		});
 
 		const owner = await app.request("/middleware-project/collaborators/middleware-reader", {

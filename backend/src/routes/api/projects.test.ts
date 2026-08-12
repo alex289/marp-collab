@@ -286,7 +286,7 @@ describe("projects routes", () => {
 			method: "PUT",
 			headers: {
 				"content-type": "application/json",
-				"x-test-user-id": "route-writer",
+				"x-test-user-id": "user-1",
 			},
 			body: JSON.stringify({
 				remoteUrl: "http://token@example.com/repo.git",
@@ -295,6 +295,25 @@ describe("projects routes", () => {
 		});
 
 		equal(response.status, 400);
+	});
+
+	test("rejects a non-owner collaborator configuring Git sync", async () => {
+		const response = await app.request("/upload-proj/git", {
+			method: "PUT",
+			headers: {
+				"content-type": "application/json",
+				"x-test-user-id": "route-writer",
+			},
+			body: JSON.stringify({
+				remoteUrl: "https://example.com/repo.git",
+				branch: "main",
+			}),
+		});
+
+		equal(response.status, 403);
+		deepEqual(await response.json(), {
+			error: "Only the project owner can perform this action",
+		});
 	});
 
 	test("saves Git settings and credentials for later requests", async () => {
@@ -366,7 +385,7 @@ describe("projects routes", () => {
 		});
 		equal(collaboratorResponse.status, 403);
 		deepEqual(await collaboratorResponse.json(), {
-			error: "Only the project owner can manage collaborators",
+			error: "Only the project owner can perform this action",
 		});
 
 		const outsiderResponse = await app.request("/upload-proj/collaborators", {

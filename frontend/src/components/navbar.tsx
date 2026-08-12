@@ -17,7 +17,7 @@ import { ModeToggle } from "./mode-toggle";
 import { useTheme } from "./theme-provider";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 
-type CollabStatus = "connecting" | "connected" | "disconnected";
+type CollabStatus = "connecting" | "connected" | "disconnected" | "syncing";
 
 type NavbarProps = {
 	breadcrumb?: {
@@ -32,6 +32,14 @@ const STATUS_DOT: Record<CollabStatus, string> = {
 	connected: "bg-emerald-500",
 	connecting: "animate-pulse bg-amber-500",
 	disconnected: "bg-red-500",
+	syncing: "animate-pulse bg-amber-500",
+};
+
+const STATUS_LABEL: Record<CollabStatus, string> = {
+	connected: "Connected",
+	connecting: "Connecting…",
+	disconnected: "Disconnected",
+	syncing: "Project is syncing with Git…",
 };
 
 export default function Navbar({ breadcrumb, actions }: NavbarProps) {
@@ -108,7 +116,7 @@ export default function Navbar({ breadcrumb, actions }: NavbarProps) {
 							<TooltipTrigger
 								render={
 									<span
-										aria-label={`Connection: ${breadcrumb.status}`}
+										aria-label={STATUS_LABEL[breadcrumb.status]}
 										className={cn(
 											"ml-1 size-2 shrink-0 rounded-full",
 											STATUS_DOT[breadcrumb.status],
@@ -116,7 +124,7 @@ export default function Navbar({ breadcrumb, actions }: NavbarProps) {
 									/>
 								}
 							/>
-							<TooltipContent>Connection: {breadcrumb.status}</TooltipContent>
+							<TooltipContent>{STATUS_LABEL[breadcrumb.status]}</TooltipContent>
 						</Tooltip>
 					) : null}
 				</nav>

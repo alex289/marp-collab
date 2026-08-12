@@ -234,9 +234,11 @@ export function ProjectGitControls({
 export function ProjectGitSetting({
 	projectId,
 	canWrite,
+	isOwner,
 }: {
 	projectId: string;
 	canWrite: boolean;
+	isOwner: boolean;
 }) {
 	const url = `${API_URL}/projects/${projectId}/git`;
 	const { data, mutate } = useSWR<ProjectGitConfig>(canWrite ? url : null, fetcher);
@@ -256,7 +258,7 @@ export function ProjectGitSetting({
 	}, [data]);
 
 	const save = async () => {
-		if (!remoteUrl.trim() || !branch.trim() || saving) {
+		if (!isOwner || !remoteUrl.trim() || !branch.trim() || saving) {
 			return;
 		}
 
@@ -303,15 +305,17 @@ export function ProjectGitSetting({
 					</p>
 					<div className="flex min-w-0 items-center justify-between gap-2 px-1">
 						<p className="truncate text-xs text-muted-foreground">{data.branch}</p>
-						<Button
-							type="button"
-							variant="link"
-							size="xs"
-							className="shrink-0 px-0"
-							onClick={() => setEditing(true)}
-						>
-							Edit settings
-						</Button>
+						{isOwner && (
+							<Button
+								type="button"
+								variant="link"
+								size="xs"
+								className="shrink-0 px-0"
+								onClick={() => setEditing(true)}
+							>
+								Edit settings
+							</Button>
+						)}
 					</div>
 				</>
 			) : (
@@ -325,14 +329,14 @@ export function ProjectGitSetting({
 						value={remoteUrl}
 						onChange={(event) => setRemoteUrl(event.target.value)}
 						placeholder="https://github.com/user/repo.git"
-						disabled={!canWrite || saving}
+						disabled={!isOwner || saving}
 						aria-label="Git remote URL"
 					/>
 					<Input
 						value={branch}
 						onChange={(event) => setBranch(event.target.value)}
 						placeholder="main"
-						disabled={!canWrite || saving}
+						disabled={!isOwner || saving}
 						aria-label="Git branch"
 					/>
 					<Input
@@ -340,7 +344,7 @@ export function ProjectGitSetting({
 						onChange={(event) => setUsername(event.target.value)}
 						placeholder="Username (optional)"
 						autoComplete="username"
-						disabled={!canWrite || saving}
+						disabled={!isOwner || saving}
 						aria-label="Git username"
 					/>
 					<Input
@@ -349,14 +353,14 @@ export function ProjectGitSetting({
 						onChange={(event) => setToken(event.target.value)}
 						placeholder={data?.hasCredentials ? "Saved access token" : "Access token (optional)"}
 						autoComplete="off"
-						disabled={!canWrite || saving}
+						disabled={!isOwner || saving}
 						aria-label="Git access token"
 					/>
 					<Button
 						type="button"
 						variant="outline"
 						className="w-full justify-start"
-						disabled={!canWrite || saving || !remoteUrl.trim() || !branch.trim()}
+						disabled={!isOwner || saving || !remoteUrl.trim() || !branch.trim()}
 						onClick={() => void save()}
 					>
 						{saving ? <Loader2 className="animate-spin" /> : <GitBranch />}
@@ -374,9 +378,9 @@ export function ProjectGitSetting({
 						</Button>
 					)}
 					<p className="px-1 text-xs text-muted-foreground">
-						{canWrite
+						{isOwner
 							? "The access token is encrypted and saved for future syncs."
-							: "You need write access to configure Git sync."}
+							: "Only the project owner can configure Git sync."}
 					</p>
 				</>
 			)}

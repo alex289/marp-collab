@@ -49,7 +49,7 @@ export const requireProjectWriteAccess = createMiddleware<ProjectRouteEnvironmen
 
 export const requireProjectOwner = createMiddleware<ProjectRouteEnvironment>(async (c, next) => {
 	if (!c.get("projectAccess").isOwner) {
-		return c.json({ error: "Only the project owner can manage collaborators" }, 403);
+		return c.json({ error: "Only the project owner can perform this action" }, 403);
 	}
 
 	await next();

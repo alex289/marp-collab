@@ -279,6 +279,7 @@ export const FileSidebar = ({
 				<ProjectGitSetting
 					projectId={projectId}
 					canWrite={projectSettings ? !projectSettings.readOnly : false}
+					isOwner={projectSettings?.isOwner ?? false}
 				/>
 
 				<div className="space-y-1.5">
