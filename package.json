@@ -17,10 +17,10 @@
 		"changeset": "changeset"
 	},
 	"dependencies": {
-		"@changesets/changelog-github": "^0.7.0",
-		"@changesets/cli": "^2.31.1",
-		"oxfmt": "^0.62.0",
-		"oxlint": "^1.77.0",
+		"@changesets/changelog-github": "^1.0.0",
+		"@changesets/cli": "^3.0.0",
+		"oxfmt": "^0.63.0",
+		"oxlint": "^1.78.0",
 		"oxlint-tsgolint": "^7.0.2001"
 	},
 	"engines": {
