@@ -61,6 +61,17 @@ async function ensurePresentationsDir(projectId: string): Promise<void> {
 	await mkdir(resolve(presentationsDir, projectId), { recursive: true });
 }
 
+export async function getProjectDirectory(projectId: string): Promise<string> {
+	await ensurePresentationsDir(projectId);
+	return resolve(presentationsDir, projectId);
+}
+
+export async function clearProjectDocumentState(projectId: string): Promise<void> {
+	const projectDir = await getProjectDirectory(projectId);
+	const files = await Array.fromAsync(glob("**/*.yjs", { cwd: projectDir }));
+	await Promise.all(files.map((file) => rm(resolve(projectDir, file))));
+}
+
 export async function getDeckFiles(projectId: string): Promise<DeckFile[]> {
 	await ensurePresentationsDir(projectId);
 

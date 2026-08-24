@@ -69,7 +69,11 @@ app.get("/:projectId", (c) => {
 		return c.json({ error: "Project not found" }, 404);
 	}
 
-	return c.json({ project, isOwner: authorization.access.isOwner });
+	return c.json({
+		project,
+		isOwner: authorization.access.isOwner,
+		readOnly: authorization.access.readOnly,
+	});
 });
 
 app.patch("/:projectId", async (c) => {

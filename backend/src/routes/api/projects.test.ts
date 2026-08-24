@@ -39,6 +39,7 @@ describe("projects routes", () => {
 	before(async () => {
 		tempDir = await mkdtemp(join(tmpdir(), "marp-test-projects-route-"));
 		process.env.DATA_PATH = tempDir;
+		process.env.AUTH_SECRET = "test-project-routes-secret";
 
 		const dbModule = await import("../../db/db.ts");
 		const projectsRouter = (await import("./projects.ts")).default;
@@ -103,6 +104,7 @@ describe("projects routes", () => {
 		db?.close();
 		await rm(tempDir, { recursive: true, force: true });
 		delete process.env.DATA_PATH;
+		delete process.env.AUTH_SECRET;
 	});
 
 	test("creates a project with the default template", async () => {
@@ -238,6 +240,140 @@ describe("projects routes", () => {
 		});
 	});
 
+	test("returns unconfigured Git settings to the project owner", async () => {
+		const response = await app.request("/upload-proj/git", {
+			headers: { "x-test-user-id": "user-1" },
+		});
+
+		equal(response.status, 200);
+		deepEqual(await response.json(), {
+			configured: false,
+			remoteUrl: null,
+			branch: "main",
+			hasCredentials: false,
+			username: null,
+		});
+	});
+
+	test("allows a collaborator with write access to use Git sync", async () => {
+		const response = await app.request("/upload-proj/git", {
+			headers: { "x-test-user-id": "route-writer" },
+		});
+
+		equal(response.status, 200);
+		deepEqual(await response.json(), {
+			configured: false,
+			remoteUrl: null,
+			branch: "main",
+			hasCredentials: false,
+			username: null,
+		});
+	});
+
+	test("rejects Git sync for a read-only collaborator", async () => {
+		const response = await app.request("/upload-proj/git", {
+			headers: { "x-test-user-id": "route-reader" },
+		});
+
+		equal(response.status, 403);
+		deepEqual(await response.json(), {
+			error: "You do not have write access to this project",
+		});
+	});
+
+	test("requires a credential-free HTTPS Git remote", async () => {
+		const response = await app.request("/upload-proj/git", {
+			method: "PUT",
+			headers: {
+				"content-type": "application/json",
+				"x-test-user-id": "user-1",
+			},
+			body: JSON.stringify({
+				remoteUrl: "http://token@example.com/repo.git",
+				branch: "main",
+			}),
+		});
+
+		equal(response.status, 400);
+	});
+
+	test("rejects a non-owner collaborator configuring Git sync", async () => {
+		const response = await app.request("/upload-proj/git", {
+			method: "PUT",
+			headers: {
+				"content-type": "application/json",
+				"x-test-user-id": "route-writer",
+			},
+			body: JSON.stringify({
+				remoteUrl: "https://example.com/repo.git",
+				branch: "main",
+			}),
+		});
+
+		equal(response.status, 403);
+		deepEqual(await response.json(), {
+			error: "Only the project owner can perform this action",
+		});
+	});
+
+	test("saves Git settings and credentials for later requests", async () => {
+		const response = await app.request("/owner-only-proj/git", {
+			method: "PUT",
+			headers: {
+				"content-type": "application/json",
+				"x-test-user-id": "user-1",
+			},
+			body: JSON.stringify({
+				remoteUrl: "https://example.com/slides.git",
+				branch: "main",
+				username: "git-user",
+				token: "secret-token",
+			}),
+		});
+
+		equal(response.status, 200);
+		deepEqual(await response.json(), {
+			configured: true,
+			remoteUrl: "https://example.com/slides.git",
+			branch: "main",
+			hasCredentials: true,
+			username: "git-user",
+		});
+
+		const reload = await app.request("/owner-only-proj/git", {
+			headers: { "x-test-user-id": "user-1" },
+		});
+		deepEqual(await reload.json(), {
+			configured: true,
+			remoteUrl: "https://example.com/slides.git",
+			branch: "main",
+			hasCredentials: true,
+			username: "git-user",
+		});
+	});
+
+	test("rejects push for a read-only collaborator", async () => {
+		const response = await app.request("/upload-proj/git/push", {
+			method: "POST",
+			headers: { "x-test-user-id": "route-reader" },
+		});
+
+		equal(response.status, 403);
+		deepEqual(await response.json(), {
+			error: "You do not have write access to this project",
+		});
+	});
+
+	test("allows a collaborator with write access to push", async () => {
+		const response = await app.request("/upload-proj/git/push", {
+			method: "POST",
+			headers: { "x-test-user-id": "route-writer" },
+		});
+
+		equal(response.status, 409);
+		deepEqual(await response.json(), { error: "Git sync is not configured" });
+	});
+
 	test("distinguishes a collaborator from an outsider when managing collaborators", async () => {
 		const collaboratorResponse = await app.request("/upload-proj/collaborators", {
 			method: "POST",
@@ -249,7 +385,7 @@ describe("projects routes", () => {
 		});
 		equal(collaboratorResponse.status, 403);
 		deepEqual(await collaboratorResponse.json(), {
-			error: "Only the project owner can manage collaborators",
+			error: "Only the project owner can perform this action",
 		});
 
 		const outsiderResponse = await app.request("/upload-proj/collaborators", {

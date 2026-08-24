@@ -87,6 +87,16 @@ describe("project storage", () => {
 			ok(result instanceof Uint8Array);
 			deepEqual(Array.from(result!), [0, 1, 2, 255]);
 		});
+
+		test("clears collaboration state without deleting source files", async () => {
+			await files.saveDocumentContent("project/clear-state/slides.md", "# Slides");
+			await files.saveDocumentBinary("project/clear-state/slides.md", new Uint8Array([1]));
+
+			await files.clearProjectDocumentState("clear-state");
+
+			equal(await files.getDocumentBinary("project/clear-state/slides.md"), undefined);
+			equal(await files.getDocumentContent("project/clear-state/slides.md"), "# Slides");
+		});
 	});
 
 	describe("getDeckFiles", () => {

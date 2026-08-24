@@ -26,6 +26,7 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import { ProjectNameSetting } from "@/components/project-name-setting";
+import { ProjectGitSetting } from "@/components/project-git-setting";
 import { Label } from "./ui/label";
 import { Button } from "./ui/button";
 import { ProjectFilesPanel } from "@/features/project-files/project-files-panel";
@@ -36,6 +37,7 @@ type WorkspacePanel = "files" | "search" | "outline" | "slides" | "settings";
 type ProjectSettingsResponse = {
 	project: Project;
 	isOwner: boolean;
+	readOnly: boolean;
 };
 
 const WORKSPACE_PANEL_HOTKEYS = {
@@ -274,6 +276,11 @@ export const FileSidebar = ({
 			</SidebarGroupLabel>
 			<SidebarGroupContent className="space-y-4">
 				<ProjectNameSetting projectId={projectId} />
+				<ProjectGitSetting
+					projectId={projectId}
+					canWrite={projectSettings ? !projectSettings.readOnly : false}
+					isOwner={projectSettings?.isOwner ?? false}
+				/>
 
 				<div className="space-y-1.5">
 					<Label htmlFor="theme-select" className="px-1 text-xs font-medium">

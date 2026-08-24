@@ -9,7 +9,7 @@ type CollabState = {
 	yText: Y.Text | null;
 	awareness: Awareness | null;
 	undoManager: Y.UndoManager | null;
-	status: "connecting" | "connected" | "disconnected";
+	status: "connecting" | "connected" | "disconnected" | "syncing";
 	readOnly: boolean;
 	synced: boolean;
 	/**
@@ -32,6 +32,10 @@ const defaultState: CollabState = {
 
 const palette = ["#f97316", "#16a34a", "#0ea5e9", "#e11d48", "#0891b2", "#ca8a04"];
 const PROJECT_PRESENCE_DOCUMENT_ID = "__presence";
+// Matches the message thrown from onAuthenticate in backend/src/collab/hocuspocus.ts
+// while the project is syncing with Git, so we can surface it distinctly from a
+// generic connection failure instead of leaving already-connected users guessing.
+const GIT_SYNC_AUTH_FAILURE_REASON = "Project is syncing with Git";
 
 const hashString = (value: string): number => {
 	let hash = 0;
@@ -61,6 +65,7 @@ export const useCollabDocument = (
 	documentName: string | null,
 	sessionUser: SessionUser | null,
 	user: PresenceUser,
+	reloadKey = 0,
 	onStatelessMessage?: (payload: string) => void,
 ): CollabState => {
 	const [state, setState] = useState<CollabState>(defaultState);
@@ -76,6 +81,10 @@ export const useCollabDocument = (
 		const yDoc = new Y.Doc();
 		const yText = yDoc.getText("content");
 		const undoManager = new Y.UndoManager(yText);
+		// Tracks whether the last authentication failure was caused by a Git sync
+		// in progress, so a subsequent status change can be reported as "syncing"
+		// instead of a plain disconnect until the provider reconnects.
+		let gitSyncing = false;
 
 		const provider = new HocuspocusProvider({
 			url: `${API_URL}/collab`,
@@ -84,8 +93,14 @@ export const useCollabDocument = (
 			onStatus: ({ status }) => {
 				setState((current) => ({
 					...current,
-					status,
+					status: gitSyncing && status !== "connected" ? "syncing" : status,
 				}));
+			},
+			onAuthenticationFailed: ({ reason }) => {
+				gitSyncing = reason === GIT_SYNC_AUTH_FAILURE_REASON;
+				if (gitSyncing) {
+					setState((current) => ({ ...current, status: "syncing" }));
+				}
 			},
 			onStateless: ({ payload }: { payload: string }) => {
 				onStatelessMessageRef.current?.(payload);
@@ -97,6 +112,7 @@ export const useCollabDocument = (
 				}));
 			},
 			onAuthenticated: ({ scope }) => {
+				gitSyncing = false;
 				setState((current) => ({
 					...current,
 					readOnly: scope === "readonly",
@@ -126,7 +142,7 @@ export const useCollabDocument = (
 			yDoc.destroy();
 			setState(defaultState);
 		};
-	}, [documentName, user, sessionUser]);
+	}, [documentName, reloadKey, user, sessionUser]);
 
 	return state;
 };
@@ -136,9 +152,12 @@ export const useProjectPresence = (
 	sessionUser: SessionUser | null,
 	user: PresenceUser,
 	activeFileId: string | null,
+	onStatelessMessage?: (payload: string) => void,
 ): Awareness | null => {
 	const [awareness, setAwareness] = useState<Awareness | null>(null);
 	const providerRef = useRef<HocuspocusProvider | null>(null);
+	const onStatelessMessageRef = useRef(onStatelessMessage);
+	onStatelessMessageRef.current = onStatelessMessage;
 
 	useEffect(() => {
 		if (!projectId || !sessionUser) {
@@ -151,6 +170,9 @@ export const useProjectPresence = (
 			url: `${API_URL}/collab`,
 			name: `project/${projectId}/${PROJECT_PRESENCE_DOCUMENT_ID}`,
 			document: yDoc,
+			onStateless: ({ payload }: { payload: string }) => {
+				onStatelessMessageRef.current?.(payload);
+			},
 		});
 
 		providerRef.current = provider;

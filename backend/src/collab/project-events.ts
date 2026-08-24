@@ -7,12 +7,20 @@ import {
 } from "../projects/document-identity.ts";
 import { saveDocumentBinary, saveDocumentContent } from "../projects/storage.ts";
 
-export function broadcastFilesChanged(projectId: string): void {
+function broadcastProjectEvent(projectId: string, payload: string): void {
 	for (const [documentName, document] of collabServer.documents) {
 		if (documentBelongsToProject(documentName, projectId)) {
-			document.broadcastStateless("files-changed");
+			document.broadcastStateless(payload);
 		}
 	}
+}
+
+export function broadcastFilesChanged(projectId: string): void {
+	broadcastProjectEvent(projectId, "files-changed");
+}
+
+export function broadcastGitPulled(projectId: string): void {
+	broadcastProjectEvent(projectId, "git-pulled");
 }
 
 async function flushDocument(documentName: string): Promise<void> {
@@ -49,6 +57,25 @@ export async function flushProjectFolderDocuments(
 	folderPath: string,
 ): Promise<void> {
 	await Promise.all(folderDocumentNames(projectId, folderPath).map(flushDocument));
+}
+
+export async function flushAndCloseProjectDocuments(projectId: string): Promise<void> {
+	const documents = [...collabServer.documents.entries()].filter(([documentName]) => {
+		const parsed = parseProjectDocumentName(documentName);
+		return parsed?.projectId === projectId && parsed.fileId !== "__presence";
+	});
+
+	await Promise.all(documents.map(([documentName]) => flushDocument(documentName)));
+	for (const [documentName] of documents) {
+		collabServer.closeConnections(documentName);
+	}
+	await Promise.all(
+		documents.map(async ([documentName, document]) => {
+			await collabServer.debouncer.executeNow(`onStoreDocument-${documentName}`);
+			await document.saveMutex.waitForUnlock();
+			await collabServer.unloadDocument(document);
+		}),
+	);
 }
 
 /**
