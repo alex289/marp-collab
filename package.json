@@ -2,25 +2,22 @@
 	"name": "marp-collab",
 	"version": "0.2.0",
 	"private": true,
-	"workspaces": [
-		"."
-	],
 	"type": "module",
 	"scripts": {
-		"dev": "pnpm -r --parallel dev",
+		"dev": "pnpm --filter '!.' -r --parallel dev",
 		"lint": "oxlint --type-aware --deny-warnings",
 		"format": "oxfmt --write",
 		"format:check": "oxfmt --check",
-		"build": "pnpm -r build",
-		"typecheck": "pnpm -r typecheck",
+		"build": "pnpm --filter '!.' -r build",
+		"typecheck": "pnpm --filter '!.' -r typecheck",
 		"test": "pnpm --filter ./frontend test && pnpm --filter ./backend test",
 		"changeset": "changeset"
 	},
 	"dependencies": {
-		"@changesets/changelog-github": "^0.7.0",
-		"@changesets/cli": "^2.31.1",
-		"oxfmt": "^0.62.0",
-		"oxlint": "^1.77.0",
+		"@changesets/changelog-github": "^1.0.0",
+		"@changesets/cli": "^3.0.0",
+		"oxfmt": "^0.63.0",
+		"oxlint": "^1.78.0",
 		"oxlint-tsgolint": "^7.0.2001"
 	},
 	"engines": {
