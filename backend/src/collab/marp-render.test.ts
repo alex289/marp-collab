@@ -63,4 +63,38 @@ section { background-image: url("../assets/local.png"); }
 	test("returns undefined for a missing markdown document", async () => {
 		equal(await renderMarkdownForPdf("pdf-render", "missing.md"), undefined);
 	});
+
+	test("expands @include comments and reports broken includes inline", async () => {
+		await storage.saveDocumentContent(
+			"project/pdf-include/deck.md",
+			`# Main
+
+<!-- @include: chapters/intro.md -->
+
+<!-- @include: chapters/missing.md -->
+`,
+		);
+		await storage.saveDocumentContent(
+			"project/pdf-include/chapters/intro.md",
+			`---
+title: Should be stripped
+---
+## Included heading
+
+<!-- @include: ./nested.md -->
+
+<!-- @include: ../deck.md -->
+`,
+		);
+		await storage.saveDocumentContent("project/pdf-include/chapters/nested.md", "Nested content");
+
+		const rendered = await renderMarkdownForPdf("pdf-include", "deck.md");
+
+		ok(rendered);
+		ok(rendered.html.includes("Included heading"));
+		ok(rendered.html.includes("Nested content"));
+		ok(!rendered.html.includes("Should be stripped"));
+		ok(rendered.html.includes("file not found"));
+		ok(rendered.html.includes("circular include"));
+	});
 });
