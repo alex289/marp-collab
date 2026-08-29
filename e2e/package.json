@@ -9,7 +9,7 @@
 	},
 	"devDependencies": {
 		"@playwright/test": "^1.62.1",
-		"@types/node": "^26.2.0",
+		"@types/node": "^26.3.0",
 		"oauth2-mock-server": "^9.1.0",
 		"typescript": "^7.0.2"
 	}
