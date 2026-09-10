@@ -14,14 +14,14 @@
 		"changeset": "changeset"
 	},
 	"dependencies": {
-		"@changesets/changelog-github": "^1.0.0",
-		"@changesets/cli": "^3.0.1",
-		"oxfmt": "^0.65.0",
-		"oxlint": "^1.80.0",
+		"@changesets/changelog-github": "^1.0.1",
+		"@changesets/cli": "^3.0.2",
+		"oxfmt": "^0.67.0",
+		"oxlint": "^1.82.0",
 		"oxlint-tsgolint": "^7.0.2001"
 	},
 	"engines": {
 		"node": ">=24.0.0"
 	},
-	"packageManager": "pnpm@11.10.0"
+	"packageManager": "pnpm@12.3.4"
 }
