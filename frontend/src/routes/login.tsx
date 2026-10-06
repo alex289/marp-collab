@@ -22,8 +22,8 @@ function LoginRoute() {
 	);
 
 	const handleSignIn = async (providerId: string) => {
-		await authClient.signIn.oauth2({
-			providerId: providerId,
+		await authClient.signIn.social({
+			provider: providerId,
 		});
 	};
 

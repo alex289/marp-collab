@@ -302,7 +302,6 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 	const handleFormatRef = useRef<() => void>(() => undefined);
 	const uploadImagesRef = useRef(onUploadImages);
 	const { resolvedTheme } = useTheme();
-	projectFileIdsRef.current = projectFileIds;
 
 	const fileKind = useMemo(() => {
 		if (!label) {
@@ -322,17 +321,16 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 		themeNames: [],
 		projectThemes: [],
 	});
-	completionConfigRef.current = {
-		fileKind: fileKind === "CSS" ? "css" : "markdown",
-		currentFileId: fileId,
-		files,
-		themeNames,
-		projectThemes,
-	};
-	const completionSource = useMemo(
-		() => createEditorCompletionSource(() => completionConfigRef.current),
-		[],
-	);
+
+	useEffect(() => {
+		completionConfigRef.current = {
+			fileKind: fileKind === "CSS" ? "css" : "markdown",
+			currentFileId: fileId,
+			files,
+			themeNames,
+			projectThemes,
+		};
+	}, [fileKind, fileId, files, themeNames, projectThemes]);
 
 	const handleFormat = useCallback(async () => {
 		const view = viewRef.current;
@@ -382,6 +380,7 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 	}, [onUploadImages]);
 
 	useEffect(() => {
+		projectFileIdsRef.current = projectFileIds;
 		const view = viewRef.current;
 		if (view) {
 			forceLinting(view);
@@ -395,6 +394,7 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 		}
 
 		const documentKind = fileKind === "CSS" ? "css" : "markdown";
+		const completionSource = createEditorCompletionSource(() => completionConfigRef.current);
 		const languageExtension = documentKind === "css" ? css() : marpMarkdown();
 		const assetReferenceLinter = linter((view) => {
 			const diagnostics: Diagnostic[] = findMissingAssetReferences(
@@ -588,7 +588,6 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 		wrapEnabled,
 		readOnly,
 		onCursorLineChange,
-		completionSource,
 	]);
 
 	useImperativeHandle(ref, () => ({

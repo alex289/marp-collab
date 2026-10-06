@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { HocuspocusProvider } from "@hocuspocus/provider";
 import type { Awareness } from "y-protocols/awareness.js";
 import * as Y from "yjs";
@@ -64,12 +64,13 @@ export const useCollabDocument = (
 	onStatelessMessage?: (payload: string) => void,
 ): CollabState => {
 	const [state, setState] = useState<CollabState>(defaultState);
-	const onStatelessMessageRef = useRef(onStatelessMessage);
-	onStatelessMessageRef.current = onStatelessMessage;
+	const handleStatelessMessage = useEffectEvent((payload: string) => {
+		onStatelessMessage?.(payload);
+	});
 
 	useEffect(() => {
+		// The cleanup of the previous document already reset the state.
 		if (!documentName || !sessionUser) {
-			setState(defaultState);
 			return;
 		}
 
@@ -88,7 +89,7 @@ export const useCollabDocument = (
 				}));
 			},
 			onStateless: ({ payload }: { payload: string }) => {
-				onStatelessMessageRef.current?.(payload);
+				handleStatelessMessage(payload);
 			},
 			onSynced: () => {
 				setState((current) => ({
@@ -111,6 +112,8 @@ export const useCollabDocument = (
 			image: user.image,
 		});
 
+		// Publishes the objects of the connection this effect just opened.
+		// oxlint-disable-next-line react/set-state-in-effect
 		setState({
 			yText,
 			awareness: provider.awareness,
@@ -141,8 +144,8 @@ export const useProjectPresence = (
 	const providerRef = useRef<HocuspocusProvider | null>(null);
 
 	useEffect(() => {
+		// The cleanup of the previous connection already reset the awareness.
 		if (!projectId || !sessionUser) {
-			setAwareness(null);
 			return;
 		}
 
@@ -154,6 +157,8 @@ export const useProjectPresence = (
 		});
 
 		providerRef.current = provider;
+		// Publishes the awareness of the connection this effect just opened.
+		// oxlint-disable-next-line react/set-state-in-effect
 		setAwareness(provider.awareness);
 
 		return () => {
