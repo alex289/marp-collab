@@ -63,6 +63,8 @@ At least one OAuth provider must be configured. Each provider is identified by a
 | `AUTH_PROVIDER_<n>_DISCOVERY_URL` | —                      | OIDC discovery URL (`.well-known/openid-configuration`). **Required.** |
 | `AUTH_PROVIDER_<n>_SCOPES`        | `openid,email,profile` | Comma-separated OAuth scopes.                                          |
 
+Register `<URL>/api/v1/auth/callback/<n>` as the redirect URI with each provider (e.g. `https://example.com/api/v1/auth/callback/0`).
+
 #### Advanced
 
 These settings are not required to be set, but can be used to customize the app's behavior.

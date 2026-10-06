@@ -1,4 +1,4 @@
-import { createContext, useContext, useRef } from "react";
+import { createContext, useContext } from "react";
 import {
 	ChevronRight,
 	File,
@@ -388,13 +388,12 @@ export function FileTreeView({
 	onDeleteFile,
 	onRenameFile,
 }: FileTreeViewProps) {
-	const dragStateRef = useRef(workspace.dragState);
-	dragStateRef.current = workspace.dragState;
+	const { draggingFileId } = workspace.dragState;
 
 	const isExternalFileDrag = (event: React.DragEvent) =>
 		Array.from(event.dataTransfer.types).includes("Files");
 	const onExternalFileDragOverPath = (event: React.DragEvent, path: string): boolean => {
-		if (dragStateRef.current.draggingFileId || !isExternalFileDrag(event)) {
+		if (draggingFileId || !isExternalFileDrag(event)) {
 			return false;
 		}
 
@@ -411,7 +410,7 @@ export function FileTreeView({
 	};
 	const onExternalFileDropOnPath = (event: React.DragEvent, destinationFolder: string): boolean => {
 		const droppedFiles = Array.from(event.dataTransfer.files);
-		if (dragStateRef.current.draggingFileId || droppedFiles.length === 0) {
+		if (draggingFileId || droppedFiles.length === 0) {
 			return false;
 		}
 

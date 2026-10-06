@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState, useSyncExternalStore } from "react";
 import { ScriptOnce } from "@tanstack/react-router";
 import { useHotkey } from "@tanstack/react-hotkeys";
 
@@ -31,20 +31,27 @@ const ThemeProviderContext = createContext<ThemeProviderState>({
 	},
 });
 
-function applyTheme(theme: Theme): "dark" | "light" {
+const DARK_SCHEME_QUERY = "(prefers-color-scheme: dark)";
+
+function isTheme(value: string | null): value is Theme {
+	return value === "light" || value === "dark" || value === "system";
+}
+
+function subscribeToColorScheme(onChange: () => void) {
+	const media = window.matchMedia(DARK_SCHEME_QUERY);
+	media.addEventListener("change", onChange);
+	return () => media.removeEventListener("change", onChange);
+}
+
+function getPrefersDark() {
+	return window.matchMedia(DARK_SCHEME_QUERY).matches;
+}
+
+function applyTheme(resolved: "dark" | "light") {
 	const root = document.documentElement;
 	root.classList.remove("light", "dark");
-
-	const resolved: "dark" | "light" =
-		theme === "system"
-			? window.matchMedia("(prefers-color-scheme: dark)").matches
-				? "dark"
-				: "light"
-			: theme;
-
 	root.classList.add(resolved);
 	root.style.colorScheme = resolved;
-	return resolved;
 }
 
 export function ThemeProvider({
@@ -52,42 +59,23 @@ export function ThemeProvider({
 	defaultTheme = "system",
 	storageKey = "theme",
 }: ThemeProviderProps) {
-	const [theme, setThemeState] = useState<Theme>(defaultTheme);
-	const [resolvedTheme, setResolvedTheme] = useState<"dark" | "light">("light");
-	const [mounted, setMounted] = useState(false);
-
-	useHotkey("D", () => setTheme(theme === "dark" ? "light" : "dark"));
-
-	useEffect(() => {
+	const [theme, setThemeState] = useState<Theme>(() => {
 		const stored = localStorage.getItem(storageKey);
-		setThemeState(
-			stored === "light" || stored === "dark" || stored === "system" ? stored : defaultTheme,
-		);
-		setMounted(true);
-	}, [defaultTheme, storageKey]);
-
-	useEffect(() => {
-		if (!mounted) {
-			return;
-		}
-		setResolvedTheme(applyTheme(theme));
-	}, [theme, mounted]);
-
-	useEffect(() => {
-		if (!mounted || theme !== "system") {
-			return;
-		}
-
-		const media = window.matchMedia("(prefers-color-scheme: dark)");
-		const onChange = () => setResolvedTheme(applyTheme("system"));
-		media.addEventListener("change", onChange);
-		return () => media.removeEventListener("change", onChange);
-	}, [theme, mounted]);
+		return isTheme(stored) ? stored : defaultTheme;
+	});
+	const prefersDark = useSyncExternalStore(subscribeToColorScheme, getPrefersDark);
+	const resolvedTheme = theme === "system" ? (prefersDark ? "dark" : "light") : theme;
 
 	const setTheme = (next: Theme) => {
 		localStorage.setItem(storageKey, next);
 		setThemeState(next);
 	};
+
+	useHotkey("D", () => setTheme(theme === "dark" ? "light" : "dark"));
+
+	useEffect(() => {
+		applyTheme(resolvedTheme);
+	}, [resolvedTheme]);
 
 	return (
 		<ThemeProviderContext value={{ theme, resolvedTheme, setTheme }}>

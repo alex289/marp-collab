@@ -273,7 +273,7 @@ export const FileSidebar = ({
 				Settings
 			</SidebarGroupLabel>
 			<SidebarGroupContent className="space-y-4">
-				<ProjectNameSetting projectId={projectId} />
+				<ProjectNameSetting key={projectId} projectId={projectId} />
 
 				<div className="space-y-1.5">
 					<Label htmlFor="theme-select" className="px-1 text-xs font-medium">

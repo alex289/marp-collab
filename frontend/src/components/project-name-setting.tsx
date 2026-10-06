@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "./ui/label";
@@ -13,15 +13,13 @@ export const ProjectNameSetting = ({ projectId }: ProjectNameSettingProps) => {
 	const { project, isProjectOwner: isOwner, mutate } = useProject(projectId);
 	const router = useRouter();
 
-	const [name, setName] = useState("");
+	// Null while the user has not edited the field, so it follows the saved name.
+	const [draftName, setDraftName] = useState<string | null>(null);
 	const [saving, setSaving] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
 	const currentName = project?.name ?? "";
-
-	useEffect(() => {
-		setName(currentName);
-	}, [currentName]);
+	const name = draftName ?? currentName;
 
 	const trimmed = name.trim();
 	const canSave = isOwner && !saving && trimmed.length > 0 && trimmed !== currentName;
@@ -44,6 +42,7 @@ export const ProjectNameSetting = ({ projectId }: ProjectNameSettingProps) => {
 		}
 
 		await mutate();
+		setDraftName(null);
 		await router.invalidate();
 	};
 
@@ -56,7 +55,7 @@ export const ProjectNameSetting = ({ projectId }: ProjectNameSettingProps) => {
 				<Input
 					id="project-name"
 					value={name}
-					onChange={(e) => setName(e.target.value)}
+					onChange={(e) => setDraftName(e.target.value)}
 					onKeyDown={(e) => {
 						if (e.key === "Enter") {
 							void handleSave();

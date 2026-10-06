@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { DeckFile } from "../../lib/types";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../../components/ui/dialog";
 import type { ProjectFilesWorkspace } from "./use-project-files-workspace";
@@ -10,11 +10,8 @@ type ImagePreviewDialogProps = {
 };
 
 export function ImagePreviewDialog({ workspace, file, onOpenChange }: ImagePreviewDialogProps) {
-	const [loadError, setLoadError] = useState(false);
-
-	useEffect(() => {
-		setLoadError(false);
-	}, [file?.id]);
+	const [failedFileId, setFailedFileId] = useState<string | null>(null);
+	const loadError = file !== null && failedFileId === file.id;
 
 	return (
 		<Dialog open={file !== null} onOpenChange={onOpenChange}>
@@ -33,7 +30,7 @@ export function ImagePreviewDialog({ workspace, file, onOpenChange }: ImagePrevi
 								src={workspace.fileUrl(file.id)}
 								alt={file.id}
 								className="max-h-[75svh] max-w-full object-contain"
-								onError={() => setLoadError(true)}
+								onError={() => setFailedFileId(file.id)}
 							/>
 						)}
 					</div>

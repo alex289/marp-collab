@@ -1,6 +1,6 @@
 FROM node:26-trixie AS builder
 
-COPY --from=ghcr.io/pnpm/pnpm:11.5.2 /opt/pnpm /opt/pnpm
+COPY --from=ghcr.io/pnpm/pnpm:12.9.1 /opt/pnpm /opt/pnpm
 RUN ln -s /opt/pnpm/pnpm /usr/local/bin/pnpm
 
 WORKDIR /app
