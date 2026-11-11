@@ -7,7 +7,6 @@
 		}
 	],
 	"commit": false,
-	"ignore": ["frontend", "backend", "e2e"],
 	"baseBranch": "main",
 	"ignore": ["frontend", "backend", "e2e"],
 	"privatePackages": {

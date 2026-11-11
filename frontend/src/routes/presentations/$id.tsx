@@ -497,26 +497,24 @@ function RouteComponent() {
 		setMarkdown("");
 	}
 
-	useEffect(() => {
-		if (!selectedFile || selectedFile.id.endsWith(".css")) {
-			return;
-		}
+	// The collab state lags one render behind a file switch, so yText can still
+	// hold the previously opened document. Only expose it once the selected
+	// file's own document has synced.
+	const syncedYText =
+		collab.yText && collab.synced && collab.documentName === (selectedFile?.documentName ?? null)
+			? collab.yText
+			: null;
 
-		// The collab state lags one render behind a file switch, so yText can
-		// still hold the previously opened document. Only sync once the selected
-		// file's own document has loaded; until then keep the previous markdown
-		// so the preview doesn't re-render and lose its scroll position.
-		if (
-			!collab.yText ||
-			!collab.synced ||
-			collab.documentName !== (selectedFile.documentName ?? null)
-		) {
+	useEffect(() => {
+		// Until the selected file's document has loaded, keep the previous
+		// markdown so the preview doesn't re-render and lose its scroll position.
+		if (!selectedFile || selectedFile.id.endsWith(".css") || !syncedYText) {
 			return;
 		}
 
 		const sync = () => {
 			// oxlint-disable-next-line no-base-to-string
-			setMarkdown(collab.yText?.toString() ?? "");
+			setMarkdown(syncedYText.toString());
 		};
 
 		let frame: number;
@@ -527,13 +525,13 @@ function RouteComponent() {
 			frame = requestAnimationFrame(sync);
 		};
 		sync();
-		collab.yText.observe(scheduleSync);
+		syncedYText.observe(scheduleSync);
 
 		return () => {
 			cancelAnimationFrame(frame);
-			collab.yText?.unobserve(scheduleSync);
+			syncedYText.unobserve(scheduleSync);
 		};
-	}, [collab.documentName, collab.synced, collab.yText, selectedFile]);
+	}, [syncedYText, selectedFile]);
 
 	useEffect(() => {
 		const cssFiles = files.filter((file) => file.id.toLowerCase().endsWith(".css"));
@@ -580,35 +578,42 @@ function RouteComponent() {
 	}, [files, id, assetToken, projectThemeStore]);
 
 	useEffect(() => {
-		if (
-			!selectedFile?.id.toLowerCase().endsWith(".css") ||
-			!collab.yText ||
-			collab.documentName !== (selectedFile.documentName ?? null)
-		) {
+		// Wait for the document to sync so an empty, still-loading text never
+		// replaces the theme loaded from the server.
+		if (!selectedFile?.id.toLowerCase().endsWith(".css") || !syncedYText) {
 			return;
 		}
 
-		let timer: ReturnType<typeof setTimeout>;
+		const applyTheme = () => {
+			// oxlint-disable-next-line no-base-to-string
+			const css = rewriteCssUrls(syncedYText.toString(), id, selectedFile.id, assetToken);
+			projectThemeStore.update((current) =>
+				upsertProjectTheme(current, { id: selectedFile.id, css }),
+			);
+		};
+
+		let timer: ReturnType<typeof setTimeout> | undefined;
 		const syncTheme = () => {
 			clearTimeout(timer);
 			// Wait for a typing burst to settle before parsing a partial CSS theme.
 			timer = setTimeout(() => {
-				// oxlint-disable-next-line no-base-to-string
-				const css = rewriteCssUrls(collab.yText?.toString() ?? "", id, selectedFile.id, assetToken);
-				projectThemeStore.update((current) =>
-					upsertProjectTheme(current, { id: selectedFile.id, css }),
-				);
+				timer = undefined;
+				applyTheme();
 			}, 150);
 		};
 
-		collab.yText.observe(syncTheme);
+		syncedYText.observe(syncTheme);
 		syncTheme();
 
 		return () => {
-			clearTimeout(timer);
-			collab.yText?.unobserve(syncTheme);
+			syncedYText.unobserve(syncTheme);
+			// Flush a pending update so switching files doesn't drop the last edits.
+			if (timer !== undefined) {
+				clearTimeout(timer);
+				applyTheme();
+			}
 		};
-	}, [collab.documentName, collab.yText, id, selectedFile, assetToken, projectThemeStore]);
+	}, [syncedYText, id, selectedFile, assetToken, projectThemeStore]);
 
 	const currentTheme = useMemo(() => getMarkdownTheme(markdown) ?? "default", [markdown]);
 
@@ -922,8 +927,14 @@ function RouteComponent() {
 	}, [isPresentation, search.slide]);
 
 	const maxSlideIndex = Math.max(0, slideCount - 1);
-	if (slideIndex > maxSlideIndex) {
-		setSlideIndex(maxSlideIndex);
+	// Clamp only when the deck shrinks, so a slide received from the presenter
+	// survives while included files are still loading.
+	const [clampedForSlideCount, setClampedForSlideCount] = useState(slideCount);
+	if (clampedForSlideCount !== slideCount) {
+		setClampedForSlideCount(slideCount);
+		if (slideIndex > maxSlideIndex) {
+			setSlideIndex(maxSlideIndex);
+		}
 	}
 	const [fullscreenPromptVisible, setFullscreenPromptVisible] = useState(autoFullscreen);
 
@@ -1427,11 +1438,7 @@ function RouteComponent() {
 						files={files}
 						themeNames={themeNames}
 						projectThemes={projectThemes}
-						yText={
-							collab.synced && collab.documentName === selectedFile?.documentName
-								? collab.yText
-								: null
-						}
+						yText={syncedYText}
 						awareness={collab.awareness}
 						undoManager={collab.undoManager}
 						readOnly={collab.readOnly}

@@ -7,7 +7,13 @@ import { useAuthSync } from "@/hooks/use-auth-sync";
 import { useHealthCheck } from "@/hooks/use-health-check";
 import useIsUserOffline from "@/hooks/use-is-user-offline";
 import { authClient } from "@/lib/auth-client";
-import { HeadContent, Outlet, createRootRoute, redirect } from "@tanstack/react-router";
+import {
+	HeadContent,
+	Outlet,
+	createRootRoute,
+	redirect,
+	type ErrorComponentProps,
+} from "@tanstack/react-router";
 import { HomeIcon, ServerCrashIcon, WifiOffIcon } from "lucide-react";
 
 export const Route = createRootRoute({
@@ -39,7 +45,7 @@ export const Route = createRootRoute({
 			</Button>
 		</div>
 	),
-	errorComponent: ({ error }) => (
+	errorComponent: ({ error }: ErrorComponentProps) => (
 		<div className="text-center mt-50">
 			<div className="text-3xl md:text-4xl font-semibold">An Error Occurred</div>
 			<div className="mt-4 mx-auto max-w-100">

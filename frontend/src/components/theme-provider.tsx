@@ -37,14 +37,21 @@ function isTheme(value: string | null): value is Theme {
 	return value === "light" || value === "dark" || value === "system";
 }
 
+let darkSchemeMedia: MediaQueryList | undefined;
+
+function getDarkSchemeMedia() {
+	darkSchemeMedia ??= window.matchMedia(DARK_SCHEME_QUERY);
+	return darkSchemeMedia;
+}
+
 function subscribeToColorScheme(onChange: () => void) {
-	const media = window.matchMedia(DARK_SCHEME_QUERY);
+	const media = getDarkSchemeMedia();
 	media.addEventListener("change", onChange);
 	return () => media.removeEventListener("change", onChange);
 }
 
 function getPrefersDark() {
-	return window.matchMedia(DARK_SCHEME_QUERY).matches;
+	return getDarkSchemeMedia().matches;
 }
 
 function applyTheme(resolved: "dark" | "light") {
