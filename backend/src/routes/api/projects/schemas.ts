@@ -87,6 +87,19 @@ const moveFileSchema = z.object({
 });
 
 const gitConfigSchema = z.object({
+	folder: z
+		.string()
+		.trim()
+		.max(1024)
+		.default("")
+		.refine(
+			(value) =>
+				value === "" ||
+				value
+					.split("/")
+					.every((part) => /^[A-Za-z0-9_ -][A-Za-z0-9._ -]*$/.test(part) && part !== ".."),
+			"Use a relative repository folder without hidden or parent directories",
+		),
 	remoteUrl: z
 		.string()
 		.trim()

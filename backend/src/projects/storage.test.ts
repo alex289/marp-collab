@@ -1,6 +1,6 @@
 import { describe, test, before, after } from "node:test";
 import { ok, equal, deepEqual, rejects } from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, mkdir, writeFile, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { Readable } from "node:stream";
@@ -384,5 +384,13 @@ describe("project storage", () => {
 		test("returns false for a folder that does not exist", async () => {
 			equal(await files.deleteProjectFolder("ops-proj", "no-such-folder"), false);
 		});
+	});
+	test("keeps Git metadata inaccessible through public file operations", async () => {
+		const dir = await files.getProjectDirectory("metadata-project");
+		await mkdir(join(dir, ".git", "repository"), { recursive: true });
+		await writeFile(join(dir, ".git", "repository", "config"), "private config");
+		equal(await files.readProjectFile("metadata-project", ".git/repository/config"), undefined);
+		equal(await files.deleteProjectFolder("metadata-project", ".git"), false);
+		equal(await readFile(join(dir, ".git", "repository", "config"), "utf8"), "private config");
 	});
 });

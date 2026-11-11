@@ -1,11 +1,13 @@
-import { createCipheriv, createDecipheriv, createHmac, randomBytes } from "node:crypto";
 import fs from "node:fs";
-import { access, readFile, writeFile } from "node:fs/promises";
+import { access, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import git from "isomorphic-git";
 import http from "isomorphic-git/http/node";
 import { mergeProjectBranches, type ProjectGitResolution } from "./git-merge.ts";
 import { clearProjectDocumentState, getProjectDirectory } from "./storage.ts";
+
+import { encryptSecret, decryptSecret } from "../helpers/encryption.ts";
+import { syncSupportedFiles } from "./git-files.ts";
 
 const REMOTE = "origin";
 const CREDENTIALS_FILE = "marp-collab-credentials";
@@ -29,9 +31,12 @@ export type ProjectGitConfig = {
 	configured: boolean;
 	remoteUrl: string | null;
 	branch: string;
+	folder: string;
 	hasCredentials: boolean;
 	username: string | null;
 };
+
+export class ProjectGitRemoteError extends Error {}
 
 export class ProjectGitContentError extends Error {}
 export class ProjectGitNotConfiguredError extends Error {}
@@ -43,8 +48,8 @@ function authOptions(credentials: GitCredentials) {
 
 	return {
 		onAuth: () => ({
-			username: credentials.username || credentials.token!,
-			password: credentials.username ? credentials.token : undefined,
+			username: credentials.username || "git",
+			password: credentials.token,
 		}),
 	};
 }
@@ -53,34 +58,15 @@ function credentialsPath(dir: string): string {
 	return join(dir, ".git", CREDENTIALS_FILE);
 }
 
-function credentialsKey(): Buffer {
-	const secret = process.env.AUTH_SECRET;
-	if (!secret) {
-		throw new Error("AUTH_SECRET is not set");
-	}
-
-	return createHmac("sha256", secret).update("marp-collab-git-credentials").digest();
-}
-
 async function readCredentials(projectId: string, dir: string): Promise<GitCredentials> {
 	try {
-		const encrypted = JSON.parse(await readFile(credentialsPath(dir), "utf8")) as {
-			iv: string;
-			tag: string;
-			data: string;
-		};
-		const decipher = createDecipheriv(
-			"aes-256-gcm",
-			credentialsKey(),
-			Buffer.from(encrypted.iv, "base64url"),
-		);
-		decipher.setAAD(Buffer.from(projectId));
-		decipher.setAuthTag(Buffer.from(encrypted.tag, "base64url"));
-		const plaintext = Buffer.concat([
-			decipher.update(Buffer.from(encrypted.data, "base64url")),
-			decipher.final(),
-		]);
-		const credentials = JSON.parse(plaintext.toString()) as StoredCredentials;
+		const credentials = JSON.parse(
+			decryptSecret(
+				await readFile(credentialsPath(dir), "utf8"),
+				"marp-collab-git-credentials",
+				projectId,
+			),
+		) as StoredCredentials;
 
 		return typeof credentials.token === "string" ? credentials : {};
 	} catch {
@@ -100,20 +86,17 @@ async function saveCredentials(
 	}
 
 	const plaintext = JSON.stringify({ username: credentials.username ?? existing.username, token });
-	const iv = randomBytes(12);
-	const cipher = createCipheriv("aes-256-gcm", credentialsKey(), iv);
-	cipher.setAAD(Buffer.from(projectId));
-	const data = Buffer.concat([cipher.update(plaintext), cipher.final()]);
-
 	await writeFile(
 		credentialsPath(dir),
-		JSON.stringify({
-			iv: iv.toString("base64url"),
-			tag: cipher.getAuthTag().toString("base64url"),
-			data: data.toString("base64url"),
-		}),
+		encryptSecret(plaintext, "marp-collab-git-credentials", projectId),
 		{ mode: 0o600 },
 	);
+}
+
+async function repositoryDirectory(projectId: string): Promise<string> {
+	const dir = join(await getProjectDirectory(projectId), ".git", "repository");
+	await mkdir(dir, { recursive: true });
+	return dir;
 }
 
 async function hasGitDirectory(dir: string): Promise<boolean> {
@@ -141,14 +124,6 @@ async function stageProjectFiles(dir: string): Promise<boolean> {
 	let changed = false;
 
 	for (const [filepath, head, worktree] of matrix) {
-		if (filepath.endsWith(".yjs")) {
-			if (head) {
-				await git.remove({ fs, dir, filepath });
-				changed = true;
-			}
-			continue;
-		}
-
 		if (head === worktree) {
 			continue;
 		}
@@ -165,7 +140,12 @@ async function stageProjectFiles(dir: string): Promise<boolean> {
 }
 
 async function commitProjectFiles(dir: string, branch: string, author: GitAuthor): Promise<void> {
-	if (!(await stageProjectFiles(dir))) {
+	const changed = await stageProjectFiles(dir);
+	const hasHead = await git.resolveRef({ fs, dir, ref: branch }).then(
+		() => true,
+		() => false,
+	);
+	if (!changed && hasHead) {
 		return;
 	}
 
@@ -189,7 +169,7 @@ async function configureBranch(dir: string, branch: string): Promise<void> {
 }
 
 async function getConfiguredProject(projectId: string) {
-	const dir = await getProjectDirectory(projectId);
+	const dir = await repositoryDirectory(projectId);
 	if (!(await hasGitDirectory(dir))) {
 		throw new ProjectGitNotConfiguredError("Git sync is not configured");
 	}
@@ -204,7 +184,8 @@ async function getConfiguredProject(projectId: string) {
 		throw new ProjectGitNotConfiguredError("Git sync is not configured");
 	}
 
-	return { dir, branch: branch ?? "main", remoteUrl: origin.url, credentials };
+	const folder = (await git.getConfig({ fs, dir, path: "marp.folder" })) ?? "";
+	return { dir, branch: branch ?? "main", remoteUrl: origin.url, credentials, folder };
 }
 
 async function getRemoteBranch(
@@ -225,9 +206,10 @@ async function getRemoteBranch(
 
 export async function getProjectGitConfig(projectId: string): Promise<ProjectGitConfig> {
 	try {
-		const { remoteUrl, branch, credentials } = await getConfiguredProject(projectId);
+		const { remoteUrl, branch, credentials, folder } = await getConfiguredProject(projectId);
 		return {
 			configured: true,
+			folder,
 			remoteUrl,
 			branch,
 			hasCredentials: Boolean(credentials.token),
@@ -240,6 +222,7 @@ export async function getProjectGitConfig(projectId: string): Promise<ProjectGit
 
 		return {
 			configured: false,
+			folder: "",
 			remoteUrl: null,
 			branch: "main",
 			hasCredentials: false,
@@ -253,13 +236,49 @@ export async function configureProjectGit({
 	remoteUrl,
 	branch,
 	credentials,
+	folder = "",
 }: {
 	projectId: string;
 	remoteUrl: string;
 	branch: string;
 	credentials: GitCredentials;
+	folder?: string;
 }): Promise<ProjectGitConfig> {
-	const dir = await getProjectDirectory(projectId);
+	const dir = await repositoryDirectory(projectId);
+	const existingConfig = await getProjectGitConfig(projectId);
+	const existing =
+		existingConfig.remoteUrl === remoteUrl ? await readCredentials(projectId, dir) : {};
+	const effectiveCredentials = {
+		username: credentials.username ?? existing.username,
+		token: credentials.token || existing.token,
+	};
+	try {
+		// Send supplied credentials on the first request, including for public remotes.
+		await git.listServerRefs({
+			http,
+			url: remoteUrl,
+			...authOptions(effectiveCredentials),
+			headers: effectiveCredentials.token
+				? {
+						Authorization: `Basic ${Buffer.from(`${effectiveCredentials.username || "git"}:${effectiveCredentials.token}`).toString("base64")}`,
+					}
+				: undefined,
+		});
+	} catch {
+		throw new ProjectGitRemoteError(
+			"Could not access the Git repository. Check the URL, username and access token.",
+		);
+	}
+	if (
+		existingConfig.configured &&
+		(existingConfig.remoteUrl !== remoteUrl ||
+			existingConfig.branch !== branch ||
+			existingConfig.folder !== folder)
+	) {
+		await rm(dir, { recursive: true, force: true });
+		await mkdir(dir, { recursive: true });
+	}
+
 	if (!(await hasGitDirectory(dir))) {
 		await git.init({ fs, dir, defaultBranch: branch });
 	}
@@ -271,7 +290,8 @@ export async function configureProjectGit({
 
 	await git.addRemote({ fs, dir, remote: REMOTE, url: remoteUrl, force: true });
 	await configureBranch(dir, branch);
-	await saveCredentials(projectId, dir, credentials);
+	await git.setConfig({ fs, dir, path: "marp.folder", value: folder });
+	await saveCredentials(projectId, dir, effectiveCredentials);
 
 	return getProjectGitConfig(projectId);
 }
@@ -285,8 +305,9 @@ export async function pullProjectFromGit({
 	author: GitAuthor;
 	resolutions?: Record<string, ProjectGitResolution>;
 }): Promise<{ commit: string; pulled: boolean }> {
-	const { dir, remoteUrl, branch, credentials } = await getConfiguredProject(projectId);
+	const { dir, remoteUrl, branch, credentials, folder } = await getConfiguredProject(projectId);
 	await configureBranch(dir, branch);
+	await syncSupportedFiles(await getProjectDirectory(projectId), join(dir, folder));
 	await commitProjectFiles(dir, branch, author);
 
 	const remoteBranch = await getRemoteBranch(dir, remoteUrl, branch, credentials);
@@ -325,8 +346,8 @@ export async function pullProjectFromGit({
 
 		if (pulled) {
 			await git.checkout({ fs, dir, ref: branch, force: true });
+			await syncSupportedFiles(join(dir, folder), await getProjectDirectory(projectId));
 			await clearProjectDocumentState(projectId);
-			await commitProjectFiles(dir, branch, author);
 		}
 	}
 
@@ -340,8 +361,9 @@ export async function pushProjectToGit({
 	projectId: string;
 	author: GitAuthor;
 }): Promise<{ commit: string; pushed: boolean }> {
-	const { dir, remoteUrl, branch, credentials } = await getConfiguredProject(projectId);
+	const { dir, remoteUrl, branch, credentials, folder } = await getConfiguredProject(projectId);
 	await configureBranch(dir, branch);
+	await syncSupportedFiles(await getProjectDirectory(projectId), join(dir, folder));
 	await commitProjectFiles(dir, branch, author);
 
 	const [remoteBranch, commit] = await Promise.all([

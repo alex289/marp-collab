@@ -17,6 +17,7 @@ import {
 	configureProjectGit,
 	getProjectGitConfig,
 	ProjectGitContentError,
+	ProjectGitRemoteError,
 	ProjectGitNotConfiguredError,
 	pullProjectFromGit,
 	pushProjectToGit,
@@ -56,6 +57,7 @@ app.put("/:projectId/git", requireProjectOwner, async (c) => {
 				projectId,
 				remoteUrl: parsed.data.remoteUrl,
 				branch: parsed.data.branch,
+				folder: parsed.data.folder,
 				credentials: {
 					username: parsed.data.username,
 					token: parsed.data.token,
@@ -63,6 +65,9 @@ app.put("/:projectId/git", requireProjectOwner, async (c) => {
 			}),
 		);
 	} catch (error) {
+		if (error instanceof ProjectGitRemoteError || error instanceof ProjectGitContentError) {
+			return c.json({ error: error.message }, 400);
+		}
 		logger.warn(
 			{
 				projectId,

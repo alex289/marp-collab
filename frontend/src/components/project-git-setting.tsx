@@ -22,6 +22,7 @@ type ProjectGitConfig = {
 	configured: boolean;
 	remoteUrl: string | null;
 	branch: string;
+	folder: string;
 	hasCredentials: boolean;
 	username: string | null;
 };
@@ -243,6 +244,7 @@ export function ProjectGitSetting({
 	const url = `${API_URL}/projects/${projectId}/git`;
 	const { data, mutate } = useSWR<ProjectGitConfig>(canWrite ? url : null, fetcher);
 	const [remoteUrl, setRemoteUrl] = useState("");
+	const [folder, setFolder] = useState("");
 	const [branch, setBranch] = useState("main");
 	const [username, setUsername] = useState("");
 	const [token, setToken] = useState("");
@@ -253,6 +255,7 @@ export function ProjectGitSetting({
 		if (data) {
 			setRemoteUrl(data.remoteUrl ?? "");
 			setBranch(data.branch);
+			setFolder(data.folder);
 			setUsername(data.username ?? "");
 		}
 	}, [data]);
@@ -270,6 +273,7 @@ export function ProjectGitSetting({
 				body: JSON.stringify({
 					remoteUrl: remoteUrl.trim(),
 					branch: branch.trim(),
+					folder: folder.trim(),
 					username: username.trim() || undefined,
 					token: token || undefined,
 				}),
@@ -304,7 +308,10 @@ export function ProjectGitSetting({
 						{data.remoteUrl}
 					</p>
 					<div className="flex min-w-0 items-center justify-between gap-2 px-1">
-						<p className="truncate text-xs text-muted-foreground">{data.branch}</p>
+						<p className="truncate text-xs text-muted-foreground">
+							{data.branch}
+							{data.folder ? ` / ${data.folder}` : ""}
+						</p>
 						{isOwner && (
 							<Button
 								type="button"
@@ -338,6 +345,13 @@ export function ProjectGitSetting({
 						placeholder="main"
 						disabled={!isOwner || saving}
 						aria-label="Git branch"
+					/>
+					<Input
+						value={folder}
+						onChange={(event) => setFolder(event.target.value)}
+						placeholder="Repository folder (optional)"
+						disabled={!isOwner || saving}
+						aria-label="Repository folder"
 					/>
 					<Input
 						value={username}

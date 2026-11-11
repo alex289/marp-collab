@@ -1,3 +1,4 @@
+import { isProjectGitSyncing } from "../../../projects/git-sync-lock.ts";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import z from "zod";
@@ -111,6 +112,10 @@ app.delete("/:projectId", async (c) => {
 	const authorization = getProjectAuthorization(projectId, user.id, "manage");
 	if (!authorization.allowed) {
 		return c.json({ error: "Project not found or you don't have permission to delete it" }, 404);
+	}
+
+	if (isProjectGitSyncing(projectId)) {
+		return c.json({ error: "This project is syncing with Git" }, 409);
 	}
 
 	await deleteProjectDirectory(projectId);

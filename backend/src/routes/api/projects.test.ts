@@ -1,9 +1,11 @@
-import { describe, test, before, after } from "node:test";
+import { describe, test, before, after, mock } from "node:test";
 import { deepEqual, equal, ok } from "node:assert/strict";
 import { mkdtemp, readdir, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { Readable } from "node:stream";
+import { startProjectGitSync, finishProjectGitSync } from "../../projects/git-sync-lock.ts";
+import git from "isomorphic-git";
 import { Hono } from "hono";
 import { ZipArchive } from "archiver";
 import type { HonoVariables } from "../../types.ts";
@@ -37,6 +39,7 @@ describe("projects routes", () => {
 	let getProjectById: typeof import("../../db/models/project.ts").getProjectById;
 
 	before(async () => {
+		mock.method(git, "listServerRefs", () => Promise.resolve([]));
 		tempDir = await mkdtemp(join(tmpdir(), "marp-test-projects-route-"));
 		process.env.DATA_PATH = tempDir;
 		process.env.AUTH_SECRET = "test-project-routes-secret";
@@ -145,11 +148,11 @@ describe("projects routes", () => {
 		const markdown = await files.getDocumentContent(`project/${body.projectId}/presentation.md`);
 		ok(markdown?.includes("theme: whs"));
 
-		const css = await files.getDocumentContent(`project/${body.projectId}/theme/whs.css`);
+		const css = await files.getDocumentContent(`project/${body.projectId}/theme/theme.css`);
 		ok(css?.includes("@theme whs"));
 
 		const deckFiles = await files.getDeckFiles(body.projectId);
-		ok(deckFiles.some((file) => file.id === "theme/logo.svg"));
+		ok(deckFiles.some((file) => file.id === "theme/whs-logo.svg"));
 	});
 
 	test("rejects an unknown template value", async () => {
@@ -250,6 +253,7 @@ describe("projects routes", () => {
 			configured: false,
 			remoteUrl: null,
 			branch: "main",
+			folder: "",
 			hasCredentials: false,
 			username: null,
 		});
@@ -265,6 +269,7 @@ describe("projects routes", () => {
 			configured: false,
 			remoteUrl: null,
 			branch: "main",
+			folder: "",
 			hasCredentials: false,
 			username: null,
 		});
@@ -336,6 +341,7 @@ describe("projects routes", () => {
 			configured: true,
 			remoteUrl: "https://example.com/slides.git",
 			branch: "main",
+			folder: "",
 			hasCredentials: true,
 			username: "git-user",
 		});
@@ -347,6 +353,7 @@ describe("projects routes", () => {
 			configured: true,
 			remoteUrl: "https://example.com/slides.git",
 			branch: "main",
+			folder: "",
 			hasCredentials: true,
 			username: "git-user",
 		});
@@ -540,5 +547,51 @@ describe("projects routes", () => {
 
 		const entriesAfter = await readdir(presentationsDir);
 		deepEqual(entriesAfter.sort(), entriesBefore.sort());
+	});
+	test("rejects invalid remote settings without saving them", async (t) => {
+		t.mock.method(git, "listServerRefs", () => Promise.reject(new Error("401")));
+		const response = await app.request("/owner-only-proj/git", {
+			method: "PUT",
+			headers: { "content-type": "application/json", "x-test-user-id": "user-1" },
+			body: JSON.stringify({
+				remoteUrl: "https://example.com/missing.git",
+				branch: "main",
+				token: "invalid",
+			}),
+		});
+		equal(response.status, 400);
+		ok(((await response.json()) as { error: string }).error.includes("Check the URL"));
+	});
+
+	test("rejects project file mutations while Git sync is running", async () => {
+		startProjectGitSync("upload-proj");
+		try {
+			const response = await app.request("/upload-proj/files", {
+				method: "POST",
+				headers: { "content-type": "application/json", "x-test-user-id": "user-1" },
+				body: JSON.stringify({ name: "racing.md" }),
+			});
+			equal(response.status, 409);
+		} finally {
+			finishProjectGitSync("upload-proj");
+		}
+	});
+
+	test("rejects repository folder traversal", async () => {
+		for (const folder of [
+			"../private",
+			"/absolute",
+			".git",
+			"slides/../private",
+			"slides/.git",
+			"slides\\private",
+		]) {
+			const response = await app.request("/owner-only-proj/git", {
+				method: "PUT",
+				headers: { "content-type": "application/json", "x-test-user-id": "user-1" },
+				body: JSON.stringify({ remoteUrl: "https://example.com/repo.git", branch: "main", folder }),
+			});
+			equal(response.status, 400);
+		}
 	});
 });

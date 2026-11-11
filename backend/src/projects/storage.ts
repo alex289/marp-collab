@@ -36,7 +36,13 @@ function resolveDocumentPath(documentName: string): string | null {
 		return null;
 	}
 
-	if (isAbsolute(fileId) || fileId.split("/").includes("..")) {
+	if (
+		isAbsolute(fileId) ||
+		fileId
+			.replace(/\\/g, "/")
+			.split("/")
+			.some((part) => part.startsWith("."))
+	) {
 		throw new Error(`Invalid presentation file id: ${fileId}`);
 	}
 
@@ -68,7 +74,7 @@ export async function getProjectDirectory(projectId: string): Promise<string> {
 
 export async function clearProjectDocumentState(projectId: string): Promise<void> {
 	const projectDir = await getProjectDirectory(projectId);
-	const files = await Array.fromAsync(glob("**/*.yjs", { cwd: projectDir }));
+	const files = await Array.fromAsync(glob("**/*.yjs", { cwd: projectDir, exclude: [".git/**"] }));
 	await Promise.all(files.map((file) => rm(resolve(projectDir, file))));
 }
 
@@ -164,7 +170,14 @@ export async function createProjectDir(projectId: string, dirPath: string): Prom
 		throw new Error(`Invalid project id: ${projectId}`);
 	}
 
-	if (!dirPath || isAbsolute(dirPath) || dirPath.split("/").includes("..")) {
+	if (
+		!dirPath ||
+		isAbsolute(dirPath) ||
+		dirPath
+			.replace(/\\/g, "/")
+			.split("/")
+			.some((part) => part.startsWith("."))
+	) {
 		throw new Error(`Invalid dir path: ${dirPath}`);
 	}
 
@@ -245,7 +258,14 @@ function resolveProjectFilePath(projectId: string, fileId: string): string | nul
 		return null;
 	}
 
-	if (!fileId || isAbsolute(fileId) || fileId.split("/").includes("..")) {
+	if (
+		!fileId ||
+		isAbsolute(fileId) ||
+		fileId
+			.replace(/\\/g, "/")
+			.split("/")
+			.some((part) => part.startsWith("."))
+	) {
 		return null;
 	}
 

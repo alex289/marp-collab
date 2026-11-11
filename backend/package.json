@@ -9,7 +9,7 @@
 		"dev": "node --watch --env-file=.env src/app.ts",
 		"build": "rolldown --config",
 		"typecheck": "tsc --noEmit",
-		"test": "node --test src/**/*.test.ts"
+		"test": "node --test 'src/**/*.test.ts'"
 	},
 	"dependencies": {
 		"@hocuspocus/server": "^4.6.0",
