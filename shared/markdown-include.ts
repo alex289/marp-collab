@@ -2,7 +2,7 @@ const MAX_DEPTH = 10;
 const MAX_INCLUDES = 100;
 const MAX_CHARACTERS = 1_000_000;
 const marker = /^ {0,3}<!--\s*@include:[\t ]*([^\r\n]+?)\s*-->[\t ]*\r?$/;
-const frontmatter = /^\uFEFF?---\r?\n(?:[^\r\n]*\r?\n)*?(?:---|\.\.\.)(?:\r?\n|$)/;
+const frontmatter = /^\uFEFF?---\r?\n(?:[^\r\n]*\r?\n)*?(?:---[\t ]*|\.\.\.)(?:\r?\n|$)/;
 
 function error(message: string): string {
 	return `> ⚠️ **Include error:** ${message}`;
