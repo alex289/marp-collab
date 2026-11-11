@@ -2,9 +2,6 @@
 	"name": "marp-collab",
 	"version": "0.2.0",
 	"private": true,
-	"workspaces": [
-		"."
-	],
 	"type": "module",
 	"scripts": {
 		"dev": "pnpm -r --parallel dev",
@@ -17,14 +14,14 @@
 		"changeset": "changeset"
 	},
 	"dependencies": {
-		"@changesets/changelog-github": "^0.7.0",
-		"@changesets/cli": "^2.31.1",
-		"oxfmt": "^0.62.0",
-		"oxlint": "^1.77.0",
-		"oxlint-tsgolint": "^7.0.2001"
+		"@changesets/changelog-github": "^1.0.1",
+		"@changesets/cli": "^3.0.3",
+		"oxfmt": "^0.77.0",
+		"oxlint": "^1.92.0",
+		"oxlint-tsgolint": "^7.0.2006"
 	},
 	"engines": {
 		"node": ">=24.0.0"
 	},
-	"packageManager": "pnpm@11.10.0"
+	"packageManager": "pnpm@12.18.0"
 }

@@ -43,18 +43,19 @@ const hashString = (value: string): number => {
 };
 
 export const usePresenceUser = (sessionUser: SessionUser | null): PresenceUser => {
+	const { id, email, name, image } = sessionUser ?? {};
 	return useMemo(() => {
-		if (!sessionUser) {
+		if (!id) {
 			return { userId: "", userName: "", color: "#0ea5e9", image: null };
 		}
-		const seed = sessionUser.id ?? sessionUser.email;
+		const seed = id;
 		return {
-			userId: sessionUser.id,
-			userName: sessionUser.name || sessionUser.email,
+			userId: id,
+			userName: name || email || "",
 			color: palette[hashString(seed) % palette.length] ?? "#0ea5e9",
-			image: sessionUser.image ?? null,
+			image: image ?? null,
 		};
-	}, [sessionUser]);
+	}, [id, email, name, image]);
 };
 
 export const useCollabDocument = (
@@ -63,12 +64,13 @@ export const useCollabDocument = (
 	user: PresenceUser,
 	onStatelessMessage?: (payload: string) => void,
 ): CollabState => {
+	const sessionUserId = sessionUser?.id;
 	const [state, setState] = useState<CollabState>(defaultState);
 	const onStatelessMessageRef = useRef(onStatelessMessage);
 	onStatelessMessageRef.current = onStatelessMessage;
 
 	useEffect(() => {
-		if (!documentName || !sessionUser) {
+		if (!documentName || !sessionUserId) {
 			setState(defaultState);
 			return;
 		}
@@ -126,7 +128,7 @@ export const useCollabDocument = (
 			yDoc.destroy();
 			setState(defaultState);
 		};
-	}, [documentName, user, sessionUser]);
+	}, [documentName, user, sessionUserId]);
 
 	return state;
 };
@@ -137,11 +139,12 @@ export const useProjectPresence = (
 	user: PresenceUser,
 	activeFileId: string | null,
 ): Awareness | null => {
+	const sessionUserId = sessionUser?.id;
 	const [awareness, setAwareness] = useState<Awareness | null>(null);
 	const providerRef = useRef<HocuspocusProvider | null>(null);
 
 	useEffect(() => {
-		if (!projectId || !sessionUser) {
+		if (!projectId || !sessionUserId) {
 			setAwareness(null);
 			return;
 		}
@@ -162,7 +165,7 @@ export const useProjectPresence = (
 			yDoc.destroy();
 			setAwareness(null);
 		};
-	}, [projectId, sessionUser]);
+	}, [projectId, sessionUserId]);
 
 	useEffect(() => {
 		const provider = providerRef.current;

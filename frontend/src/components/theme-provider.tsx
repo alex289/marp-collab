@@ -56,8 +56,6 @@ export function ThemeProvider({
 	const [resolvedTheme, setResolvedTheme] = useState<"dark" | "light">("light");
 	const [mounted, setMounted] = useState(false);
 
-	useHotkey("D", () => setTheme(theme === "dark" ? "light" : "dark"));
-
 	useEffect(() => {
 		const stored = localStorage.getItem(storageKey);
 		setThemeState(
@@ -88,6 +86,8 @@ export function ThemeProvider({
 		localStorage.setItem(storageKey, next);
 		setThemeState(next);
 	};
+
+	useHotkey("D", () => setTheme(theme === "dark" ? "light" : "dark"));
 
 	return (
 		<ThemeProviderContext value={{ theme, resolvedTheme, setTheme }}>

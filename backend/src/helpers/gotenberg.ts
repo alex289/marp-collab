@@ -5,20 +5,20 @@ import { getMimeType } from "./file-allowlist.ts";
 const GOTENBERG_URL = process.env.GOTENBERG_URL ?? "http://gotenberg:3000";
 
 function buildMetadata(rendered: RenderedPdfInput): string {
-	const metadata: Record<string, string | string[]> = {
-		Title: rendered.title,
-		Creator: "Marp Collab",
+	const metadata: Record<string, string> = {
+		title: rendered.title,
+		creator: "Marp Collab",
 	};
 	if (rendered.author) {
-		metadata.Author = rendered.author;
+		metadata.author = rendered.author;
 	}
 	if (rendered.description) {
-		metadata.Subject = rendered.description;
+		metadata.subject = rendered.description;
 	}
 	if (rendered.keywords?.length) {
-		metadata.Keywords = rendered.keywords;
+		metadata.keywords = rendered.keywords.join(", ");
 	}
-	return JSON.stringify(metadata);
+	return JSON.stringify([{ op: "set-metadata", ...metadata }]);
 }
 
 function buildIndexHtml(rendered: RenderedPdfInput): string {
@@ -61,8 +61,8 @@ export async function renderPdfViaGotenberg(
 	form.append("preferCssPageSize", "true");
 	form.append("emulatedMediaType", "print");
 	form.append("waitDelay", "2s");
-	form.append("generateDocumentOutline", "true");
-	form.append("metadata", buildMetadata(rendered));
+	form.append("nativeBookmarks", "true");
+	form.append("stages", buildMetadata(rendered));
 
 	return fetch(`${GOTENBERG_URL}/forms/chromium/convert/html`, {
 		method: "POST",

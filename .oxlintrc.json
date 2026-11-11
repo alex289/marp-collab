@@ -5,6 +5,10 @@
 		"browser": true
 	},
 	"rules": {
+		// React Compiler is not enabled; retain the pre-upgrade lint scope for effects and refs.
+		"react/set-state-in-effect": "off",
+		"react/refs": "off",
+		"react/preserve-manual-memoization": "off",
 		"no-alert": "error",
 		"no-empty": "error",
 		"no-console": "error",
