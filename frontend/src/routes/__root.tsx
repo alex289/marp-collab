@@ -43,7 +43,7 @@ export const Route = createRootRoute({
 		<div className="text-center mt-50">
 			<div className="text-3xl md:text-4xl font-semibold">An Error Occurred</div>
 			<div className="mt-4 mx-auto max-w-100">
-				{error instanceof Error ? error.message : String(error)}
+				{error instanceof Error ? error.message : "An unexpected error occurred."}
 			</div>
 			<Button className="mt-6 px-4" size="lg" onClick={() => (window.location.href = "/")}>
 				<HomeIcon />

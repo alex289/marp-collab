@@ -53,6 +53,10 @@ All settings are configured via environment variables.
 | `URL`         | —       | Public base URL of the app (e.g. `https://example.com`). Used by Better Auth as the trusted origin. **Required.** |
 | `AUTH_SECRET` | —       | Random secret used by Better Auth to sign sessions. **Required.**                                                 |
 
+PDF export requires Gotenberg 9; the Compose files use version 9.4.0. Custom deployments must upgrade their Gotenberg service alongside the app.
+
+Register `${URL}/api/v1/auth/callback/<n>` as the redirect URI with each OAuth provider (for example, `https://slides.example.com/api/v1/auth/callback/0`). When upgrading from Better Auth 1.6, replace the previous `/api/v1/auth/oauth2/callback/<n>` redirect URI and restart any sign-ins in progress. Providers must support PKCE, which is now enabled by default.
+
 At least one OAuth provider must be configured. Each provider is identified by a numeric index `<n>` starting at `0`:
 
 | Variable                          | Default                | Description                                                            |
@@ -62,8 +66,6 @@ At least one OAuth provider must be configured. Each provider is identified by a
 | `AUTH_PROVIDER_<n>_CLIENT_SECRET` | —                      | OAuth client secret. **Required.**                                     |
 | `AUTH_PROVIDER_<n>_DISCOVERY_URL` | —                      | OIDC discovery URL (`.well-known/openid-configuration`). **Required.** |
 | `AUTH_PROVIDER_<n>_SCOPES`        | `openid,email,profile` | Comma-separated OAuth scopes.                                          |
-
-Register `<URL>/api/v1/auth/callback/<n>` as the redirect URI with each provider (e.g. `https://example.com/api/v1/auth/callback/0`).
 
 #### Advanced
 

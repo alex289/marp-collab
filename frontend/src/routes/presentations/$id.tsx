@@ -504,11 +504,19 @@ function RouteComponent() {
 			setMarkdown(collab.yText?.toString() ?? "");
 		};
 
+		let frame: number;
+		const scheduleSync = () => {
+			cancelAnimationFrame(frame);
+			// Yjs observers run inside editor transactions. Publish to React after
+			// the transaction settles so rapid typing cannot nest React updates.
+			frame = requestAnimationFrame(sync);
+		};
 		sync();
-		collab.yText.observe(sync);
+		collab.yText.observe(scheduleSync);
 
 		return () => {
-			collab.yText?.unobserve(sync);
+			cancelAnimationFrame(frame);
+			collab.yText?.unobserve(scheduleSync);
 		};
 	}, [collab.documentName, collab.synced, collab.yText, selectedFile]);
 
@@ -565,20 +573,24 @@ function RouteComponent() {
 			return;
 		}
 
+		let timer: ReturnType<typeof setTimeout>;
 		const syncTheme = () => {
-			// oxlint-disable-next-line no-base-to-string
-			const css = rewriteCssUrls(collab.yText?.toString() ?? "", id, selectedFile.id, assetToken);
-			projectThemeStore.update((current) =>
-				upsertProjectTheme(current, {
-					id: selectedFile.id,
-					css,
-				}),
-			);
+			clearTimeout(timer);
+			// Wait for a typing burst to settle before parsing a partial CSS theme.
+			timer = setTimeout(() => {
+				// oxlint-disable-next-line no-base-to-string
+				const css = rewriteCssUrls(collab.yText?.toString() ?? "", id, selectedFile.id, assetToken);
+				projectThemeStore.update((current) =>
+					upsertProjectTheme(current, { id: selectedFile.id, css }),
+				);
+			}, 150);
 		};
 
 		collab.yText.observe(syncTheme);
+		syncTheme();
 
 		return () => {
+			clearTimeout(timer);
 			collab.yText?.unobserve(syncTheme);
 		};
 	}, [collab.documentName, collab.yText, id, selectedFile, assetToken, projectThemeStore]);
@@ -1398,7 +1410,11 @@ function RouteComponent() {
 						files={files}
 						themeNames={themeNames}
 						projectThemes={projectThemes}
-						yText={collab.yText}
+						yText={
+							collab.synced && collab.documentName === selectedFile?.documentName
+								? collab.yText
+								: null
+						}
 						awareness={collab.awareness}
 						undoManager={collab.undoManager}
 						readOnly={collab.readOnly}

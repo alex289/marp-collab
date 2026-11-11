@@ -24,6 +24,7 @@ function LoginRoute() {
 	const handleSignIn = async (providerId: string) => {
 		await authClient.signIn.social({
 			provider: providerId,
+			callbackURL: "/",
 		});
 	};
 
