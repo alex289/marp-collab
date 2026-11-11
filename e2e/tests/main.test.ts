@@ -479,6 +479,65 @@ test.describe("Editor page — file management", () => {
 });
 
 test.describe("Editor: content editing", () => {
+	test("expands includes, refreshes their content and navigates all included slides", async ({
+		page,
+	}) => {
+		await page.goto("/");
+		await createPresentation(page, "Markdown Include Test");
+		await page.waitForURL(/\/presentations\/.+/);
+		await waitForSidebar(page);
+		const projectId = new URL(page.url()).pathname.split("/").at(-1)!;
+		const upload = async (text: string) => {
+			const response = await page.request.post(`/api/v1/projects/${projectId}/files/upload`, {
+				multipart: {
+					file: { name: "part.md", mimeType: "text/markdown", buffer: Buffer.from(text) },
+				},
+			});
+			expect(response.ok()).toBeTruthy();
+		};
+		await upload("# Included first\n\n---\n\n# Included second");
+		const editor = page.locator(".cm-content");
+		await editor.click();
+		await page.keyboard.press("ControlOrMeta+A");
+		await page.keyboard.insertText("# Main\n\n---\n\n<!-- @include: part.md -->");
+		const preview = page.frameLocator('iframe[title="Marp preview"]');
+		await expect(preview.getByRole("heading", { name: "Included second" })).toBeAttached({
+			timeout: 15_000,
+		});
+		await upload("# Updated first\n\n---\n\n# Updated second");
+		await expect(preview.getByRole("heading", { name: "Updated second" })).toBeAttached({
+			timeout: 15_000,
+		});
+		await expect(editor).toContainText("<!-- @include: part.md -->");
+		await expect(editor).not.toContainText("Updated second");
+		await page.getByRole("button", { name: "Start", exact: true }).click();
+		await expect(page.getByText("Slide 1/3", { exact: true })).toBeVisible();
+		await page.getByRole("button", { name: "Next", exact: true }).click();
+		await page.getByRole("button", { name: "Next", exact: true }).click();
+		await expect(page.getByText("Slide 3/3", { exact: true })).toBeVisible();
+		await expect(page.getByRole("button", { name: "Next", exact: true })).toBeDisabled();
+		const includeUrl = `**/api/v1/projects/${projectId}/files/part.md`;
+		let failed = false;
+		await page.route(includeUrl, async (route) => {
+			await route.fulfill({ status: 503, body: "Temporary failure" });
+			failed = true;
+		});
+		await expect.poll(() => failed, { timeout: 10_000 }).toBeTruthy();
+		// Let the failed response reach the resolver before inspecting the frame.
+		await page.evaluate(
+			() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+		);
+		await expect(page.getByText("Slide 3/3", { exact: true })).toBeVisible();
+		const presentation = page.frameLocator('iframe[title="Presentation"]');
+		await expect(presentation.getByRole("heading", { name: "Updated second" })).toBeAttached();
+		await page.unroute(includeUrl);
+		await upload("# Recovered first\n\n---\n\n# Recovered second");
+		await expect(presentation.getByRole("heading", { name: "Recovered second" })).toBeAttached({
+			timeout: 15_000,
+		});
+		await expect(page.getByText("Slide 3/3", { exact: true })).toBeVisible();
+	});
+
 	test("type into the CodeMirror editor and see live preview update", async ({ page }) => {
 		await page.goto("/");
 

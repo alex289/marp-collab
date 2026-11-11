@@ -26,6 +26,8 @@ import {
 	isValidProjectFileLocation,
 	openProjectFile,
 } from "../../../projects/storage.ts";
+import { toDocumentName } from "../../../projects/document-identity.ts";
+import { getCurrentDocumentContent } from "../../../collab/document-content.ts";
 import {
 	requireProjectWriteAccess,
 	type ProjectRouteVariables,
@@ -156,7 +158,18 @@ app.get("/:projectId/files/:fileId{.+}", async (c) => {
 	const fileId = decodeURIComponent(c.req.param("fileId"));
 
 	if (isMarkdownFileId(fileId)) {
-		return c.json({ error: "Use the collaboration endpoint for markdown files" }, 400);
+		if (!isValidProjectFileLocation(projectId, fileId)) {
+			return c.json({ error: "Invalid file path" }, 400);
+		}
+		c.header("Cache-Control", "no-store");
+		// Markdown is edited via the collab endpoint; serve reads from the live
+		// Yjs document when one is loaded so includes/previews see current content.
+		const documentName = toDocumentName(projectId, fileId);
+		const content = await getCurrentDocumentContent(documentName);
+		if (content === undefined) {
+			return c.json({ error: "File not found" }, 404);
+		}
+		return c.text(content);
 	}
 
 	const file = await openProjectFile(projectId, fileId);

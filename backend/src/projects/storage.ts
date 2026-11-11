@@ -174,7 +174,13 @@ export async function getDocumentContent(documentName: string): Promise<string |
 	try {
 		return await readFile(filePath, "utf8");
 	} catch (error) {
-		if (isMissingFileError(error)) {
+		// A directory (or a path below a regular file) is not a document.
+		if (
+			isMissingFileError(error) ||
+			(error instanceof Error &&
+				"code" in error &&
+				(error.code === "EISDIR" || error.code === "ENOTDIR"))
+		) {
 			return undefined;
 		}
 
