@@ -275,8 +275,9 @@ export const FileSidebar = ({
 				Settings
 			</SidebarGroupLabel>
 			<SidebarGroupContent className="space-y-4">
-				<ProjectNameSetting projectId={projectId} />
+				<ProjectNameSetting key={projectId} projectId={projectId} />
 				<ProjectGitSetting
+					key={`git-${projectId}`}
 					projectId={projectId}
 					canWrite={projectSettings ? !projectSettings.readOnly : false}
 					isOwner={projectSettings?.isOwner ?? false}

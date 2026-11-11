@@ -18,10 +18,10 @@ For breaking changes or major new features, open an issue beforehand to discuss 
 
 ### Required tools
 
-| Tool                           | Version       | Purpose         |
-| ------------------------------ | ------------- | --------------- |
-| [Node.js](https://nodejs.org/) | 24.x or 26.x  | Runtime         |
-| [pnpm](https://pnpm.io/)       | 11.x or newer | Package manager |
+| Tool                           | Version          | Purpose         |
+| ------------------------------ | ---------------- | --------------- |
+| [Node.js](https://nodejs.org/) | 24.x or 26.x     | Runtime         |
+| [pnpm](https://pnpm.io/)       | 12.18.0 (pinned) | Package manager |
 
 ### Setting up the development environment
 

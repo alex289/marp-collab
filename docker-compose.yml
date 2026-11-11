@@ -15,7 +15,7 @@ services:
     depends_on:
       - gotenberg
   gotenberg:
-    image: gotenberg/gotenberg:9
+    image: gotenberg/gotenberg:9.4.0
     container_name: marp-gotenberg
     restart: unless-stopped
     environment:

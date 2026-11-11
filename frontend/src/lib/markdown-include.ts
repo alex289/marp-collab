@@ -1,0 +1,34 @@
+import { API_URL } from "./config.ts";
+import { expandMarkdownIncludes } from "../../../shared/markdown-include.ts";
+export { hasMarkdownIncludes } from "../../../shared/markdown-include.ts";
+
+export async function resolveMarkdownIncludes(
+	markdown: string,
+	projectId: string,
+	currentFileId: string | null,
+	signal?: AbortSignal,
+	onSourceLines?: (lines: number[]) => void,
+): Promise<string> {
+	if (!projectId) {
+		return markdown;
+	}
+	return await expandMarkdownIncludes(
+		markdown,
+		currentFileId ?? "",
+		async (fileId) => {
+			const encodedId = fileId.split("/").map(encodeURIComponent).join("/");
+			const response = await fetch(
+				`${API_URL}/projects/${encodeURIComponent(projectId)}/files/${encodedId}`,
+				{ signal, cache: "no-store" },
+			);
+			if (response.status === 404) {
+				return undefined;
+			}
+			if (!response.ok) {
+				throw new Error("Could not load included Markdown");
+			}
+			return response.text();
+		},
+		onSourceLines,
+	);
+}

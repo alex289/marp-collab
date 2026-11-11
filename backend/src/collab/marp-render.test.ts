@@ -60,7 +60,75 @@ section { background-image: url("../assets/local.png"); }
 		ok(rendered.css.includes("asset0.png"));
 	});
 
+	test("uses current content for both main and included documents", async () => {
+		const rendered = await renderMarkdownForPdf("pdf-live", "deck.md", (name) =>
+			Promise.resolve(
+				name.endsWith("/deck.md") ? "# Live main\n\n<!-- @include: part.md -->" : "# Live included",
+			),
+		);
+		ok(rendered?.html.includes("Live main"));
+		ok(rendered?.html.includes("Live included"));
+	});
+
+	test("preserves included slides after a YAML end marker", async () => {
+		const rendered = await renderMarkdownForPdf("pdf-yaml", "deck.md", (name) =>
+			Promise.resolve(
+				name.endsWith("/deck.md")
+					? "# Main\n\n<!-- @include: part.md -->"
+					: "---\nmarp: true\n...\n# First included\n\n---\n\n# Second included",
+			),
+		);
+		ok(rendered?.html.includes("First included"));
+		ok(rendered?.html.includes("Second included"));
+	});
+
+	test("reports directories and paths below regular files as missing includes", async () => {
+		await storage.createProjectDir("pdf-invalid-target", "folder.md");
+		await storage.saveDocumentContent("project/pdf-invalid-target/regular.md", "# A file");
+		await storage.saveDocumentContent(
+			"project/pdf-invalid-target/deck.md",
+			"# Main\n\n<!-- @include: folder.md -->\n\n<!-- @include: regular.md/child.md -->",
+		);
+		const rendered = await renderMarkdownForPdf("pdf-invalid-target", "deck.md");
+		ok(rendered?.html.includes("Main"));
+		equal(rendered?.html.match(/file not found/g)?.length, 2);
+	});
+
 	test("returns undefined for a missing markdown document", async () => {
 		equal(await renderMarkdownForPdf("pdf-render", "missing.md"), undefined);
+	});
+
+	test("expands @include comments and reports broken includes inline", async () => {
+		await storage.saveDocumentContent(
+			"project/pdf-include/deck.md",
+			`# Main
+
+<!-- @include: chapters/intro.md -->
+
+<!-- @include: chapters/missing.md -->
+`,
+		);
+		await storage.saveDocumentContent(
+			"project/pdf-include/chapters/intro.md",
+			`---
+title: Should be stripped
+---
+## Included heading
+
+<!-- @include: ./nested.md -->
+
+<!-- @include: ../deck.md -->
+`,
+		);
+		await storage.saveDocumentContent("project/pdf-include/chapters/nested.md", "Nested content");
+
+		const rendered = await renderMarkdownForPdf("pdf-include", "deck.md");
+
+		ok(rendered);
+		ok(rendered.html.includes("Included heading"));
+		ok(rendered.html.includes("Nested content"));
+		ok(!rendered.html.includes("Should be stripped"));
+		ok(rendered.html.includes("file not found"));
+		ok(rendered.html.includes("circular include"));
 	});
 });

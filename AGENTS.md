@@ -10,7 +10,7 @@ This is a pnpm workspace for a collaborative Marp editor. Main app code lives in
 
 ## Build, Test, and Development Commands
 
-Use Node `>=24` and pnpm `11.7.0`.
+Use Node `>=24` and pnpm `12.18.0`.
 
 - `pnpm install`: install workspace dependencies.
 - `pnpm dev`: run frontend and backend dev servers in parallel.
@@ -18,10 +18,10 @@ Use Node `>=24` and pnpm `11.7.0`.
 - `pnpm typecheck`: run TypeScript checks for each package.
 - `pnpm lint`: run type-aware Oxlint with warnings denied.
 - `pnpm format` / `pnpm format:check`: write or verify Oxfmt formatting.
-- `pnpm --filter server test`: run backend unit tests with Node's built-in test runner.
+- `pnpm --filter backend test`: run backend unit tests with Node's built-in test runner.
 - `pnpm --filter e2e test`: run Playwright tests; this starts the Docker e2e stack from `e2e/docker-compose.e2e.yml`.
 
-For local manual startup, copy `backend/.env.example` to `backend/.env`, then run `pnpm --filter server dev` and `pnpm --filter vite-app dev`.
+For local manual startup, copy `backend/.env.example` to `backend/.env`, then run `pnpm --filter backend dev` and `pnpm --filter frontend dev`.
 
 ## Coding Style & Naming Conventions
 

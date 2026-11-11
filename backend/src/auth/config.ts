@@ -35,6 +35,7 @@ export function loadAuthConfig() {
 			switch (configKey) {
 				case "NAME":
 					publicProviderInfo.push({ name: value, id: providerId });
+					providerConfig.name = value;
 					break;
 				case "CLIENT_ID":
 					providerConfig.clientId = value;
@@ -91,6 +92,10 @@ export function loadAuthConfig() {
 
 		if (!config.scopes) {
 			config.scopes = ["openid", "email", "profile"];
+		}
+
+		if (!config.discoveryUrl) {
+			config.accountSubject = ({ profile }) => profile.id || profile.sub || "";
 		}
 
 		if (!publicProviderInfo.some((info) => info.id === providerId)) {

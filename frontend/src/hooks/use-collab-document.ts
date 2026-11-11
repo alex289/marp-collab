@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 import { HocuspocusProvider } from "@hocuspocus/provider";
 import type { Awareness } from "y-protocols/awareness.js";
 import * as Y from "yjs";
@@ -47,18 +47,19 @@ const hashString = (value: string): number => {
 };
 
 export const usePresenceUser = (sessionUser: SessionUser | null): PresenceUser => {
+	const { id, email, name, image } = sessionUser ?? {};
 	return useMemo(() => {
-		if (!sessionUser) {
+		if (!id) {
 			return { userId: "", userName: "", color: "#0ea5e9", image: null };
 		}
-		const seed = sessionUser.id ?? sessionUser.email;
+		const seed = id;
 		return {
-			userId: sessionUser.id,
-			userName: sessionUser.name || sessionUser.email,
+			userId: id,
+			userName: name || email || "",
 			color: palette[hashString(seed) % palette.length] ?? "#0ea5e9",
-			image: sessionUser.image ?? null,
+			image: image ?? null,
 		};
-	}, [sessionUser]);
+	}, [id, email, name, image]);
 };
 
 export const useCollabDocument = (
@@ -68,13 +69,15 @@ export const useCollabDocument = (
 	reloadKey = 0,
 	onStatelessMessage?: (payload: string) => void,
 ): CollabState => {
+	const sessionUserId = sessionUser?.id;
 	const [state, setState] = useState<CollabState>(defaultState);
-	const onStatelessMessageRef = useRef(onStatelessMessage);
-	onStatelessMessageRef.current = onStatelessMessage;
+	const handleStatelessMessage = useEffectEvent((payload: string) => {
+		onStatelessMessage?.(payload);
+	});
 
 	useEffect(() => {
-		if (!documentName || !sessionUser) {
-			setState(defaultState);
+		// The cleanup of the previous document already reset the state.
+		if (!documentName || !sessionUserId) {
 			return;
 		}
 
@@ -123,7 +126,7 @@ export const useCollabDocument = (
 				}
 			},
 			onStateless: ({ payload }: { payload: string }) => {
-				onStatelessMessageRef.current?.(payload);
+				handleStatelessMessage(payload);
 			},
 			onSynced: () => {
 				setState((current) => ({
@@ -149,6 +152,8 @@ export const useCollabDocument = (
 			image: user.image,
 		});
 
+		// Publishes the objects of the connection this effect just opened.
+		// oxlint-disable-next-line react/set-state-in-effect
 		setState({
 			yText,
 			awareness: provider.awareness,
@@ -165,7 +170,7 @@ export const useCollabDocument = (
 			yDoc.destroy();
 			setState(defaultState);
 		};
-	}, [documentName, reloadKey, user, sessionUser]);
+	}, [documentName, reloadKey, user, sessionUserId]);
 
 	return state;
 };
@@ -177,14 +182,16 @@ export const useProjectPresence = (
 	activeFileId: string | null,
 	onStatelessMessage?: (payload: string) => void,
 ): Awareness | null => {
+	const sessionUserId = sessionUser?.id;
 	const [awareness, setAwareness] = useState<Awareness | null>(null);
 	const providerRef = useRef<HocuspocusProvider | null>(null);
-	const onStatelessMessageRef = useRef(onStatelessMessage);
-	onStatelessMessageRef.current = onStatelessMessage;
+	const handleStatelessMessage = useEffectEvent((payload: string) => {
+		onStatelessMessage?.(payload);
+	});
 
 	useEffect(() => {
-		if (!projectId || !sessionUser) {
-			setAwareness(null);
+		// The cleanup of the previous connection already reset the awareness.
+		if (!projectId || !sessionUserId) {
 			return;
 		}
 
@@ -194,11 +201,13 @@ export const useProjectPresence = (
 			name: `project/${projectId}/${PROJECT_PRESENCE_DOCUMENT_ID}`,
 			document: yDoc,
 			onStateless: ({ payload }: { payload: string }) => {
-				onStatelessMessageRef.current?.(payload);
+				handleStatelessMessage(payload);
 			},
 		});
 
 		providerRef.current = provider;
+		// Publishes the awareness of the connection this effect just opened.
+		// oxlint-disable-next-line react/set-state-in-effect
 		setAwareness(provider.awareness);
 
 		return () => {
@@ -207,7 +216,7 @@ export const useProjectPresence = (
 			yDoc.destroy();
 			setAwareness(null);
 		};
-	}, [projectId, sessionUser]);
+	}, [projectId, sessionUserId]);
 
 	useEffect(() => {
 		const provider = providerRef.current;

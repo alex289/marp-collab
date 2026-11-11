@@ -65,6 +65,9 @@ export type ProjectFilesWorkspace = {
 	exportUrl: () => string;
 };
 
+const getLoadErrorMessage = (requestError: unknown) =>
+	requestError instanceof Error ? requestError.message : "Unknown error";
+
 export function useProjectFilesWorkspace({
 	projectId,
 	selectedFile,
@@ -91,19 +94,53 @@ export function useProjectFilesWorkspace({
 		try {
 			setFiles(await client.list(projectId));
 		} catch (requestError) {
-			setError(requestError instanceof Error ? requestError.message : "Unknown error");
+			setError(getLoadErrorMessage(requestError));
 		} finally {
 			setIsLoading(false);
 		}
 	}, [client, projectId]);
 
-	useEffect(() => {
-		void reload();
-	}, [reload]);
+	// Reset during render (instead of in the effect) when switching projects.
+	const [loadingProjectId, setLoadingProjectId] = useState(projectId);
+	if (loadingProjectId !== projectId) {
+		setLoadingProjectId(projectId);
+		setIsLoading(true);
+		setError(null);
+	}
 
 	useEffect(() => {
-		setOpenFolders((previous) => expandOpenFoldersForSelection(previous, selectedFile?.id ?? null));
-	}, [selectedFile?.id]);
+		let cancelled = false;
+
+		const loadInitialFiles = async () => {
+			try {
+				const nextFiles = await client.list(projectId);
+				if (!cancelled) {
+					setFiles(nextFiles);
+				}
+			} catch (requestError) {
+				if (!cancelled) {
+					setError(getLoadErrorMessage(requestError));
+				}
+			} finally {
+				if (!cancelled) {
+					setIsLoading(false);
+				}
+			}
+		};
+
+		void loadInitialFiles();
+		return () => {
+			cancelled = true;
+		};
+	}, [client, projectId]);
+
+	// Open the selected file's folders once per selection; the user may collapse them afterwards.
+	const selectedFileId = selectedFile?.id ?? null;
+	const [expandedForFileId, setExpandedForFileId] = useState<string | null>(null);
+	if (expandedForFileId !== selectedFileId) {
+		setExpandedForFileId(selectedFileId);
+		setOpenFolders((previous) => expandOpenFoldersForSelection(previous, selectedFileId));
+	}
 
 	const selectFile = useCallback(
 		(file: DeckFile) => {

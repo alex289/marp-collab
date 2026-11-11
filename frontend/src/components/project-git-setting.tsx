@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import useSWR from "swr";
 import { ArrowDown, ArrowUp, GitBranch, Loader2 } from "lucide-react";
 import { toast } from "sonner";
@@ -25,6 +25,13 @@ type ProjectGitConfig = {
 	folder: string;
 	hasCredentials: boolean;
 	username: string | null;
+};
+
+type GitSettingsDraft = {
+	remoteUrl: string;
+	branch: string;
+	folder: string;
+	username: string;
 };
 
 type GitAction = "pull" | "push";
@@ -243,22 +250,27 @@ export function ProjectGitSetting({
 }) {
 	const url = `${API_URL}/projects/${projectId}/git`;
 	const { data, mutate } = useSWR<ProjectGitConfig>(canWrite ? url : null, fetcher);
-	const [remoteUrl, setRemoteUrl] = useState("");
-	const [folder, setFolder] = useState("");
-	const [branch, setBranch] = useState("main");
-	const [username, setUsername] = useState("");
+	// Null while the user has not edited the form, so it follows the saved settings.
+	const [draft, setDraft] = useState<GitSettingsDraft | null>(null);
 	const [token, setToken] = useState("");
 	const [editing, setEditing] = useState(false);
 	const [saving, setSaving] = useState(false);
 
-	useEffect(() => {
-		if (data) {
-			setRemoteUrl(data.remoteUrl ?? "");
-			setBranch(data.branch);
-			setFolder(data.folder);
-			setUsername(data.username ?? "");
-		}
-	}, [data]);
+	const savedSettings: GitSettingsDraft = {
+		remoteUrl: data?.remoteUrl ?? "",
+		branch: data?.branch ?? "main",
+		folder: data?.folder ?? "",
+		username: data?.username ?? "",
+	};
+	const { remoteUrl, branch, folder, username } = draft ?? savedSettings;
+	const updateDraft = (field: keyof GitSettingsDraft, value: string) => {
+		setDraft((current) => ({ ...(current ?? savedSettings), [field]: value }));
+	};
+	const discardDraft = () => {
+		setDraft(null);
+		setToken("");
+		setEditing(false);
+	};
 
 	const save = async () => {
 		if (!isOwner || !remoteUrl.trim() || !branch.trim() || saving) {
@@ -284,8 +296,7 @@ export function ProjectGitSetting({
 			}
 
 			await mutate(result, { revalidate: false });
-			setToken("");
-			setEditing(false);
+			discardDraft();
 			toast.success("Git settings saved.");
 		} catch (error) {
 			toast.error(error instanceof Error ? error.message : "Could not save Git settings");
@@ -334,28 +345,28 @@ export function ProjectGitSetting({
 						id="git-remote-url"
 						type="url"
 						value={remoteUrl}
-						onChange={(event) => setRemoteUrl(event.target.value)}
+						onChange={(event) => updateDraft("remoteUrl", event.target.value)}
 						placeholder="https://github.com/user/repo.git"
 						disabled={!isOwner || saving}
 						aria-label="Git remote URL"
 					/>
 					<Input
 						value={branch}
-						onChange={(event) => setBranch(event.target.value)}
+						onChange={(event) => updateDraft("branch", event.target.value)}
 						placeholder="main"
 						disabled={!isOwner || saving}
 						aria-label="Git branch"
 					/>
 					<Input
 						value={folder}
-						onChange={(event) => setFolder(event.target.value)}
+						onChange={(event) => updateDraft("folder", event.target.value)}
 						placeholder="Repository folder (optional)"
 						disabled={!isOwner || saving}
 						aria-label="Repository folder"
 					/>
 					<Input
 						value={username}
-						onChange={(event) => setUsername(event.target.value)}
+						onChange={(event) => updateDraft("username", event.target.value)}
 						placeholder="Username (optional)"
 						autoComplete="username"
 						disabled={!isOwner || saving}
@@ -386,7 +397,7 @@ export function ProjectGitSetting({
 							variant="ghost"
 							className="w-full"
 							disabled={saving}
-							onClick={() => setEditing(false)}
+							onClick={discardDraft}
 						>
 							Cancel
 						</Button>

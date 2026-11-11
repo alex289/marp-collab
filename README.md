@@ -12,6 +12,20 @@ Realtime collaboration editor for marp presentations<br><br>
 
 MarpCollab is a realtime collaboration editor for [Marp](https://marp.app/) presentations. It allows multiple users to edit the same presentation simultaneously, with changes reflected in real-time.
 
+## Include Markdown files
+
+Reuse slides from another `.md` or `.markdown` file in the same project with a standalone comment:
+
+```markdown
+<!-- @include: chapters/intro.md -->
+```
+
+Paths are relative to the file containing the comment, including for nested includes. Leading YAML frontmatter in included files is stripped. Preview, slide overview, presentation navigation and PDF export use the expanded content; the editor keeps the original comments. Clicking an included slide jumps to its include comment in the main file.
+
+Included content refreshes every three seconds and PDF export reads active edits. Missing files, cycles and invalid paths produce inline errors. Expansion allows up to 10 nested levels, 100 includes and 1,000,000 total source characters. Comments in fenced or indented code examples are left unchanged.
+
+Image paths in included content currently resolve relative to the main deck. Slide reordering is disabled for decks with includes; edit the source files to reorder those slides.
+
 ## Getting Started
 
 MarpCollab is self-hosted with Docker Compose. You need Docker with the Compose plugin and an OAuth provider to log in with.
@@ -52,6 +66,10 @@ All settings are configured via environment variables.
 | ------------- | ------- | ----------------------------------------------------------------------------------------------------------------- |
 | `URL`         | —       | Public base URL of the app (e.g. `https://example.com`). Used by Better Auth as the trusted origin. **Required.** |
 | `AUTH_SECRET` | —       | Random secret used by Better Auth to sign sessions. **Required.**                                                 |
+
+PDF export requires Gotenberg 9; the Compose files use version 9.4.0. Custom deployments must upgrade their Gotenberg service alongside the app.
+
+Register `${URL}/api/v1/auth/callback/<n>` as the redirect URI with each OAuth provider (for example, `https://slides.example.com/api/v1/auth/callback/0`). When upgrading from Better Auth 1.6, replace the previous `/api/v1/auth/oauth2/callback/<n>` redirect URI and restart any sign-ins in progress. Providers must support PKCE, which is now enabled by default.
 
 At least one OAuth provider must be configured. Each provider is identified by a numeric index `<n>` starting at `0`:
 
