@@ -60,6 +60,16 @@ section { background-image: url("../assets/local.png"); }
 		ok(rendered.css.includes("asset0.png"));
 	});
 
+	test("uses current content for both main and included documents", async () => {
+		const rendered = await renderMarkdownForPdf("pdf-live", "deck.md", (name) =>
+			Promise.resolve(
+				name.endsWith("/deck.md") ? "# Live main\n\n<!-- @include: part.md -->" : "# Live included",
+			),
+		);
+		ok(rendered?.html.includes("Live main"));
+		ok(rendered?.html.includes("Live included"));
+	});
+
 	test("returns undefined for a missing markdown document", async () => {
 		equal(await renderMarkdownForPdf("pdf-render", "missing.md"), undefined);
 	});

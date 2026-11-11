@@ -10,6 +10,7 @@ import {
 	usePresenceUser,
 	useProjectPresence,
 } from "@/hooks/use-collab-document";
+import { hasMarkdownIncludes } from "@/lib/markdown-include";
 import { useIncludedMarkdown } from "@/hooks/use-included-markdown";
 import type { DeckFile, ProjectCollaboratorsResponse } from "@/lib/types";
 import Navbar from "@/components/navbar";
@@ -413,11 +414,21 @@ function RouteComponent() {
 	// being previewed — editing a CSS theme shouldn't move the preview scroll.
 	const isEditingPreviewFile =
 		isMarkdownDeckFile(selectedFile) && selectedFile.id === previewFile?.id;
-	const followSlideIndex = isEditingPreviewFile ? getSlideIndexForLine(markdown, cursorLine) : null;
+
 	// Rendering (preview, presentation, slide count) works on the markdown with
 	// <!-- @include: file.md --> comments expanded; the editor keeps the raw text.
-	const renderedMarkdown = useIncludedMarkdown(markdown, id, previewFile?.id ?? null);
-	const slideCount = useMemo(() => countMarpSlides(markdown), [markdown]);
+	const included = useIncludedMarkdown(markdown, id, previewFile?.id ?? null);
+	const renderedMarkdown = included.markdown;
+	const hasIncludes = hasMarkdownIncludes(markdown);
+	const expandedLine = included.sourceLines.indexOf(cursorLine) + 1;
+	const followSlideIndex = isEditingPreviewFile
+		? getSlideIndexForLine(renderedMarkdown, expandedLine || cursorLine)
+		: null;
+	const sourceLineForSlide = (index: number) => {
+		const line = getLineForSlideIndex(renderedMarkdown, index);
+		return included.sourceLines[line - 1] ?? line;
+	};
+	const slideCount = useMemo(() => countMarpSlides(renderedMarkdown), [renderedMarkdown]);
 
 	useEffect(() => {
 		if (files.length === 0) {
@@ -812,12 +823,14 @@ function RouteComponent() {
 
 	// Reordering rewrites the deck's own document, so it is only offered while
 	// that deck is the file the editor has open for writing.
-	const canReorderSlides = isEditingPreviewFile && !collab.readOnly;
-	const reorderHint = collab.readOnly
-		? "You have read-only access to this deck."
-		: canReorderSlides
-			? "Click to jump, drag to reorder."
-			: "Open this deck in the editor to reorder its slides.";
+	const canReorderSlides = isEditingPreviewFile && !collab.readOnly && !hasIncludes;
+	const reorderHint = hasIncludes
+		? "Edit included files directly to reorder their slides."
+		: collab.readOnly
+			? "You have read-only access to this deck."
+			: canReorderSlides
+				? "Click to jump, drag to reorder."
+				: "Open this deck in the editor to reorder its slides.";
 
 	const handleMoveSlide = useCallback(
 		(from: number, to: number) => {
@@ -1438,7 +1451,7 @@ function RouteComponent() {
 					}
 					slidesPanel={
 						<SlideOverviewPanel
-							markdown={markdown}
+							markdown={renderedMarkdown}
 							isMarkdown={previewFile !== null}
 							projectId={id}
 							deckFileId={previewFile?.id ?? null}
@@ -1449,7 +1462,7 @@ function RouteComponent() {
 							canReorder={canReorderSlides}
 							reorderHint={reorderHint}
 							onSelectSlide={(index) =>
-								editorPaneRef.current?.jumpToLine(getLineForSlideIndex(markdown, index))
+								editorPaneRef.current?.jumpToLine(sourceLineForSlide(index))
 							}
 							onMoveSlide={handleMoveSlide}
 						/>
@@ -1505,7 +1518,7 @@ function RouteComponent() {
 								return;
 							}
 
-							editorPaneRef.current?.jumpToLine(getLineForSlideIndex(markdown, index));
+							editorPaneRef.current?.jumpToLine(sourceLineForSlide(index));
 						}}
 					/>
 				</Suspense>

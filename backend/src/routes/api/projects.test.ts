@@ -105,6 +105,34 @@ describe("projects routes", () => {
 		delete process.env.DATA_PATH;
 	});
 
+	test("serves current Markdown to collaborators and denies outsiders", async () => {
+		await files.saveDocumentContent("project/upload-proj/chapters/read.md", "# Saved");
+		const url = "/upload-proj/files/chapters/read.md";
+		for (const userId of ["user-1", "route-writer", "route-reader"]) {
+			const response = await app.request(url, { headers: { "x-test-user-id": userId } });
+			equal(response.status, 200);
+			equal(response.headers.get("cache-control"), "no-store");
+			equal(await response.text(), "# Saved");
+		}
+		for (const userId of ["route-outsider", ""]) {
+			const response = await app.request(url, { headers: { "x-test-user-id": userId } });
+			ok(response.status === 401 || response.status === 403);
+		}
+		const missing = await app.request("/upload-proj/files/missing.md", {
+			headers: { "x-test-user-id": "user-1" },
+		});
+		equal(missing.status, 404);
+		const { collabServer } = await import("../../collab/hocuspocus.ts");
+		const doc = "project/upload-proj/chapters/read.md";
+		collabServer.documents.set(doc, { getText: () => ({ toJSON: () => "# Live edits" }) } as never);
+		try {
+			const response = await app.request(url, { headers: { "x-test-user-id": "route-reader" } });
+			equal(await response.text(), "# Live edits");
+		} finally {
+			collabServer.documents.delete(doc);
+		}
+	});
+
 	test("creates a project with the default template", async () => {
 		const response = await app.request("/", {
 			method: "POST",

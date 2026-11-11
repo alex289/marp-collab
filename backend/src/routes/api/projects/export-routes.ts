@@ -1,3 +1,4 @@
+import { getCurrentDocumentContent } from "../../../collab/document-content.ts";
 import { Readable } from "node:stream";
 import { Hono } from "hono";
 import { stream } from "hono/streaming";
@@ -69,7 +70,7 @@ app.get("/:projectId/export/pdf/:fileId{.+}", async (c) => {
 		return c.json({ error: "Only markdown files can be exported to PDF" }, 400);
 	}
 
-	const rendered = await renderMarkdownForPdf(projectId, fileId);
+	const rendered = await renderMarkdownForPdf(projectId, fileId, getCurrentDocumentContent);
 	if (!rendered) {
 		return c.json({ error: "File not found" }, 404);
 	}
