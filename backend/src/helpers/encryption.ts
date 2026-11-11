@@ -23,9 +23,15 @@ export function encryptSecret(plaintext: string, purpose: string, identity: stri
 
 export function decryptSecret(encrypted: string, purpose: string, identity: string): string {
 	const { iv, tag, data } = JSON.parse(encrypted) as { iv: string; tag: string; data: string };
-	const decipher = createDecipheriv("aes-256-gcm", key(purpose), Buffer.from(iv, "base64url"));
+	const ivBytes = Buffer.from(iv, "base64url");
+	const tagBytes = Buffer.from(tag, "base64url");
+	// Without a fixed tag length, GCM accepts truncated tags that are far easier to forge.
+	if (ivBytes.length !== 12 || tagBytes.length !== 16) {
+		throw new Error("Invalid encrypted secret");
+	}
+	const decipher = createDecipheriv("aes-256-gcm", key(purpose), ivBytes, { authTagLength: 16 });
 	decipher.setAAD(Buffer.from(identity));
-	decipher.setAuthTag(Buffer.from(tag, "base64url"));
+	decipher.setAuthTag(tagBytes);
 	return Buffer.concat([
 		decipher.update(Buffer.from(data, "base64url")),
 		decipher.final(),

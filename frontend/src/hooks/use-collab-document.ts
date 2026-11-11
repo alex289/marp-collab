@@ -32,9 +32,9 @@ const defaultState: CollabState = {
 
 const palette = ["#f97316", "#16a34a", "#0ea5e9", "#e11d48", "#0891b2", "#ca8a04"];
 const PROJECT_PRESENCE_DOCUMENT_ID = "__presence";
-// Matches the message thrown from onAuthenticate in backend/src/collab/hocuspocus.ts
-// while the project is syncing with Git, so we can surface it distinctly from a
-// generic connection failure instead of leaving already-connected users guessing.
+// Matches GIT_SYNC_REJECTION_REASON in backend/src/collab/hocuspocus.ts, sent while
+// the project is syncing with Git, so we can surface it distinctly from a generic
+// connection failure instead of leaving already-connected users guessing.
 const GIT_SYNC_AUTH_FAILURE_REASON = "Project is syncing with Git";
 
 const hashString = (value: string): number => {

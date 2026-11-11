@@ -396,6 +396,34 @@ describe("projects routes", () => {
 		});
 	});
 
+	test("lets only the owner disconnect Git sync and forget the access token", async () => {
+		const forbidden = await app.request("/upload-proj/git", {
+			method: "DELETE",
+			headers: { "x-test-user-id": "route-writer" },
+		});
+		equal(forbidden.status, 403);
+
+		const response = await app.request("/owner-only-proj/git", {
+			method: "DELETE",
+			headers: { "x-test-user-id": "user-1" },
+		});
+		equal(response.status, 200);
+		const disconnected = {
+			configured: false,
+			remoteUrl: null,
+			branch: "main",
+			folder: "",
+			hasCredentials: false,
+			username: null,
+		};
+		deepEqual(await response.json(), disconnected);
+
+		const reload = await app.request("/owner-only-proj/git", {
+			headers: { "x-test-user-id": "user-1" },
+		});
+		deepEqual(await reload.json(), disconnected);
+	});
+
 	test("rejects push for a read-only collaborator", async () => {
 		const response = await app.request("/upload-proj/git/push", {
 			method: "POST",
@@ -631,6 +659,28 @@ describe("projects routes", () => {
 			equal(response.status, 400);
 		}
 	});
+	test("broadcasts sync completion after saving Git settings so blocked editors reconnect", async (t) => {
+		const { collabServer } = await import("../../collab/hocuspocus.ts");
+		const document = new Document("project/owner-only-proj/__presence");
+		const messages: string[] = [];
+		t.mock.method(document, "broadcastStateless", (payload: string) => {
+			messages.push(payload);
+		});
+		collabServer.documents.set(document.name, document);
+		try {
+			const response = await app.request("/owner-only-proj/git", {
+				method: "PUT",
+				headers: { "content-type": "application/json", "x-test-user-id": "user-1" },
+				body: JSON.stringify({ remoteUrl: "https://example.com/slides.git", branch: "main" }),
+			});
+			equal(response.status, 200);
+			ok(messages.includes("git-sync-finished"));
+		} finally {
+			collabServer.documents.delete(document.name);
+			document.destroy();
+		}
+	});
+
 	test("broadcasts sync completion after a failed Git action so every editor can reconnect", async (t) => {
 		const { collabServer } = await import("../../collab/hocuspocus.ts");
 		const document = new Document("project/upload-proj/__presence");

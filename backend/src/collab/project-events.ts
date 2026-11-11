@@ -59,13 +59,24 @@ export async function flushProjectFolderDocuments(
 	await Promise.all(folderDocumentNames(projectId, folderPath).map(flushDocument));
 }
 
-export async function flushAndCloseProjectDocuments(projectId: string): Promise<void> {
-	const documents = [...collabServer.documents.entries()].filter(([documentName]) => {
-		const parsed = parseProjectDocumentName(documentName);
-		return parsed?.projectId === projectId && parsed.fileId !== "__presence";
-	});
+function isProjectFileDocument(documentName: string, projectId: string): boolean {
+	const parsed = parseProjectDocumentName(documentName);
+	return parsed?.projectId === projectId && parsed.fileId !== "__presence";
+}
 
-	await Promise.all(documents.map(([documentName]) => flushDocument(documentName)));
+/** Must run while the project's Git sync lock is held, which makes collab loads and stores no-ops. */
+export async function flushAndCloseProjectDocuments(projectId: string): Promise<void> {
+	// Documents that passed authentication before the sync started may still be loading.
+	await Promise.allSettled(
+		[...collabServer.loadingDocuments.entries()]
+			.filter(([documentName]) => isProjectFileDocument(documentName, projectId))
+			.map(([, loading]) => loading),
+	);
+	const documents = [...collabServer.documents.entries()].filter(([documentName]) =>
+		isProjectFileDocument(documentName, projectId),
+	);
+
+	// Close first so no edit can arrive after the final flush.
 	for (const [documentName] of documents) {
 		collabServer.closeConnections(documentName);
 	}
@@ -73,6 +84,7 @@ export async function flushAndCloseProjectDocuments(projectId: string): Promise<
 		documents.map(async ([documentName, document]) => {
 			await collabServer.debouncer.executeNow(`onStoreDocument-${documentName}`);
 			await document.saveMutex.waitForUnlock();
+			await flushDocument(documentName);
 			await collabServer.unloadDocument(document);
 		}),
 	);

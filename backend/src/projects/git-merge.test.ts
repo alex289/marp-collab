@@ -5,7 +5,7 @@ import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import git from "isomorphic-git";
-import { mergeProjectBranches, ProjectGitConflictError } from "./git-merge.ts";
+import { mergeProjectBranches, mergeTextFiles, ProjectGitConflictError } from "./git-merge.ts";
 
 const author = { name: "Test User", email: "test@example.com" };
 
@@ -42,11 +42,28 @@ describe("project Git merge", () => {
 		await commitFile(dir, "slides.md", "# Slides\n\nRemote paragraph\n");
 		await git.checkout({ fs, dir, ref: "main", force: true });
 
-		await mergeProjectBranches({ dir, ours: "main", theirs: "remote", author });
+		const merge = await mergeProjectBranches({
+			dir,
+			ours: "refs/heads/main",
+			theirs: "remote",
+			author,
+		});
 
 		const content = await readFile(join(dir, "slides.md"), "utf8");
 		match(content, /Project paragraph/);
 		match(content, /Remote paragraph/);
+		deepEqual(merge.overlapping, ["slides.md"]);
+	});
+
+	test("merges files that differ only in line endings without duplicating them", () => {
+		deepEqual(mergeTextFiles("a\r\nb\r\nc\r\n", "a\r\nB\r\nc\r\n", "a\nb\nc\n"), {
+			text: "a\nB\nc\n",
+			overlapping: false,
+		});
+		deepEqual(
+			mergeTextFiles("a\r\nb\r\nc\r\nd\r\n", "a\r\nB\r\nc\r\nd\r\n", "a\r\nb\r\nc\r\nD\r\n"),
+			{ text: "a\r\nB\r\nc\r\nD\r\n", overlapping: false },
+		);
 	});
 
 	test("asks which side of a binary conflict to keep", async () => {
@@ -60,7 +77,7 @@ describe("project Git merge", () => {
 		await git.checkout({ fs, dir, ref: "main", force: true });
 
 		await rejects(
-			() => mergeProjectBranches({ dir, ours: "main", theirs: "remote", author }),
+			() => mergeProjectBranches({ dir, ours: "refs/heads/main", theirs: "remote", author }),
 			(error: unknown) => {
 				deepEqual((error as ProjectGitConflictError).conflicts, [
 					{ path: "image.png", type: "binary" },
@@ -71,7 +88,7 @@ describe("project Git merge", () => {
 
 		await mergeProjectBranches({
 			dir,
-			ours: "main",
+			ours: "refs/heads/main",
 			theirs: "remote",
 			author,
 			resolutions: { "image.png": "remote" },
@@ -91,7 +108,7 @@ describe("project Git merge", () => {
 		await git.checkout({ fs, dir, ref: "main", force: true });
 
 		await rejects(
-			() => mergeProjectBranches({ dir, ours: "main", theirs: "remote", author }),
+			() => mergeProjectBranches({ dir, ours: "refs/heads/main", theirs: "remote", author }),
 			(error: unknown) => {
 				deepEqual((error as ProjectGitConflictError).conflicts, [
 					{ path: "notes.md", type: "remote-deleted" },
@@ -102,7 +119,7 @@ describe("project Git merge", () => {
 
 		await mergeProjectBranches({
 			dir,
-			ours: "main",
+			ours: "refs/heads/main",
 			theirs: "remote",
 			author,
 			resolutions: { "notes.md": "remote" },
@@ -110,7 +127,7 @@ describe("project Git merge", () => {
 		await rejects(() => readFile(join(dir, "notes.md")));
 	});
 
-	test("keeps a project deletion when Git changed the file", async () => {
+	test("asks before applying a project deletion over a remote change", async () => {
 		const dir = join(tempDir, "project-delete");
 		await git.init({ fs, dir, defaultBranch: "main" });
 		await commitFile(dir, "notes.md", "Base\n");
@@ -120,9 +137,31 @@ describe("project Git merge", () => {
 		await commitFile(dir, "notes.md", "Remote change\n");
 		await git.checkout({ fs, dir, ref: "main", force: true });
 
-		await mergeProjectBranches({ dir, ours: "main", theirs: "remote", author });
+		await rejects(
+			() => mergeProjectBranches({ dir, ours: "refs/heads/main", theirs: "remote", author }),
+			(error: unknown) => {
+				deepEqual((error as ProjectGitConflictError).conflicts, [
+					{ path: "notes.md", type: "project-deleted" },
+				]);
+				return error instanceof ProjectGitConflictError;
+			},
+		);
 
-		await rejects(() => readFile(join(dir, "notes.md")));
+		await mergeProjectBranches({
+			dir,
+			ours: "refs/heads/main",
+			theirs: "remote",
+			author,
+			resolutions: { "notes.md": "remote" },
+		});
+		equal(await readFile(join(dir, "notes.md"), "utf8"), "Remote change\n");
+		const { blob } = await git.readBlob({
+			fs,
+			dir,
+			oid: await git.resolveRef({ fs, dir, ref: "refs/heads/main" }),
+			filepath: "notes.md",
+		});
+		equal(Buffer.from(blob).toString(), "Remote change\n");
 	});
 
 	test("asks which independently created file to keep", async () => {
@@ -136,7 +175,7 @@ describe("project Git merge", () => {
 		await git.checkout({ fs, dir, ref: "main", force: true });
 
 		await rejects(
-			() => mergeProjectBranches({ dir, ours: "main", theirs: "remote", author }),
+			() => mergeProjectBranches({ dir, ours: "refs/heads/main", theirs: "remote", author }),
 			(error: unknown) => {
 				deepEqual((error as ProjectGitConflictError).conflicts, [
 					{ path: "notes.md", type: "add-add" },
@@ -147,11 +186,18 @@ describe("project Git merge", () => {
 
 		await mergeProjectBranches({
 			dir,
-			ours: "main",
+			ours: "refs/heads/main",
 			theirs: "remote",
 			author,
 			resolutions: { "notes.md": "project" },
 		});
 		equal(await readFile(join(dir, "notes.md"), "utf8"), "Project notes\n");
+		const { blob } = await git.readBlob({
+			fs,
+			dir,
+			oid: await git.resolveRef({ fs, dir, ref: "refs/heads/main" }),
+			filepath: "notes.md",
+		});
+		equal(Buffer.from(blob).toString(), "Project notes\n");
 	});
 });

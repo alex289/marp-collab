@@ -194,4 +194,101 @@ describe("project Git sync", () => {
 		await gitSync.pushProjectToGit({ projectId, author });
 		equal(run(remote, "ls-tree", "HEAD", "slides/deck.md"), "");
 	});
+
+	describe("with a branch other than main", () => {
+		const author = { name: "Test", email: "test@example.com" };
+		const run = (dir: string, ...args: string[]) =>
+			execFileSync("git", ["-C", dir, ...args], { encoding: "utf8" }).trim();
+		let remote: string;
+
+		before(async () => {
+			remote = join(tempDir, "slides-remote");
+			await mkdir(remote, { recursive: true });
+			run(remote, "init", "-b", "slides");
+			run(remote, "config", "receive.denyCurrentBranch", "ignore");
+			await writeFile(join(remote, "deck.md"), "# Remote slides\n");
+			run(remote, "add", ".");
+			run(remote, "-c", "user.name=T", "-c", "user.email=t@e", "commit", "-m", "Remote");
+		});
+
+		function mockRemote(t: { mock: typeof mock }) {
+			t.mock.method(git, "listServerRefs", () =>
+				Promise.resolve([{ ref: "refs/heads/slides", oid: run(remote, "rev-parse", "slides") }]),
+			);
+			t.mock.method(git, "fetch", ({ dir }: { dir: string }) => {
+				run(dir, "fetch", remote, "+slides:refs/remotes/origin/slides");
+				return Promise.resolve();
+			});
+			t.mock.method(
+				git,
+				"push",
+				({ dir, ref, remoteRef }: { dir: string; ref: string; remoteRef: string }) => {
+					run(dir, "push", remote, `${ref}:${remoteRef}`);
+					return Promise.resolve();
+				},
+			);
+		}
+
+		test("keeps the configured branch and pushes deletions", async (t) => {
+			mockRemote(t);
+			const projectId = "slides-branch-project";
+			const dir = await storage.getProjectDirectory(projectId);
+			const repository = join(dir, ".git", "repository");
+			await gitSync.configureProjectGit({
+				projectId,
+				remoteUrl: "https://example.com/repo.git",
+				branch: "slides",
+				credentials: {},
+			});
+
+			await gitSync.pullProjectFromGit({ projectId, author });
+			equal((await getProjectGitConfig(projectId)).branch, "slides");
+			equal(await git.currentBranch({ fs, dir: repository, fullname: true }), "refs/heads/slides");
+
+			await writeFile(join(dir, "notes.md"), "Notes\n");
+			await gitSync.pushProjectToGit({ projectId, author });
+			equal(run(remote, "show", "slides:notes.md"), "Notes");
+
+			await rm(join(dir, "notes.md"));
+			await gitSync.pushProjectToGit({ projectId, author });
+			equal(run(remote, "ls-tree", "slides", "notes.md"), "");
+			equal(run(remote, "branch", "--list", "main"), "");
+
+			const commits = run(remote, "rev-list", "--count", "slides");
+			deepEqual(await gitSync.pushProjectToGit({ projectId, author }), {
+				commit: run(remote, "rev-parse", "slides"),
+				pushed: false,
+			});
+			equal(run(remote, "rev-list", "--count", "slides"), commits);
+		});
+
+		test("rolls the branch back when applying a pull fails", async (t) => {
+			mockRemote(t);
+			const projectId = "slides-rollback-project";
+			const dir = await storage.getProjectDirectory(projectId);
+			const repository = join(dir, ".git", "repository");
+			await gitSync.configureProjectGit({
+				projectId,
+				remoteUrl: "https://example.com/repo.git",
+				branch: "slides",
+				credentials: {},
+			});
+			await gitSync.pullProjectFromGit({ projectId, author });
+
+			await writeFile(join(remote, "agenda.md"), "Agenda\n");
+			run(remote, "add", ".");
+			run(remote, "-c", "user.name=T", "-c", "user.email=t@e", "commit", "-m", "Agenda");
+			// A folder in the project's way makes copying the pulled file fail after the merge.
+			await mkdir(join(dir, "agenda.md"));
+			await writeFile(join(dir, "agenda.md", "code.ts"), "unsupported");
+			const before = await git.resolveRef({ fs, dir: repository, ref: "refs/heads/slides" });
+
+			await rejects(gitSync.pullProjectFromGit({ projectId, author }));
+			equal(await git.resolveRef({ fs, dir: repository, ref: "refs/heads/slides" }), before);
+
+			await rm(join(dir, "agenda.md"), { recursive: true });
+			equal((await gitSync.pullProjectFromGit({ projectId, author })).pulled, true);
+			equal(await readFile(join(dir, "agenda.md"), "utf8"), "Agenda\n");
+		});
+	});
 });

@@ -71,3 +71,21 @@ export function beginProjectWrite(projectId: string): (() => void) | null {
 		cleanup(projectId, state);
 	};
 }
+
+/** Each Git operation can hold a pack of up to 100 MB in memory, so limit how many run at once. */
+export const MAX_CONCURRENT_GIT_OPERATIONS = 4;
+let runningGitOperations = 0;
+
+export function beginGitOperation(): (() => void) | null {
+	if (runningGitOperations >= MAX_CONCURRENT_GIT_OPERATIONS) {
+		return null;
+	}
+	runningGitOperations++;
+	let released = false;
+	return () => {
+		if (!released) {
+			released = true;
+			runningGitOperations--;
+		}
+	};
+}

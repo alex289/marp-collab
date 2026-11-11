@@ -13,6 +13,9 @@ test("authenticated encryption uses random nonces and binds ciphertext to its pu
 		const tampered = JSON.parse(encrypted);
 		tampered.data = Buffer.from("tampered").toString("base64url");
 		throws(() => decryptSecret(JSON.stringify(tampered), "credentials", "project-a"));
+		const truncated = JSON.parse(encrypted);
+		truncated.tag = Buffer.from(truncated.tag, "base64url").subarray(0, 4).toString("base64url");
+		throws(() => decryptSecret(JSON.stringify(truncated), "credentials", "project-a"), /Invalid/);
 		process.env.AUTH_SECRET = "changed-secret";
 		throws(() => decryptSecret(encrypted, "credentials", "project-a"));
 		delete process.env.AUTH_SECRET;

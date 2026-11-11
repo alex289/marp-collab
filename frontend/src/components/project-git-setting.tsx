@@ -39,7 +39,7 @@ type GitResolution = "project" | "remote";
 
 type GitConflict = {
 	path: string;
-	type: "add-add" | "binary" | "remote-deleted";
+	type: "add-add" | "binary" | "project-deleted" | "remote-deleted";
 };
 
 export function ProjectGitControls({
@@ -81,6 +81,7 @@ export function ProjectGitControls({
 				pulled?: boolean;
 				pushed?: boolean;
 				conflicts?: GitConflict[];
+				overlapping?: string[];
 			};
 			if (response.status === 409 && result.conflicts?.length) {
 				setConflicts(result.conflicts);
@@ -106,6 +107,12 @@ export function ProjectGitControls({
 						? "Pushed project changes."
 						: "Already up to date.",
 			);
+			if (result.overlapping?.length) {
+				toast.warning(
+					`Both sides changed the same lines in ${result.overlapping.join(", ")}. Both versions were kept, so please review them.`,
+					{ duration: 15_000 },
+				);
+			}
 		} catch (error) {
 			toast.error(error instanceof Error ? error.message : `Git ${nextAction} failed`);
 		} finally {
@@ -178,9 +185,11 @@ export function ProjectGitControls({
 								<p className="text-muted-foreground">
 									{conflict.type === "remote-deleted"
 										? "Deleted in Git, but changed in this project."
-										: conflict.type === "add-add"
-											? "Created independently in Git and this project."
-											: "This non-text file changed in Git and this project."}
+										: conflict.type === "project-deleted"
+											? "Deleted in this project, but changed in Git."
+											: conflict.type === "add-add"
+												? "Created independently in Git and this project."
+												: "This non-text file changed in Git and this project."}
 								</p>
 								<ButtonGroup className="w-full">
 									<Button
@@ -195,7 +204,7 @@ export function ProjectGitControls({
 											}))
 										}
 									>
-										Keep project
+										{conflict.type === "project-deleted" ? "Keep deleted" : "Keep project"}
 									</Button>
 									<Button
 										type="button"
@@ -305,6 +314,29 @@ export function ProjectGitSetting({
 		}
 	};
 
+	const disconnect = async () => {
+		if (!isOwner || saving) {
+			return;
+		}
+
+		setSaving(true);
+		try {
+			const response = await fetch(url, { method: "DELETE" });
+			const result = (await response.json()) as ProjectGitConfig & { error?: string };
+			if (!response.ok) {
+				throw new Error(result.error ?? "Could not disconnect Git sync");
+			}
+
+			await mutate(result, { revalidate: false });
+			discardDraft();
+			toast.success("Git sync disconnected. The access token was removed.");
+		} catch (error) {
+			toast.error(error instanceof Error ? error.message : "Could not disconnect Git sync");
+		} finally {
+			setSaving(false);
+		}
+	};
+
 	const showSummary = data?.configured && !editing;
 
 	return (
@@ -400,6 +432,17 @@ export function ProjectGitSetting({
 							onClick={discardDraft}
 						>
 							Cancel
+						</Button>
+					)}
+					{data?.configured && isOwner && (
+						<Button
+							type="button"
+							variant="ghost"
+							className="w-full text-destructive hover:text-destructive"
+							disabled={saving}
+							onClick={() => void disconnect()}
+						>
+							Disconnect Git sync
 						</Button>
 					)}
 					<p className="px-1 text-xs text-muted-foreground">

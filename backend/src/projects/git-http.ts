@@ -4,6 +4,7 @@ import { request as httpsRequest } from "node:https";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import type { HttpClient, GitHttpRequest, GitHttpResponse } from "isomorphic-git";
+import { assertGitPackWithinLimits, GitPackLimitError } from "./git-pack-limits.ts";
 
 function requestHttps(request: GitHttpRequest): Promise<GitHttpResponse> {
 	return new Promise((resolve, reject) => {
@@ -149,14 +150,32 @@ export function createGitHttpClient(
 			const body = response.body;
 			if (body) {
 				const limit = url.pathname.endsWith("/info/refs") ? 1024 * 1024 : 100 * 1024 * 1024;
+				const isPack = url.pathname.endsWith("/git-upload-pack");
 				response.body = (async function* limitedBody() {
 					let bytes = 0;
+					const chunks: Uint8Array[] = [];
 					for await (const chunk of body) {
 						bytes += chunk.byteLength;
 						if (bytes > limit) {
 							throw new ProjectGitNetworkError("Git remote response exceeds the transfer limit");
 						}
-						yield chunk;
+						if (isPack) {
+							chunks.push(chunk);
+						} else {
+							yield chunk;
+						}
+					}
+					if (isPack) {
+						// Check the whole pack before isomorphic-git starts unpacking it.
+						const pack = Buffer.concat(chunks);
+						try {
+							assertGitPackWithinLimits(pack);
+						} catch (error) {
+							throw error instanceof GitPackLimitError
+								? new ProjectGitNetworkError(error.message)
+								: error;
+						}
+						yield pack;
 					}
 				})();
 			}

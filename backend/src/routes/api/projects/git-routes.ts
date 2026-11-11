@@ -13,19 +13,22 @@ import {
 	type ProjectRouteVariables,
 } from "../../../middleware/project-access-middleware.ts";
 import {
+	beginGitOperation,
 	finishProjectGitSync,
 	startProjectGitSync,
 	waitForProjectWrites,
 } from "../../../projects/git-sync-lock.ts";
 import { ProjectGitConflictError } from "../../../projects/git-merge.ts";
 import {
-	configureProjectGit,
+	disconnectProjectGit,
 	getProjectGitConfig,
 	ProjectGitContentError,
 	ProjectGitRemoteError,
 	ProjectGitNotConfiguredError,
 	pullProjectFromGit,
 	pushProjectToGit,
+	saveProjectGitConfig,
+	verifyProjectGitRemote,
 } from "../../../projects/git-sync.ts";
 import { gitConfigSchema, gitPullSchema } from "./schemas.ts";
 
@@ -35,6 +38,28 @@ const app = new Hono<GitRoutesEnv>();
 
 function writeOnly(c: Context<GitRoutesEnv>) {
 	return c.json({ error: "You do not have write access to this project" }, 403);
+}
+
+function alreadySyncing(c: Context<GitRoutesEnv>) {
+	return c.json({ error: "This project is already syncing" }, 409);
+}
+
+function serverBusy(c: Context<GitRoutesEnv>) {
+	return c.json({ error: "Too many Git syncs are running. Try again shortly." }, 429);
+}
+
+/** Holds the project's sync lock, which makes editors wait and reconnect once it is released. */
+async function withProjectSyncLock<T>(projectId: string, run: () => Promise<T>): Promise<T | null> {
+	if (!startProjectGitSync(projectId)) {
+		return null;
+	}
+	try {
+		return await run();
+	} finally {
+		finishProjectGitSync(projectId);
+		broadcastFilesChanged(projectId);
+		broadcastGitSyncFinished(projectId);
+	}
 }
 
 app.get("/:projectId/git", async (c) => {
@@ -52,26 +77,32 @@ app.put("/:projectId/git", requireProjectOwner, async (c) => {
 	}
 
 	const projectId = c.req.param("projectId")!;
-	if (!startProjectGitSync(projectId)) {
-		return c.json({ error: "This project is already syncing" }, 409);
+	const settings = {
+		projectId,
+		remoteUrl: parsed.data.remoteUrl,
+		branch: parsed.data.branch,
+		folder: parsed.data.folder,
+		credentials: {
+			username: parsed.data.username,
+			token: parsed.data.token,
+		},
+	};
+	const release = beginGitOperation();
+	if (!release) {
+		return serverBusy(c);
 	}
 
 	try {
-		await waitForProjectWrites(projectId);
-		return c.json(
-			await configureProjectGit({
-				projectId,
-				remoteUrl: parsed.data.remoteUrl,
-				branch: parsed.data.branch,
-				folder: parsed.data.folder,
-				credentials: {
-					username: parsed.data.username,
-					token: parsed.data.token,
-				},
-			}),
-		);
+		// Check the remote before locking, so editors are not blocked by a slow network.
+		await verifyProjectGitRemote(settings);
+		const config = await withProjectSyncLock(projectId, () => saveProjectGitConfig(settings));
+		return config ? c.json(config) : alreadySyncing(c);
 	} catch (error) {
-		if (error instanceof ProjectGitRemoteError || error instanceof ProjectGitContentError) {
+		if (
+			error instanceof ProjectGitRemoteError ||
+			error instanceof ProjectGitContentError ||
+			error instanceof ProjectGitNetworkError
+		) {
 			return c.json({ error: error.message }, 400);
 		}
 		logger.warn(
@@ -83,8 +114,17 @@ app.put("/:projectId/git", requireProjectOwner, async (c) => {
 		);
 		return c.json({ error: "Could not save Git settings" }, 500);
 	} finally {
-		finishProjectGitSync(projectId);
+		release();
 	}
+});
+
+app.delete("/:projectId/git", requireProjectOwner, async (c) => {
+	const projectId = c.req.param("projectId")!;
+	const config = await withProjectSyncLock(projectId, async () => {
+		await disconnectProjectGit(projectId);
+		return getProjectGitConfig(projectId);
+	});
+	return config ? c.json(config) : alreadySyncing(c);
 });
 
 async function runGitAction(
@@ -97,25 +137,25 @@ async function runGitAction(
 	}
 
 	const projectId = c.req.param("projectId")!;
-	if (!startProjectGitSync(projectId)) {
-		return c.json({ error: "This project is already syncing" }, 409);
+	const release = beginGitOperation();
+	if (!release) {
+		return serverBusy(c);
 	}
 
 	try {
-		await waitForProjectWrites(projectId);
-		await flushAndCloseProjectDocuments(projectId);
-		const user = c.get("user")!;
-		const options = {
-			projectId,
-			author: { name: user.name || user.email, email: user.email },
-		};
-
-		if (action === "pull") {
-			const result = await pullProjectFromGit({ ...options, resolutions });
-			return c.json(result);
-		}
-
-		return c.json(await pushProjectToGit(options));
+		const result = await withProjectSyncLock(projectId, async () => {
+			await waitForProjectWrites(projectId);
+			await flushAndCloseProjectDocuments(projectId);
+			const user = c.get("user")!;
+			const options = {
+				projectId,
+				author: { name: user.name || user.email, email: user.email },
+			};
+			return action === "pull"
+				? pullProjectFromGit({ ...options, resolutions })
+				: pushProjectToGit(options);
+		});
+		return result ? c.json(result) : alreadySyncing(c);
 	} catch (error) {
 		logger.warn(
 			{
@@ -157,9 +197,7 @@ async function runGitAction(
 
 		return c.json({ error: `Git ${action} failed` }, 500);
 	} finally {
-		finishProjectGitSync(projectId);
-		broadcastFilesChanged(projectId);
-		broadcastGitSyncFinished(projectId);
+		release();
 	}
 }
 

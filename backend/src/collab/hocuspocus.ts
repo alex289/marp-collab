@@ -24,6 +24,8 @@ type CollabContext = {
 
 const fallbackColors = ["#f97316", "#16a34a", "#0ea5e9", "#e11d48", "#7c3aed", "#db2777"];
 const PROJECT_PRESENCE_DOCUMENT_ID = "__presence";
+/** Sent to clients as the rejection reason, so they can wait for the sync instead of giving up. */
+export const GIT_SYNC_REJECTION_REASON = "Project is syncing with Git";
 
 const hashString = (value: string): number => {
 	let hash = 0;
@@ -37,6 +39,20 @@ const hashString = (value: string): number => {
 function isProjectPresenceDocument(documentName: string): boolean {
 	const parsed = parseProjectDocumentName(documentName);
 	return parsed?.fileId === PROJECT_PRESENCE_DOCUMENT_ID;
+}
+
+function isSyncingProjectDocument(documentName: string): boolean {
+	const parsed = parseProjectDocumentName(documentName);
+	return (
+		parsed !== null &&
+		parsed.fileId !== PROJECT_PRESENCE_DOCUMENT_ID &&
+		isProjectGitSyncing(parsed.projectId)
+	);
+}
+
+function gitSyncRejection(): Error {
+	// Hocuspocus forwards only `reason` to the client; the message alone becomes "permission-denied".
+	return Object.assign(new Error(GIT_SYNC_REJECTION_REASON), { reason: GIT_SYNC_REJECTION_REASON });
 }
 
 export const collabServer = new Hocuspocus({
@@ -64,9 +80,6 @@ export const collabServer = new Hocuspocus({
 				throw new Error("Invalid document name");
 			}
 			const { projectId, fileId } = parsed;
-			if (fileId !== PROJECT_PRESENCE_DOCUMENT_ID && isProjectGitSyncing(projectId)) {
-				throw new Error("Project is syncing with Git");
-			}
 			if (fileId !== PROJECT_PRESENCE_DOCUMENT_ID && !isEditableExtension(fileId)) {
 				throw new Error("Only text files can be opened in the editor");
 			}
@@ -74,6 +87,9 @@ export const collabServer = new Hocuspocus({
 			const authorization = getProjectAuthorization(projectId, session.user.id, "read");
 			if (!authorization.allowed) {
 				throw new Error("Forbidden");
+			}
+			if (isSyncingProjectDocument(documentName)) {
+				throw gitSyncRejection();
 			}
 
 			connectionConfig.readOnly = authorization.access.readOnly;
@@ -103,6 +119,10 @@ export const collabServer = new Hocuspocus({
 		unregisterProjectConnection(socketId, documentName);
 	},
 	async onLoadDocument({ documentName }: { documentName: string }) {
+		// A connection authenticated just before a sync started must not load pre-sync content.
+		if (isSyncingProjectDocument(documentName)) {
+			throw gitSyncRejection();
+		}
 		// See the comment in onAuthenticate: Hocuspocus does not log exceptions
 		// thrown from this hook, so we log them ourselves before rethrowing.
 		try {
@@ -135,7 +155,8 @@ export const collabServer = new Hocuspocus({
 	},
 	async onStoreDocument({ documentName, document }: { documentName: string; document: Y.Doc }) {
 		try {
-			if (isProjectPresenceDocument(documentName)) {
+			// Git sync flushes documents itself before closing them; later stores would overwrite pulled files.
+			if (isProjectPresenceDocument(documentName) || isSyncingProjectDocument(documentName)) {
 				return;
 			}
 

@@ -18,7 +18,7 @@ type TreeEntry = {
 
 export type ProjectGitConflict = {
 	path: string;
-	type: "add-add" | "binary" | "remote-deleted";
+	type: "add-add" | "binary" | "project-deleted" | "remote-deleted";
 };
 
 export type ProjectGitResolution = "project" | "remote";
@@ -81,6 +81,8 @@ async function findConflicts(dir: string, ours: string, theirs: string) {
 				conflicts.push({ path, type: "add-add" });
 			} else if (base?.type === "blob" && project?.type === "blob" && !remote) {
 				conflicts.push({ path, type: "remote-deleted" });
+			} else if (base?.type === "blob" && !project && remote?.type === "blob") {
+				conflicts.push({ path, type: "project-deleted" });
 			} else if (
 				project?.type === "blob" &&
 				remote?.type === "blob" &&
@@ -94,20 +96,34 @@ async function findConflicts(dir: string, ours: string, theirs: string) {
 	return { conflicts: conflicts.sort((a, b) => a.path.localeCompare(b.path)), ourOid, theirOid };
 }
 
-const LINEBREAKS = /^.*(?:\r?\n|$)/gm;
+const LINEBREAKS = /^.*(?:\n|$)/gm;
 
-export function mergeTextFiles(base: string, project: string, remote: string): string {
-	const result = diff3Merge<string>(
-		project.match(LINEBREAKS) ?? [],
-		base.match(LINEBREAKS) ?? [],
-		remote.match(LINEBREAKS) ?? [],
+function usesCrlf(text: string): boolean {
+	return text.includes("\r\n");
+}
+
+/**
+ * Three-way merge of text files. Where both sides changed the same lines, both versions are kept
+ * (project first) and `overlapping` is set so the user can be told to review the file.
+ */
+export function mergeTextFiles(
+	base: string,
+	project: string,
+	remote: string,
+): { text: string; overlapping: boolean } {
+	// Compare lines without their endings, so a line-ending change alone does not conflict.
+	const [baseLines, projectLines, remoteLines] = [base, project, remote].map(
+		(text) => text.replaceAll("\r\n", "\n").match(LINEBREAKS) ?? [],
 	);
+	const result = diff3Merge<string>(projectLines!, baseLines!, remoteLines!);
 	let merged = "";
+	let overlapping = false;
 
 	for (const block of result) {
 		if (block.ok) {
 			merged += block.ok.join("");
 		} else if (block.conflict) {
+			overlapping = true;
 			const projectText = block.conflict.a.join("");
 			const remoteText = block.conflict.b.join("");
 			merged += projectText;
@@ -118,7 +134,9 @@ export function mergeTextFiles(base: string, project: string, remote: string): s
 		}
 	}
 
-	return merged;
+	// Keep the project's line endings unless the remote switched them.
+	const crlf = usesCrlf(remote) !== usesCrlf(base) ? usesCrlf(remote) : usesCrlf(project);
+	return { text: crlf ? merged.replaceAll("\n", "\r\n") : merged, overlapping };
 }
 
 function projectPath(dir: string, filepath: string): string {
@@ -165,8 +183,9 @@ export async function mergeProjectBranches({
 	theirs: string;
 	author: GitAuthor;
 	resolutions?: Record<string, ProjectGitResolution>;
-}): Promise<{ alreadyMerged: boolean }> {
+}): Promise<{ alreadyMerged: boolean; overlapping: string[] }> {
 	const { conflicts, ourOid, theirOid } = await findConflicts(dir, ours, theirs);
+	const overlapping = new Set<string>();
 	const unresolved = conflicts.filter((conflict) => !resolutions[conflict.path]);
 	if (unresolved.length > 0) {
 		throw new ProjectGitConflictError(unresolved);
@@ -181,12 +200,16 @@ export async function mergeProjectBranches({
 			author,
 			abortOnConflict: false,
 			allowUnrelatedHistories: true,
-			mergeDriver: ({ contents, path }) => ({
-				cleanMerge: isEditableExtension(path),
-				mergedText: isEditableExtension(path)
-					? mergeTextFiles(contents[0] ?? "", contents[1] ?? "", contents[2] ?? "")
-					: (contents[1] ?? ""),
-			}),
+			mergeDriver: ({ contents, path }) => {
+				if (!isEditableExtension(path)) {
+					return { cleanMerge: false, mergedText: contents[1] ?? "" };
+				}
+				const merged = mergeTextFiles(contents[0] ?? "", contents[1] ?? "", contents[2] ?? "");
+				if (merged.overlapping) {
+					overlapping.add(path);
+				}
+				return { cleanMerge: true, mergedText: merged.text };
+			},
 		});
 
 		await git.checkout({ fs, dir, ref: ours, force: true });
@@ -198,7 +221,7 @@ export async function mergeProjectBranches({
 			await git.commit({ fs, dir, ref: ours, message: "Resolve Git pull conflicts", author });
 		}
 
-		return { alreadyMerged: Boolean(merge.alreadyMerged) };
+		return { alreadyMerged: Boolean(merge.alreadyMerged), overlapping: [...overlapping].sort() };
 	} catch (error) {
 		if (!(error instanceof git.Errors.MergeConflictError)) {
 			throw error;
@@ -215,7 +238,15 @@ export async function mergeProjectBranches({
 				resolved.add(filepath);
 			}
 			for (const filepath of error.data.deleteByUs) {
-				await deleteVersion(dir, filepath);
+				const resolution = resolutions[filepath];
+				if (!resolution) {
+					throw new ProjectGitConflictError([{ path: filepath, type: "project-deleted" }]);
+				}
+				if (resolution === "remote") {
+					await keepVersion(dir, theirOid, filepath);
+				} else {
+					await deleteVersion(dir, filepath);
+				}
 				resolved.add(filepath);
 			}
 			for (const filepath of error.data.deleteByTheirs) {
@@ -245,7 +276,7 @@ export async function mergeProjectBranches({
 				author,
 			});
 			await git.checkout({ fs, dir, ref: ours, force: true });
-			return { alreadyMerged: false };
+			return { alreadyMerged: false, overlapping: [...overlapping].sort() };
 		} catch (resolutionError) {
 			await git.abortMerge({ fs, dir, commit: ourOid }).catch(() => undefined);
 			throw resolutionError;
