@@ -1,5 +1,5 @@
 packages:
-  - .
+  - "."
   - frontend
   - backend
   - e2e
@@ -17,9 +17,9 @@ publicHoistPattern:
 # so the highlighter reads an empty syntax tree and nothing gets colored. Dependency
 # bumps kept resolving these to two versions at once, so pin them to one copy each.
 overrides:
-  "@codemirror/language": "^6.12.4"
-  "@codemirror/autocomplete": "^6.20.3"
-  "@lezer/markdown": "^1.7.2"
+  "@codemirror/language": "^6.13.1"
+  "@codemirror/autocomplete": "^6.20.4"
+  "@lezer/markdown": "^1.8.1"
 allowBuilds:
   better-sqlite3: true
   integer: true

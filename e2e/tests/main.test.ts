@@ -1138,6 +1138,12 @@ test.describe("Editor: collaboration", () => {
 
 test.describe("Presentation mode: slide counter and timer", () => {
 	test.beforeEach(async ({ page }) => {
+		const editorErrors: string[] = [];
+		page.on("console", (message) => {
+			if (message.text().includes("CodeMirror plugin crashed")) {
+				editorErrors.push(message.text());
+			}
+		});
 		await page.goto("/");
 		await createPresentation(page, "Counter Timer Test");
 		await page.waitForURL(/\/presentations\/.+/);
@@ -1149,6 +1155,14 @@ test.describe("Presentation mode: slide counter and timer", () => {
 		await page.keyboard.type(
 			"<!-- presenter: Test User -->\n\n<!-- Open with the key point -->\n\n# Slide 1\n\n---\n\n<!-- presenter: Bob -->\n\n# Slide 2\n\n---\n\n<!-- presenter: Bob -->\n\n# Slide 3",
 		);
+
+		await expect(
+			page
+				.frameLocator('iframe[title="Marp preview"]')
+				.getByRole("heading", { name: "Slide 3", exact: true }),
+		).toBeVisible();
+
+		expect(editorErrors).toEqual([]);
 
 		await page.getByRole("button", { name: "Start" }).click();
 		await expect(page).toHaveURL(/mode=present/);

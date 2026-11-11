@@ -21,6 +21,7 @@ export const PresentationActions = ({
 	const navigate = useNavigate();
 	const [isExportingPdf, setIsExportingPdf] = useState(false);
 	const { project } = useProject(projectId);
+	const projectName = project?.name;
 
 	const handleStartPresentation = useCallback(async () => {
 		const secondaryScreen = await getSecondaryScreen();
@@ -61,7 +62,7 @@ export const PresentationActions = ({
 
 			const link = document.createElement("a");
 			link.href = url;
-			link.download = project?.name ? `${project.name}.pdf` : "presentation.pdf";
+			link.download = projectName ? `${projectName}.pdf` : "presentation.pdf";
 			document.body.append(link);
 			link.click();
 			link.remove();
@@ -71,7 +72,7 @@ export const PresentationActions = ({
 		} finally {
 			setIsExportingPdf(false);
 		}
-	}, [projectId, selectedFileId, isExportingPdf, project?.name]);
+	}, [projectId, selectedFileId, isExportingPdf, projectName]);
 
 	return (
 		<>

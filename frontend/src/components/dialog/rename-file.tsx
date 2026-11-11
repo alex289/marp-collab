@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { getProjectFilesErrorMessage } from "@/features/project-files/project-files-client";
 import type { DeckFile } from "@/lib/types";
-import { useEffect, useMemo, useState } from "react";
+import { useState } from "react";
 
 type Props = {
 	file: DeckFile | null;
@@ -26,27 +26,27 @@ type Props = {
 const getBasename = (path: string): string => path.split("/").pop() ?? path;
 
 export function RenameFileDialog({ file, open, onOpenChange, onRename }: Props) {
-	const [name, setName] = useState("");
+	return (
+		<Dialog open={open} onOpenChange={onOpenChange}>
+			<DialogContent className="sm:max-w-md">
+				{/* Mounted per open dialog so the form state starts fresh every time. */}
+				<RenameFileForm file={file} onRename={onRename} onDone={() => onOpenChange(false)} />
+			</DialogContent>
+		</Dialog>
+	);
+}
+
+type RenameFileFormProps = {
+	file: DeckFile | null;
+	onRename: (file: DeckFile, name: string) => Promise<void>;
+	onDone: () => void;
+};
+
+function RenameFileForm({ file, onRename, onDone }: RenameFileFormProps) {
+	const [name, setName] = useState(() => (file ? getBasename(file.id) : ""));
 	const [error, setError] = useState<string | null>(null);
 	const [isSubmitting, setIsSubmitting] = useState(false);
-	const originalName = useMemo(() => (file ? getBasename(file.id) : ""), [file]);
 	const isFolder = file?.type === "folder";
-
-	useEffect(() => {
-		if (open) {
-			setName(originalName);
-			setError(null);
-			setIsSubmitting(false);
-		}
-	}, [open, originalName]);
-
-	function handleOpenChange(next: boolean) {
-		onOpenChange(next);
-		if (!next) {
-			setError(null);
-			setIsSubmitting(false);
-		}
-	}
 
 	async function handleSubmit(e: React.FormEvent) {
 		e.preventDefault();
@@ -59,7 +59,7 @@ export function RenameFileDialog({ file, open, onOpenChange, onRename }: Props) 
 
 		try {
 			await onRename(file, name.trim());
-			handleOpenChange(false);
+			onDone();
 		} catch (requestError) {
 			setError(
 				getProjectFilesErrorMessage(
@@ -73,42 +73,38 @@ export function RenameFileDialog({ file, open, onOpenChange, onRename }: Props) 
 	}
 
 	return (
-		<Dialog open={open} onOpenChange={handleOpenChange}>
-			<DialogContent className="sm:max-w-md">
-				<form onSubmit={handleSubmit} className="flex flex-col gap-3">
-					<DialogHeader>
-						<DialogTitle>{isFolder ? "Rename Folder" : "Rename File"}</DialogTitle>
-						<DialogDescription>
-							Enter a new name. The item will stay in its current folder.
-						</DialogDescription>
-					</DialogHeader>
-					<FieldGroup>
-						<Field>
-							<Label htmlFor="rename-name">Name</Label>
-							<Input
-								id="rename-name"
-								name="rename-name"
-								value={name}
-								onChange={(e) => setName(e.target.value)}
-								required
-							/>
-						</Field>
-					</FieldGroup>
-					{error && <ErrorAlert title="Failed to rename item" description={error} />}
-					<DialogFooter>
-						<DialogClose
-							render={
-								<Button variant="outline" type="button" disabled={isSubmitting}>
-									Cancel
-								</Button>
-							}
-						/>
-						<Button type="submit" disabled={isSubmitting || name.trim() === ""}>
-							{isSubmitting ? "Renaming..." : "Rename"}
+		<form onSubmit={handleSubmit} className="flex flex-col gap-3">
+			<DialogHeader>
+				<DialogTitle>{isFolder ? "Rename Folder" : "Rename File"}</DialogTitle>
+				<DialogDescription>
+					Enter a new name. The item will stay in its current folder.
+				</DialogDescription>
+			</DialogHeader>
+			<FieldGroup>
+				<Field>
+					<Label htmlFor="rename-name">Name</Label>
+					<Input
+						id="rename-name"
+						name="rename-name"
+						value={name}
+						onChange={(e) => setName(e.target.value)}
+						required
+					/>
+				</Field>
+			</FieldGroup>
+			{error && <ErrorAlert title="Failed to rename item" description={error} />}
+			<DialogFooter>
+				<DialogClose
+					render={
+						<Button variant="outline" type="button" disabled={isSubmitting}>
+							Cancel
 						</Button>
-					</DialogFooter>
-				</form>
-			</DialogContent>
-		</Dialog>
+					}
+				/>
+				<Button type="submit" disabled={isSubmitting || name.trim() === ""}>
+					{isSubmitting ? "Renaming..." : "Rename"}
+				</Button>
+			</DialogFooter>
+		</form>
 	);
 }

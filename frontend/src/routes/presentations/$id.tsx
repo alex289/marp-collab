@@ -3,7 +3,16 @@ import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod/v4-mini";
 import * as Y from "yjs";
 import { toast } from "sonner";
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+	lazy,
+	Suspense,
+	useCallback,
+	useEffect,
+	useMemo,
+	useRef,
+	useState,
+	useSyncExternalStore,
+} from "react";
 import { FileSidebar } from "@/components/file-sidebar";
 import {
 	useCollabDocument,
@@ -21,9 +30,9 @@ import { getProject } from "@/lib/project";
 import { useHotkeys } from "@tanstack/react-hotkeys";
 import { PresentationFrame } from "@/components/presentation-frame";
 import { Button } from "@/components/ui/button";
-import { ButtonGroup } from "@/components/ui/button-group";
 import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { PresentationTimer } from "@/components/presentation-timer";
 import type { EditorPaneHandle, MarkdownImageUploadResult } from "@/components/editor-pane";
 import { SearchPanel } from "@/components/search-panel";
 import { findTextMatches, replaceTextRange, type TextSearchMatch } from "@/lib/text-search";
@@ -38,7 +47,8 @@ import { listThemeNames, rewriteCssUrls, setProjectThemes } from "@/lib/marp";
 import { useAssetToken } from "@/lib/asset-token";
 import { fetcher } from "@/lib/fetcher";
 import { applyThemeToYText, getMarkdownTheme } from "@/lib/markdown-theme";
-import { upsertProjectTheme, type ProjectTheme } from "@/lib/project-themes";
+import { upsertProjectTheme } from "@/lib/project-themes";
+import { createProjectThemeStore } from "@/lib/project-theme-store";
 import { API_URL } from "@/lib/config";
 import { releaseWakeLock, requestWakeLock } from "@/lib/wake-lock";
 import { useProjectFilesWorkspace } from "@/features/project-files/use-project-files-workspace";
@@ -52,7 +62,6 @@ import {
 	MonitorOffIcon,
 	MonitorPlayIcon,
 	PauseIcon,
-	PlayIcon,
 	XIcon,
 } from "lucide-react";
 import useSWR from "swr";
@@ -194,17 +203,47 @@ function clampPaneWidth(value: number, min: number, max: number) {
 	return Math.min(Math.max(value, min), Math.max(min, max));
 }
 
-function formatElapsed(ms: number) {
-	const totalSeconds = Math.max(0, Math.floor(ms / 1000));
-	const hours = Math.floor(totalSeconds / 3600);
-	const minutes = Math.floor((totalSeconds % 3600) / 60);
-	const seconds = totalSeconds % 60;
-
-	if (hours > 0) {
-		return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+function resolveSelectedFile(
+	files: DeckFile[],
+	isLoading: boolean,
+	requestedFileId: string | undefined,
+	selectedFile: DeckFile | null,
+): DeckFile | null {
+	if (files.length === 0) {
+		return null;
 	}
 
-	return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+	if (selectedFile && (isLoading || files.some((file) => file.id === selectedFile.id))) {
+		return selectedFile;
+	}
+
+	const requestedFile = requestedFileId
+		? files.find((file) => file.id === requestedFileId && isMarkdownDeckFile(file))
+		: null;
+
+	return (
+		requestedFile ??
+		files.find((file) => file.id === "presentation.md") ??
+		files.find((file) => isMarkdownDeckFile(file)) ??
+		files[0] ??
+		null
+	);
+}
+
+function resolvePreviewFile(
+	files: DeckFile[],
+	selectedFile: DeckFile | null,
+	previewFile: DeckFile | null,
+): DeckFile | null {
+	if (isMarkdownDeckFile(selectedFile)) {
+		return selectedFile;
+	}
+
+	if (previewFile && files.some((file) => file.id === previewFile.id && isMarkdownDeckFile(file))) {
+		return previewFile;
+	}
+
+	return files.find((file) => isMarkdownDeckFile(file)) ?? null;
 }
 
 function RouteComponent() {
@@ -282,9 +321,14 @@ function RouteComponent() {
 	const [sidebarResizing, setSidebarResizing] = useState(false);
 	const mainRef = useRef<HTMLElement | null>(null);
 	const [markdown, setMarkdown] = useState("");
-	const [projectThemes, setProjectThemesState] = useState<ProjectTheme[]>([]);
-	const [themeNames, setThemeNames] = useState<string[]>(() => listThemeNames());
-	const [themeRevision, setThemeRevision] = useState(0);
+	const [projectThemeStore] = useState(() =>
+		createProjectThemeStore(setProjectThemes, listThemeNames()),
+	);
+	const {
+		themes: projectThemes,
+		names: themeNames,
+		revision: themeRevision,
+	} = useSyncExternalStore(projectThemeStore.subscribe, projectThemeStore.getSnapshot);
 	const [assetRevision, setAssetRevision] = useState(0);
 	const assetToken = useAssetToken(id);
 	const [slideIndex, setSlideIndex] = useState(0);
@@ -292,10 +336,6 @@ function RouteComponent() {
 	const [zoomState, setZoomState] = useState({ zoom: 1, originX: 50, originY: 50 });
 	const [laserState, setLaserState] = useState({ active: false, xPercent: -1, yPercent: -1 });
 	const [cursorLine, setCursorLine] = useState(1);
-	const [startedAt, setStartedAt] = useState(() => Date.now());
-	const [now, setNow] = useState(() => Date.now());
-	const [isTimerPaused, setIsTimerPaused] = useState(false);
-	const [pausedElapsedMs, setPausedElapsedMs] = useState(0);
 	const [searchQuery, setSearchQuery] = useState("");
 	const [pendingCursorJump, setPendingCursorJump] = useState<{
 		userId: string;
@@ -309,9 +349,13 @@ function RouteComponent() {
 	const selectedCssFileIdRef = useRef<string | null>(null);
 	const suppressNextSlideAwarenessUpdateRef = useRef(false);
 	const lastAppliedPresentationUpdateRef = useRef(0);
-	selectedCssFileIdRef.current = selectedFile?.id.toLowerCase().endsWith(".css")
+	const selectedCssFileId = selectedFile?.id.toLowerCase().endsWith(".css")
 		? selectedFile.id
 		: null;
+
+	useEffect(() => {
+		selectedCssFileIdRef.current = selectedCssFileId;
+	}, [selectedCssFileId]);
 
 	useEffect(() => {
 		localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, String(sidebarWidth));
@@ -430,97 +474,67 @@ function RouteComponent() {
 	};
 	const slideCount = useMemo(() => countMarpSlides(renderedMarkdown), [renderedMarkdown]);
 
-	useEffect(() => {
-		if (files.length === 0) {
-			setSelectedFile(null);
-			return;
-		}
+	// Adjust state during render instead of in effects to avoid an extra commit.
+	const nextSelectedFile = resolveSelectedFile(files, isLoading, search.file, selectedFile);
+	if (nextSelectedFile !== selectedFile) {
+		setSelectedFile(nextSelectedFile);
+	}
 
-		const requestedFile = search.file
-			? files.find((f) => f.id === search.file && isMarkdownDeckFile(f))
+	const nextPreviewFile = resolvePreviewFile(files, selectedFile, previewFile);
+	if (nextPreviewFile !== previewFile) {
+		setPreviewFile(nextPreviewFile);
+	}
+
+	// Project files are served under stable URLs; bump the asset version when
+	// the file list changes so re-uploaded images bypass the browser cache.
+	const [assetRevisionFiles, setAssetRevisionFiles] = useState(files);
+	if (assetRevisionFiles !== files) {
+		setAssetRevisionFiles(files);
+		setAssetRevision((revision) => revision + 1);
+	}
+
+	if (!selectedFile && markdown !== "") {
+		setMarkdown("");
+	}
+
+	// The collab state lags one render behind a file switch, so yText can still
+	// hold the previously opened document. Only expose it once the selected
+	// file's own document has synced.
+	const syncedYText =
+		collab.yText && collab.synced && collab.documentName === (selectedFile?.documentName ?? null)
+			? collab.yText
 			: null;
 
-		const preferredDefault = () =>
-			requestedFile ??
-			files.find((f) => f.id === "presentation.md") ??
-			files.find((f) => isMarkdownDeckFile(f)) ??
-			files[0] ??
-			null;
-
-		if (!selectedFile) {
-			setSelectedFile(preferredDefault());
-			return;
-		}
-
-		const stillAvailable = files.some((file) => file.id === selectedFile.id);
-		if (!stillAvailable && !isLoading) {
-			setSelectedFile(preferredDefault());
-		}
-	}, [files, isLoading, search.file, selectedFile]);
-
 	useEffect(() => {
-		if (isMarkdownDeckFile(selectedFile)) {
-			setPreviewFile(selectedFile);
-			return;
-		}
-
-		setPreviewFile((current) => {
-			if (current && files.some((file) => file.id === current.id && isMarkdownDeckFile(file))) {
-				return current;
-			}
-
-			return files.find((file) => isMarkdownDeckFile(file)) ?? null;
-		});
-	}, [files, selectedFile]);
-
-	useEffect(() => {
-		// Project files are served under stable URLs; bump the asset version when
-		// the file list changes so re-uploaded images bypass the browser cache.
-		setAssetRevision((revision) => revision + 1);
-	}, [files]);
-
-	useEffect(() => {
-		if (!selectedFile) {
-			setMarkdown("");
-			return;
-		}
-
-		if (selectedFile.id.endsWith(".css")) {
-			return;
-		}
-
-		// The collab state lags one render behind a file switch, so yText can
-		// still hold the previously opened document. Only sync once the selected
-		// file's own document has loaded; until then keep the previous markdown
-		// so the preview doesn't re-render and lose its scroll position.
-		if (
-			!collab.yText ||
-			!collab.synced ||
-			collab.documentName !== (selectedFile.documentName ?? null)
-		) {
+		// Until the selected file's document has loaded, keep the previous
+		// markdown so the preview doesn't re-render and lose its scroll position.
+		if (!selectedFile || selectedFile.id.endsWith(".css") || !syncedYText) {
 			return;
 		}
 
 		const sync = () => {
 			// oxlint-disable-next-line no-base-to-string
-			setMarkdown(collab.yText?.toString() ?? "");
+			setMarkdown(syncedYText.toString());
 		};
 
+		let frame: number;
+		const scheduleSync = () => {
+			cancelAnimationFrame(frame);
+			// Yjs observers run inside editor transactions. Publish to React after
+			// the transaction settles so rapid typing cannot nest React updates.
+			frame = requestAnimationFrame(sync);
+		};
 		sync();
-		collab.yText.observe(sync);
+		syncedYText.observe(scheduleSync);
 
 		return () => {
-			collab.yText?.unobserve(sync);
+			cancelAnimationFrame(frame);
+			syncedYText.unobserve(scheduleSync);
 		};
-	}, [collab.documentName, collab.synced, collab.yText, selectedFile]);
+	}, [syncedYText, selectedFile]);
 
 	useEffect(() => {
 		const cssFiles = files.filter((file) => file.id.toLowerCase().endsWith(".css"));
-		if (cssFiles.length === 0) {
-			setProjectThemesState([]);
-			return;
-		}
-
 		const controller = new AbortController();
 		void (async () => {
 			const themes = await Promise.all(
@@ -547,7 +561,7 @@ function RouteComponent() {
 				return;
 			}
 
-			setProjectThemesState((current) => {
+			projectThemeStore.update((current) => {
 				const loadedThemes = themes.filter(
 					(theme): theme is { id: string; css: string } => theme !== null,
 				);
@@ -561,39 +575,45 @@ function RouteComponent() {
 		})();
 
 		return () => controller.abort();
-	}, [files, id, assetToken]);
+	}, [files, id, assetToken, projectThemeStore]);
 
 	useEffect(() => {
-		setThemeNames(setProjectThemes(projectThemes));
-		setThemeRevision((revision) => revision + 1);
-	}, [projectThemes]);
-
-	useEffect(() => {
-		if (
-			!selectedFile?.id.toLowerCase().endsWith(".css") ||
-			!collab.yText ||
-			collab.documentName !== (selectedFile.documentName ?? null)
-		) {
+		// Wait for the document to sync so an empty, still-loading text never
+		// replaces the theme loaded from the server.
+		if (!selectedFile?.id.toLowerCase().endsWith(".css") || !syncedYText) {
 			return;
 		}
 
-		const syncTheme = () => {
+		const applyTheme = () => {
 			// oxlint-disable-next-line no-base-to-string
-			const css = rewriteCssUrls(collab.yText?.toString() ?? "", id, selectedFile.id, assetToken);
-			setProjectThemesState((current) =>
-				upsertProjectTheme(current, {
-					id: selectedFile.id,
-					css,
-				}),
+			const css = rewriteCssUrls(syncedYText.toString(), id, selectedFile.id, assetToken);
+			projectThemeStore.update((current) =>
+				upsertProjectTheme(current, { id: selectedFile.id, css }),
 			);
 		};
 
-		collab.yText.observe(syncTheme);
+		let timer: ReturnType<typeof setTimeout> | undefined;
+		const syncTheme = () => {
+			clearTimeout(timer);
+			// Wait for a typing burst to settle before parsing a partial CSS theme.
+			timer = setTimeout(() => {
+				timer = undefined;
+				applyTheme();
+			}, 150);
+		};
+
+		syncedYText.observe(syncTheme);
+		syncTheme();
 
 		return () => {
-			collab.yText?.unobserve(syncTheme);
+			syncedYText.unobserve(syncTheme);
+			// Flush a pending update so switching files doesn't drop the last edits.
+			if (timer !== undefined) {
+				clearTimeout(timer);
+				applyTheme();
+			}
 		};
-	}, [collab.documentName, collab.yText, id, selectedFile, assetToken]);
+	}, [syncedYText, id, selectedFile, assetToken, projectThemeStore]);
 
 	const currentTheme = useMemo(() => getMarkdownTheme(markdown) ?? "default", [markdown]);
 
@@ -606,10 +626,12 @@ function RouteComponent() {
 		[collab.yText],
 	);
 
-	useEffect(() => {
+	const [searchFileId, setSearchFileId] = useState(selectedFile?.id);
+	if (searchFileId !== selectedFile?.id) {
+		setSearchFileId(selectedFile?.id);
 		setSearchMatches([]);
 		setSearchError(null);
-	}, [selectedFile?.id]);
+	}
 
 	const jumpToUserCursor = useCallback(
 		(userId: string) => {
@@ -694,17 +716,13 @@ function RouteComponent() {
 			return;
 		}
 
-		if (jumpToUserCursor(pendingCursorJump.userId)) {
-			setPendingCursorJump(null);
-			return;
-		}
-
 		const awareness = collab.awareness;
 		const retry = () => {
 			if (jumpToUserCursor(pendingCursorJump.userId)) {
 				setPendingCursorJump(null);
 			}
 		};
+		retry();
 		awareness.on("change", retry);
 		const timeout = window.setTimeout(() => {
 			setPendingCursorJump(null);
@@ -867,30 +885,14 @@ function RouteComponent() {
 		[canReorderSlides, collab.yText],
 	);
 
-	useEffect(() => {
-		if (!isPresentation) {
-			return;
+	// Unblank whenever presentation mode is entered. The timer restarts by remounting.
+	const [wasPresentation, setWasPresentation] = useState(isPresentation);
+	if (wasPresentation !== isPresentation) {
+		setWasPresentation(isPresentation);
+		if (isPresentation) {
+			setIsBlanked(false);
 		}
-
-		const currentTime = Date.now();
-		setStartedAt(currentTime);
-		setNow(currentTime);
-		setIsTimerPaused(false);
-		setPausedElapsedMs(0);
-		setIsBlanked(false);
-	}, [isPresentation]);
-
-	useEffect(() => {
-		if (!isPresentation || isTimerPaused) {
-			return;
-		}
-
-		const interval = window.setInterval(() => setNow(Date.now()), 1000);
-
-		return () => {
-			window.clearInterval(interval);
-		};
-	}, [isPresentation, isTimerPaused]);
+	}
 
 	useEffect(() => {
 		if (!isPresentation) {
@@ -924,16 +926,16 @@ function RouteComponent() {
 		});
 	}, [isPresentation, search.slide]);
 
-	useEffect(() => {
-		if (slideCount <= 0) {
-			setSlideIndex(0);
-			return;
-		}
-
-		setSlideIndex((prev) => Math.min(prev, slideCount - 1));
-	}, [slideCount]);
-
 	const maxSlideIndex = Math.max(0, slideCount - 1);
+	// Clamp only when the deck shrinks, so a slide received from the presenter
+	// survives while included files are still loading.
+	const [clampedForSlideCount, setClampedForSlideCount] = useState(slideCount);
+	if (clampedForSlideCount !== slideCount) {
+		setClampedForSlideCount(slideCount);
+		if (slideIndex > maxSlideIndex) {
+			setSlideIndex(maxSlideIndex);
+		}
+	}
 	const [fullscreenPromptVisible, setFullscreenPromptVisible] = useState(autoFullscreen);
 
 	const enterFullscreen = useCallback(() => {
@@ -1164,26 +1166,6 @@ function RouteComponent() {
 
 	if (isPresentation) {
 		const viewerUrl = `/presentations/${id}?mode=viewer&slide=${slideIndex}${selectedFile?.id ? `&file=${encodeURIComponent(selectedFile.id)}` : ""}`;
-		const elapsedMs = isTimerPaused ? pausedElapsedMs : now - startedAt;
-		const resetTimer = () => {
-			const currentTime = Date.now();
-			setStartedAt(currentTime);
-			setNow(currentTime);
-			setPausedElapsedMs(0);
-			setIsTimerPaused(false);
-		};
-		const pauseTimer = () => {
-			const currentTime = Date.now();
-			setNow(currentTime);
-			setPausedElapsedMs(Math.max(0, currentTime - startedAt));
-			setIsTimerPaused(true);
-		};
-		const resumeTimer = () => {
-			const currentTime = Date.now();
-			setStartedAt(currentTime - pausedElapsedMs);
-			setNow(currentTime);
-			setIsTimerPaused(false);
-		};
 		const frame = (
 			<PresentationFrame
 				markdown={renderedMarkdown}
@@ -1248,38 +1230,7 @@ function RouteComponent() {
 						<TooltipContent>Back to first slide</TooltipContent>
 					</Tooltip>
 					<div className="flex items-center gap-1 md:gap-2">
-						<ButtonGroup>
-							<Tooltip>
-								<TooltipTrigger
-									render={
-										<Button
-											type="button"
-											variant="secondary"
-											aria-label={isTimerPaused ? "Resume timer" : "Pause timer"}
-											onClick={isTimerPaused ? resumeTimer : pauseTimer}
-										>
-											{isTimerPaused ? <PlayIcon /> : <PauseIcon />}
-										</Button>
-									}
-								/>
-								<TooltipContent>{isTimerPaused ? "Resume timer" : "Pause timer"}</TooltipContent>
-							</Tooltip>
-							<Tooltip>
-								<TooltipTrigger
-									render={
-										<Button
-											type="button"
-											variant="secondary"
-											aria-label="Reset timer"
-											onClick={resetTimer}
-										>
-											{formatElapsed(elapsedMs)}
-										</Button>
-									}
-								/>
-								<TooltipContent>Reset timer</TooltipContent>
-							</Tooltip>
-						</ButtonGroup>
+						<PresentationTimer />
 						<Separator orientation="vertical" />
 						<Tooltip>
 							<TooltipTrigger
@@ -1487,7 +1438,7 @@ function RouteComponent() {
 						files={files}
 						themeNames={themeNames}
 						projectThemes={projectThemes}
-						yText={collab.yText}
+						yText={syncedYText}
 						awareness={collab.awareness}
 						undoManager={collab.undoManager}
 						readOnly={collab.readOnly}
