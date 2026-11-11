@@ -2,11 +2,12 @@ import fs from "node:fs";
 import { access, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import git from "isomorphic-git";
-import http from "isomorphic-git/http/node";
+import { projectGitHttp as http } from "./git-http.ts";
 import { mergeProjectBranches, type ProjectGitResolution } from "./git-merge.ts";
-import { clearProjectDocumentState, getProjectDirectory } from "./storage.ts";
+import { getProjectDirectory } from "./storage.ts";
 
 import { encryptSecret, decryptSecret } from "../helpers/encryption.ts";
+import { reconcileProjectDocumentState } from "./git-document-state.ts";
 import { syncSupportedFiles } from "./git-files.ts";
 
 const REMOTE = "origin";
@@ -347,7 +348,7 @@ export async function pullProjectFromGit({
 		if (pulled) {
 			await git.checkout({ fs, dir, ref: branch, force: true });
 			await syncSupportedFiles(join(dir, folder), await getProjectDirectory(projectId));
-			await clearProjectDocumentState(projectId);
+			await reconcileProjectDocumentState(projectId);
 		}
 	}
 

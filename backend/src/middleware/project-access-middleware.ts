@@ -1,4 +1,4 @@
-import { isProjectGitSyncing } from "../projects/git-sync-lock.ts";
+import { beginProjectWrite } from "../projects/git-sync-lock.ts";
 import { createMiddleware } from "hono/factory";
 import { getProjectAccess, type ProjectAccess } from "../projects/access-policy.ts";
 import type { HonoVariables } from "../types.ts";
@@ -44,11 +44,16 @@ export const requireProjectWriteAccess = createMiddleware<ProjectRouteEnvironmen
 			return c.json({ error: "You do not have write access to this project" }, 403);
 		}
 
-		if (isProjectGitSyncing(c.req.param("projectId")!)) {
+		const release = beginProjectWrite(c.req.param("projectId")!);
+		if (!release) {
 			return c.json({ error: "This project is syncing with Git" }, 409);
 		}
 
-		await next();
+		try {
+			await next();
+		} finally {
+			release();
+		}
 	},
 );
 

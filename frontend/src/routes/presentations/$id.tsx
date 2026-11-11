@@ -227,7 +227,7 @@ function RouteComponent() {
 			if (payload === "files-changed") {
 				setFilesChangedRevision((revision) => revision + 1);
 			}
-			if (payload === "git-pulled") {
+			if (payload === "git-sync-finished") {
 				setCollabRevision((revision) => revision + 1);
 			}
 		},

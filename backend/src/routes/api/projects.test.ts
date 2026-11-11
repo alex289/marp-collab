@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { Readable } from "node:stream";
 import { startProjectGitSync, finishProjectGitSync } from "../../projects/git-sync-lock.ts";
+import { Document } from "@hocuspocus/server";
 import git from "isomorphic-git";
 import { Hono } from "hono";
 import { ZipArchive } from "archiver";
@@ -592,6 +593,26 @@ describe("projects routes", () => {
 				body: JSON.stringify({ remoteUrl: "https://example.com/repo.git", branch: "main", folder }),
 			});
 			equal(response.status, 400);
+		}
+	});
+	test("broadcasts sync completion after a failed Git action so every editor can reconnect", async (t) => {
+		const { collabServer } = await import("../../collab/hocuspocus.ts");
+		const document = new Document("project/upload-proj/__presence");
+		const messages: string[] = [];
+		t.mock.method(document, "broadcastStateless", (payload: string) => {
+			messages.push(payload);
+		});
+		collabServer.documents.set(document.name, document);
+		try {
+			const response = await app.request("/upload-proj/git/push", {
+				method: "POST",
+				headers: { "x-test-user-id": "user-1" },
+			});
+			equal(response.status, 409);
+			ok(messages.includes("git-sync-finished"));
+		} finally {
+			collabServer.documents.delete(document.name);
+			document.destroy();
 		}
 	});
 });

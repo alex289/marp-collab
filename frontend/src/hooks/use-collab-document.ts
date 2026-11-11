@@ -25,7 +25,7 @@ const defaultState: CollabState = {
 	awareness: null,
 	undoManager: null,
 	status: "disconnected",
-	readOnly: false,
+	readOnly: true,
 	synced: false,
 	documentName: null,
 };
@@ -85,6 +85,14 @@ export const useCollabDocument = (
 		// in progress, so a subsequent status change can be reported as "syncing"
 		// instead of a plain disconnect until the provider reconnects.
 		let gitSyncing = false;
+		let retryTimer: ReturnType<typeof setTimeout> | undefined;
+		const retryDocument = () => {
+			clearTimeout(retryTimer);
+			retryTimer = setTimeout(() => {
+				provider.detach();
+				provider.attach();
+			}, 1000);
+		};
 
 		const provider = new HocuspocusProvider({
 			url: `${API_URL}/collab`,
@@ -96,10 +104,22 @@ export const useCollabDocument = (
 					status: gitSyncing && status !== "connected" ? "syncing" : status,
 				}));
 			},
+			onClose: ({ event }) => {
+				setState((current) => ({
+					...current,
+					status: gitSyncing ? "syncing" : "disconnected",
+					synced: false,
+					readOnly: true,
+				}));
+				if (event.code === 1000) {
+					retryDocument();
+				}
+			},
 			onAuthenticationFailed: ({ reason }) => {
 				gitSyncing = reason === GIT_SYNC_AUTH_FAILURE_REASON;
 				if (gitSyncing) {
-					setState((current) => ({ ...current, status: "syncing" }));
+					retryDocument();
+					setState((current) => ({ ...current, status: "syncing", synced: false, readOnly: true }));
 				}
 			},
 			onStateless: ({ payload }: { payload: string }) => {
@@ -108,11 +128,13 @@ export const useCollabDocument = (
 			onSynced: () => {
 				setState((current) => ({
 					...current,
+					status: "connected",
 					synced: true,
 				}));
 			},
 			onAuthenticated: ({ scope }) => {
 				gitSyncing = false;
+				clearTimeout(retryTimer);
 				setState((current) => ({
 					...current,
 					readOnly: scope === "readonly",
@@ -132,12 +154,13 @@ export const useCollabDocument = (
 			awareness: provider.awareness,
 			undoManager,
 			status: "connecting",
-			readOnly: false,
+			readOnly: true,
 			synced: false,
 			documentName,
 		});
 
 		return () => {
+			clearTimeout(retryTimer);
 			provider.destroy();
 			yDoc.destroy();
 			setState(defaultState);

@@ -64,7 +64,7 @@ export const collabServer = new Hocuspocus({
 				throw new Error("Invalid document name");
 			}
 			const { projectId, fileId } = parsed;
-			if (isProjectGitSyncing(projectId)) {
+			if (fileId !== PROJECT_PRESENCE_DOCUMENT_ID && isProjectGitSyncing(projectId)) {
 				throw new Error("Project is syncing with Git");
 			}
 			if (fileId !== PROJECT_PRESENCE_DOCUMENT_ID && !isEditableExtension(fileId)) {

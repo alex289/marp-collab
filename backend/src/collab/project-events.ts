@@ -19,8 +19,8 @@ export function broadcastFilesChanged(projectId: string): void {
 	broadcastProjectEvent(projectId, "files-changed");
 }
 
-export function broadcastGitPulled(projectId: string): void {
-	broadcastProjectEvent(projectId, "git-pulled");
+export function broadcastGitSyncFinished(projectId: string): void {
+	broadcastProjectEvent(projectId, "git-sync-finished");
 }
 
 async function flushDocument(documentName: string): Promise<void> {

@@ -3,15 +3,20 @@ import z from "zod";
 import git from "isomorphic-git";
 import {
 	broadcastFilesChanged,
-	broadcastGitPulled,
+	broadcastGitSyncFinished,
 	flushAndCloseProjectDocuments,
 } from "../../../collab/project-events.ts";
+import { ProjectGitNetworkError } from "../../../projects/git-http.ts";
 import { logger } from "../../../helpers/logger.ts";
 import {
 	requireProjectOwner,
 	type ProjectRouteVariables,
 } from "../../../middleware/project-access-middleware.ts";
-import { finishProjectGitSync, startProjectGitSync } from "../../../projects/git-sync-lock.ts";
+import {
+	finishProjectGitSync,
+	startProjectGitSync,
+	waitForProjectWrites,
+} from "../../../projects/git-sync-lock.ts";
 import { ProjectGitConflictError } from "../../../projects/git-merge.ts";
 import {
 	configureProjectGit,
@@ -52,6 +57,7 @@ app.put("/:projectId/git", requireProjectOwner, async (c) => {
 	}
 
 	try {
+		await waitForProjectWrites(projectId);
 		return c.json(
 			await configureProjectGit({
 				projectId,
@@ -94,9 +100,9 @@ async function runGitAction(
 	if (!startProjectGitSync(projectId)) {
 		return c.json({ error: "This project is already syncing" }, 409);
 	}
-	let pulled = false;
 
 	try {
+		await waitForProjectWrites(projectId);
 		await flushAndCloseProjectDocuments(projectId);
 		const user = c.get("user")!;
 		const options = {
@@ -106,7 +112,6 @@ async function runGitAction(
 
 		if (action === "pull") {
 			const result = await pullProjectFromGit({ ...options, resolutions });
-			pulled = result.pulled;
 			return c.json(result);
 		}
 
@@ -121,6 +126,9 @@ async function runGitAction(
 			`Git ${action} failed`,
 		);
 
+		if (error instanceof ProjectGitNetworkError) {
+			return c.json({ error: error.message }, 400);
+		}
 		if (error instanceof ProjectGitNotConfiguredError) {
 			return c.json({ error: error.message }, 409);
 		}
@@ -151,9 +159,7 @@ async function runGitAction(
 	} finally {
 		finishProjectGitSync(projectId);
 		broadcastFilesChanged(projectId);
-		if (pulled) {
-			broadcastGitPulled(projectId);
-		}
+		broadcastGitSyncFinished(projectId);
 	}
 }
 
