@@ -108,7 +108,12 @@ const gitConfigSchema = z.object({
 		.refine((value) => {
 			const url = new URL(value);
 			return url.protocol === "https:" && !url.username && !url.password;
-		}, "Remote URL must be HTTPS and must not contain credentials"),
+		}, "Remote URL must be HTTPS and must not contain credentials")
+		// Git paths are appended to the URL, so a query or fragment would swallow them.
+		.refine(
+			(value) => !value.includes("?") && !value.includes("#"),
+			"Remote URL must not contain a query or fragment",
+		),
 	branch: z
 		.string()
 		.trim()

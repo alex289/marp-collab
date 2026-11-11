@@ -63,8 +63,15 @@ async function removeEmptiedParents(root: string, path: string): Promise<void> {
 	}
 }
 
-/** Replace only supported files, retaining unrelated repository contents. */
-export async function syncSupportedFiles(source: string, destination: string): Promise<void> {
+/**
+ * Replace only supported files, retaining unrelated repository contents. Pass `companionSuffix`
+ * when the destination is the project, so a removed file's collaboration state goes with it.
+ */
+export async function syncSupportedFiles(
+	source: string,
+	destination: string,
+	{ companionSuffix }: { companionSuffix?: string } = {},
+): Promise<void> {
 	await mkdir(source, { recursive: true });
 	await mkdir(destination, { recursive: true });
 	const sourceFiles = await supportedFiles(source);
@@ -73,6 +80,9 @@ export async function syncSupportedFiles(source: string, destination: string): P
 	for (const path of await supportedFiles(destination)) {
 		if (!files.has(path)) {
 			await rm(join(destination, path));
+			if (companionSuffix) {
+				await rm(join(destination, `${path}${companionSuffix}`), { force: true });
+			}
 			await removeEmptiedParents(destination, path);
 		}
 	}

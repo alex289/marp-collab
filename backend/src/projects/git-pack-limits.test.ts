@@ -1,9 +1,10 @@
 import { after, before, describe, test } from "node:test";
-import { doesNotThrow, throws } from "node:assert/strict";
+import { doesNotReject, rejects } from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { deflateSync } from "node:zlib";
 import { assertGitPackWithinLimits, GitPackLimitError } from "./git-pack-limits.ts";
 
 function pktLine(payload: Uint8Array): Buffer {
@@ -24,6 +25,27 @@ function sideBandResponse(pack: Buffer): Buffer {
 	}
 	lines.push(Buffer.from("0000"));
 	return Buffer.concat(lines);
+}
+
+/** Encodes an object header: type in bits 4-6, size as little-endian base-128 after 4 bits. */
+function objectHeader(type: number, size: number, padding = 0): number[] {
+	const bytes = [(type << 4) | (size & 0x0f)];
+	let rest = Math.floor(size / 16);
+	while (rest > 0 || padding > 0) {
+		bytes[bytes.length - 1]! |= 0x80;
+		bytes.push(rest & 0x7f);
+		rest = Math.floor(rest / 128);
+		if (rest === 0 && padding > 0) {
+			padding--;
+		}
+	}
+	return bytes;
+}
+
+function rawPack(...objects: Buffer[]): Buffer {
+	const header = Buffer.from([0x50, 0x41, 0x43, 0x4b, 0, 0, 0, 2, 0, 0, 0, 0]);
+	header.writeUInt32BE(objects.length, 8);
+	return Buffer.concat([header, ...objects]);
 }
 
 describe("Git pack limits", () => {
@@ -56,30 +78,67 @@ describe("Git pack limits", () => {
 		await rm(repository, { recursive: true, force: true });
 	});
 
-	test("accepts packs within the limits", () => {
-		doesNotThrow(() => assertGitPackWithinLimits(sideBandResponse(pack)));
-		doesNotThrow(() => assertGitPackWithinLimits(pack));
+	test("accepts packs within the limits", async () => {
+		await doesNotReject(assertGitPackWithinLimits(sideBandResponse(pack)));
+		await doesNotReject(assertGitPackWithinLimits(pack));
 	});
 
-	test("rejects objects that unpack beyond the object limit", () => {
-		throws(
-			() => assertGitPackWithinLimits(sideBandResponse(pack), { maxObjectBytes: 1024 * 1024 }),
+	test("rejects objects that unpack beyond the object limit", async () => {
+		await rejects(
+			assertGitPackWithinLimits(sideBandResponse(pack), { maxObjectBytes: 1024 * 1024 }),
 			GitPackLimitError,
 		);
 	});
 
-	test("counts delta results toward the total limit", () => {
+	test("counts delta results toward the total limit", async () => {
 		// Each version of a.md is 2.4 MB, so both together exceed 4 MB only when deltas are expanded.
-		throws(
-			() => assertGitPackWithinLimits(sideBandResponse(pack), { maxTotalBytes: 4 * 1024 * 1024 }),
+		await rejects(
+			assertGitPackWithinLimits(sideBandResponse(pack), { maxTotalBytes: 4 * 1024 * 1024 }),
 			GitPackLimitError,
 		);
-		doesNotThrow(() =>
+		await doesNotReject(
 			assertGitPackWithinLimits(sideBandResponse(pack), { maxTotalBytes: 6 * 1024 * 1024 }),
 		);
 	});
 
-	test("ignores responses without pack data", () => {
-		doesNotThrow(() => assertGitPackWithinLimits(Buffer.from("0008NAK\n0000")));
+	test("ignores responses without pack data", async () => {
+		await doesNotReject(assertGitPackWithinLimits(Buffer.from("0008NAK\n0000")));
+		// A push status report on band 1 whose bytes would read as a huge object count.
+		const report = Buffer.from("\u0001unpack ok\nok refs/heads/main\n");
+		await doesNotReject(
+			assertGitPackWithinLimits(Buffer.concat([pktLine(report), Buffer.from("0000")])),
+		);
+	});
+
+	test("rejects sizes padded so isomorphic-git would read a different value", async () => {
+		const blob = Buffer.alloc(10_000);
+		const honest = rawPack(Buffer.from(objectHeader(3, blob.length)), deflateSync(blob));
+		await rejects(assertGitPackWithinLimits(honest, { maxObjectBytes: 1000 }), GitPackLimitError);
+		for (const padding of [1, 20, 200]) {
+			const padded = rawPack(Buffer.from(objectHeader(3, blob.length, padding)), deflateSync(blob));
+			await rejects(assertGitPackWithinLimits(padded, { maxObjectBytes: 1000 }), GitPackLimitError);
+		}
+	});
+
+	test("rejects delta target sizes padded past 32 bits", async () => {
+		// Base size 1, then a target size whose continuation bytes run past 32 bits.
+		const delta = Buffer.from([0x01, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x01]);
+		const packed = rawPack(
+			Buffer.from(objectHeader(7, delta.length)),
+			Buffer.alloc(20),
+			deflateSync(delta),
+		);
+		await rejects(assertGitPackWithinLimits(packed), GitPackLimitError);
+	});
+
+	test("rejects packs with too many objects or truncated objects", async () => {
+		const empty = Buffer.concat([Buffer.from(objectHeader(3, 0)), deflateSync(Buffer.alloc(0))]);
+		await rejects(
+			assertGitPackWithinLimits(rawPack(empty, empty, empty), { maxObjects: 2 }),
+			/too many objects/,
+		);
+		const truncated = rawPack(empty);
+		truncated.writeUInt32BE(5, 8);
+		await rejects(assertGitPackWithinLimits(truncated), GitPackLimitError);
 	});
 });

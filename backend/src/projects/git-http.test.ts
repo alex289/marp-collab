@@ -122,6 +122,55 @@ test("Git HTTP aborts oversized advertisements and closes the upstream iterator"
 	equal(closed, true);
 });
 
+test("Git HTTP rejects remotes with a query or fragment before connecting", async () => {
+	let calls = 0;
+	const client = createGitHttpClient(publicDns, {
+		request: () => {
+			calls++;
+			return Promise.resolve(emptyResponse);
+		},
+	});
+	for (const url of [
+		"https://git.example/repo.git?x=1/git-upload-pack",
+		"https://git.example/repo.git?x=1/info/refs?service=git-upload-pack",
+		"https://git.example/repo.git?/info/refs",
+		"https://git.example/repo.git#x/git-upload-pack",
+	]) {
+		await rejects(client.request({ url }), /query or fragment/);
+	}
+	equal(calls, 0);
+
+	await client.request({ url: "https://git.example/repo.git/info/refs?service=git-upload-pack" });
+	equal(calls, 1);
+});
+
+test("Git HTTP checks every POST response for packs, whatever the URL path", async () => {
+	// A single blob header declaring 400 MB, which exceeds the per-object limit.
+	const pack = Buffer.concat([
+		Buffer.from("PACK"),
+		Buffer.from([0, 0, 0, 2, 0, 0, 0, 1]),
+		Buffer.from([0xb0, 0x80, 0x80, 0xc0, 0x0c]),
+	]);
+	const client = createGitHttpClient(publicDns, {
+		request: () =>
+			Promise.resolve({
+				...emptyResponse,
+				body: (async function* responseBody() {
+					yield pack;
+				})(),
+			}),
+	});
+	const response = await client.request({
+		url: "https://git.example/repo/anything",
+		method: "POST",
+	});
+	await rejects(async () => {
+		for await (const _chunk of response.body!) {
+			/* drain response */
+		}
+	}, /size limit/);
+});
+
 test("Git HTTP cancels DNS resolution when the operation is aborted", async () => {
 	const controller = new AbortController();
 	let connected = false;

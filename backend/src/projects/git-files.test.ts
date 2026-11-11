@@ -52,3 +52,19 @@ test("rejects symbolic links as a content error", async () => {
 		await rm(root, { recursive: true, force: true });
 	}
 });
+
+test("removes a deleted file's collaboration state so its folder can be pruned", async () => {
+	const root = await mkdtemp(join(tmpdir(), "marp-git-files-"));
+	try {
+		const source = join(root, "source");
+		const destination = join(root, "destination");
+		await mkdir(source);
+		await mkdir(join(destination, "slides"), { recursive: true });
+		await writeFile(join(destination, "slides", "deck.md"), "old");
+		await writeFile(join(destination, "slides", "deck.md.yjs"), "state");
+		await syncSupportedFiles(source, destination, { companionSuffix: ".yjs" });
+		await rejects(stat(join(destination, "slides")), { code: "ENOENT" });
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});

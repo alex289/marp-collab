@@ -14,7 +14,9 @@ import {
 } from "../../../middleware/project-access-middleware.ts";
 import {
 	beginGitOperation,
+	finishProjectGitConfigure,
 	finishProjectGitSync,
+	startProjectGitConfigure,
 	startProjectGitSync,
 	waitForProjectWrites,
 } from "../../../projects/git-sync-lock.ts";
@@ -62,6 +64,21 @@ async function withProjectSyncLock<T>(projectId: string, run: () => Promise<T>):
 	}
 }
 
+/** Holds the project's Git repository for a settings change; editors keep working meanwhile. */
+async function withProjectConfigureLock<T>(
+	projectId: string,
+	run: () => Promise<T>,
+): Promise<T | null> {
+	if (!startProjectGitConfigure(projectId)) {
+		return null;
+	}
+	try {
+		return await run();
+	} finally {
+		finishProjectGitConfigure(projectId);
+	}
+}
+
 app.get("/:projectId/git", async (c) => {
 	if (c.get("projectAccess").readOnly) {
 		return writeOnly(c);
@@ -93,9 +110,9 @@ app.put("/:projectId/git", requireProjectOwner, async (c) => {
 	}
 
 	try {
-		// Check the remote before locking, so editors are not blocked by a slow network.
+		// Check the remote before locking, so a slow network does not hold the repository.
 		await verifyProjectGitRemote(settings);
-		const config = await withProjectSyncLock(projectId, () => saveProjectGitConfig(settings));
+		const config = await withProjectConfigureLock(projectId, () => saveProjectGitConfig(settings));
 		return config ? c.json(config) : alreadySyncing(c);
 	} catch (error) {
 		if (
@@ -120,7 +137,7 @@ app.put("/:projectId/git", requireProjectOwner, async (c) => {
 
 app.delete("/:projectId/git", requireProjectOwner, async (c) => {
 	const projectId = c.req.param("projectId")!;
-	const config = await withProjectSyncLock(projectId, async () => {
+	const config = await withProjectConfigureLock(projectId, async () => {
 		await disconnectProjectGit(projectId);
 		return getProjectGitConfig(projectId);
 	});

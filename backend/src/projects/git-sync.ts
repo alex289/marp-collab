@@ -389,7 +389,9 @@ export async function pullProjectFromGit({
 
 			if (pulled) {
 				await git.checkout({ fs, dir, ref, force: true });
-				await syncSupportedFiles(join(dir, folder), await getProjectDirectory(projectId));
+				await syncSupportedFiles(join(dir, folder), await getProjectDirectory(projectId), {
+					companionSuffix: ".yjs",
+				});
 				await reconcileProjectDocumentState(projectId);
 			}
 		} catch (error) {

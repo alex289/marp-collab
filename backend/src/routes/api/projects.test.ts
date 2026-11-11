@@ -659,7 +659,7 @@ describe("projects routes", () => {
 			equal(response.status, 400);
 		}
 	});
-	test("broadcasts sync completion after saving Git settings so blocked editors reconnect", async (t) => {
+	test("saves Git settings without interrupting editors, but not during a sync", async (t) => {
 		const { collabServer } = await import("../../collab/hocuspocus.ts");
 		const document = new Document("project/owner-only-proj/__presence");
 		const messages: string[] = [];
@@ -667,17 +667,39 @@ describe("projects routes", () => {
 			messages.push(payload);
 		});
 		collabServer.documents.set(document.name, document);
-		try {
-			const response = await app.request("/owner-only-proj/git", {
+		const save = () =>
+			app.request("/owner-only-proj/git", {
 				method: "PUT",
 				headers: { "content-type": "application/json", "x-test-user-id": "user-1" },
 				body: JSON.stringify({ remoteUrl: "https://example.com/slides.git", branch: "main" }),
 			});
-			equal(response.status, 200);
-			ok(messages.includes("git-sync-finished"));
+		try {
+			equal((await save()).status, 200);
+			deepEqual(messages, []);
+
+			startProjectGitSync("owner-only-proj");
+			try {
+				equal((await save()).status, 409);
+			} finally {
+				finishProjectGitSync("owner-only-proj");
+			}
 		} finally {
 			collabServer.documents.delete(document.name);
 			document.destroy();
+		}
+	});
+
+	test("rejects Git remotes with a query or fragment", async () => {
+		for (const remoteUrl of [
+			"https://example.com/repo.git?x=1",
+			"https://example.com/repo.git#x",
+		]) {
+			const response = await app.request("/owner-only-proj/git", {
+				method: "PUT",
+				headers: { "content-type": "application/json", "x-test-user-id": "user-1" },
+				body: JSON.stringify({ remoteUrl, branch: "main" }),
+			});
+			equal(response.status, 400);
 		}
 	});
 

@@ -2,6 +2,9 @@ import { test } from "node:test";
 import { equal, ok } from "node:assert/strict";
 import {
 	beginGitOperation,
+	finishProjectGitConfigure,
+	isProjectGitSyncing,
+	startProjectGitConfigure,
 	beginProjectWrite,
 	MAX_CONCURRENT_GIT_OPERATIONS,
 	startProjectGitSync,
@@ -46,4 +49,19 @@ test("limits how many Git operations run at once", () => {
 	for (const release of releases.slice(1)) {
 		release!();
 	}
+});
+
+test("settings changes exclude syncs without blocking project writes", () => {
+	ok(startProjectGitConfigure("configure"));
+	equal(isProjectGitSyncing("configure"), false);
+	const release = beginProjectWrite("configure");
+	ok(release);
+	release();
+	equal(startProjectGitSync("configure"), false);
+	equal(startProjectGitConfigure("configure"), false);
+	finishProjectGitConfigure("configure");
+
+	ok(startProjectGitSync("configure"));
+	equal(startProjectGitConfigure("configure"), false);
+	finishProjectGitSync("configure");
 });

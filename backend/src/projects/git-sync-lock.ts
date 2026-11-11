@@ -1,5 +1,7 @@
 type ProjectOperations = {
 	syncing: boolean;
+	/** Settings changes touch only the Git repository, so they exclude syncs but not editing. */
+	configuring: boolean;
 	writers: number;
 	drained: (() => void)[];
 };
@@ -8,14 +10,14 @@ const projects = new Map<string, ProjectOperations>();
 function operations(projectId: string): ProjectOperations {
 	let state = projects.get(projectId);
 	if (!state) {
-		state = { syncing: false, writers: 0, drained: [] };
+		state = { syncing: false, configuring: false, writers: 0, drained: [] };
 		projects.set(projectId, state);
 	}
 	return state;
 }
 
 function cleanup(projectId: string, state: ProjectOperations): void {
-	if (!state.syncing && state.writers === 0) {
+	if (!state.syncing && !state.configuring && state.writers === 0) {
 		projects.delete(projectId);
 	}
 }
@@ -23,11 +25,29 @@ function cleanup(projectId: string, state: ProjectOperations): void {
 /** Reserve synchronization immediately, then drain previously admitted mutations. */
 export function startProjectGitSync(projectId: string): boolean {
 	const state = operations(projectId);
-	if (state.syncing) {
+	if (state.syncing || state.configuring) {
 		return false;
 	}
 	state.syncing = true;
 	return true;
+}
+
+/** Reserve the project's Git repository for a settings change, without blocking editors. */
+export function startProjectGitConfigure(projectId: string): boolean {
+	const state = operations(projectId);
+	if (state.syncing || state.configuring) {
+		return false;
+	}
+	state.configuring = true;
+	return true;
+}
+
+export function finishProjectGitConfigure(projectId: string): void {
+	const state = projects.get(projectId);
+	if (state) {
+		state.configuring = false;
+		cleanup(projectId, state);
+	}
 }
 
 export function waitForProjectWrites(projectId: string): Promise<void> {
@@ -72,7 +92,7 @@ export function beginProjectWrite(projectId: string): (() => void) | null {
 	};
 }
 
-/** Each Git operation can hold a pack of up to 100 MB in memory, so limit how many run at once. */
+/** Each Git operation can buffer a 100 MB download and unpack objects of up to 300 MB, so limit how many run at once. */
 export const MAX_CONCURRENT_GIT_OPERATIONS = 4;
 let runningGitOperations = 0;
 

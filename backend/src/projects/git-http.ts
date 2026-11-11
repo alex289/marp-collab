@@ -102,6 +102,14 @@ export function createGitHttpClient(
 			if (url.protocol !== "https:" || url.username || url.password) {
 				throw new ProjectGitNetworkError("Git remotes must use HTTPS without URL credentials");
 			}
+			// isomorphic-git appends paths to the remote URL, so a query in the remote would hide them.
+			// The only query it sends itself is the service on the ref advertisement.
+			const isRefAdvertisement =
+				url.pathname.endsWith("/info/refs") &&
+				/^\?service=git-(?:upload|receive)-pack$/.test(url.search);
+			if (url.hash || (url.search && !isRefAdvertisement)) {
+				throw new ProjectGitNetworkError("Git remotes must not contain a query or fragment");
+			}
 			const signal = request.signal
 				? AbortSignal.any([request.signal, AbortSignal.timeout(30_000)])
 				: AbortSignal.timeout(30_000);
@@ -149,8 +157,9 @@ export function createGitHttpClient(
 			}
 			const body = response.body;
 			if (body) {
-				const limit = url.pathname.endsWith("/info/refs") ? 1024 * 1024 : 100 * 1024 * 1024;
-				const isPack = url.pathname.endsWith("/git-upload-pack");
+				// isomorphic-git lists refs with GET; every POST is a service exchange that may carry a pack.
+				const isPack = request.method === "POST";
+				const limit = isPack ? 100 * 1024 * 1024 : 1024 * 1024;
 				response.body = (async function* limitedBody() {
 					let bytes = 0;
 					const chunks: Uint8Array[] = [];
@@ -169,7 +178,7 @@ export function createGitHttpClient(
 						// Check the whole pack before isomorphic-git starts unpacking it.
 						const pack = Buffer.concat(chunks);
 						try {
-							assertGitPackWithinLimits(pack);
+							await assertGitPackWithinLimits(pack);
 						} catch (error) {
 							throw error instanceof GitPackLimitError
 								? new ProjectGitNetworkError(error.message)
