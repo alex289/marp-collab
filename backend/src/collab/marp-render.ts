@@ -1,3 +1,4 @@
+import { expandMarkdownIncludes } from "../../../shared/markdown-include.ts";
 import { Marp } from "@marp-team/marp-core";
 import { posix } from "node:path";
 import { getDeckFiles, getDocumentContent } from "../projects/storage.ts";
@@ -93,11 +94,17 @@ export type RenderedPdfInput = {
 export async function renderMarkdownForPdf(
 	projectId: string,
 	markdownFileId: string,
+	readDocument = getDocumentContent,
 ): Promise<RenderedPdfInput | undefined> {
-	const markdown = await getDocumentContent(toDocumentName(projectId, markdownFileId));
-	if (markdown === undefined) {
+	const rawMarkdown = await readDocument(toDocumentName(projectId, markdownFileId));
+	if (rawMarkdown === undefined) {
 		return undefined;
 	}
+
+	const markdownDir = dirOf(markdownFileId);
+	const markdown = await expandMarkdownIncludes(rawMarkdown, markdownFileId, (fileId) =>
+		readDocument(toDocumentName(projectId, fileId)),
+	);
 
 	const assets = new Map<string, string>();
 	let assetCounter = 0;
@@ -123,8 +130,6 @@ export async function renderMarkdownForPdf(
 		}
 		return toFlatName(resolvePosixPath(dir, src));
 	}
-
-	const markdownDir = dirOf(markdownFileId);
 
 	const marp = new Marp({
 		html: {
