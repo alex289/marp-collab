@@ -122,6 +122,14 @@ describe("projects routes", () => {
 			headers: { "x-test-user-id": "user-1" },
 		});
 		equal(missing.status, 404);
+		await files.createProjectDir("upload-proj", "folder.md");
+		for (const path of ["folder.md", "chapters/read.md/child.md"]) {
+			const response = await app.request(`/upload-proj/files/${path}`, {
+				headers: { "x-test-user-id": "user-1" },
+			});
+			equal(response.status, 404);
+		}
+
 		const { collabServer } = await import("../../collab/hocuspocus.ts");
 		const doc = "project/upload-proj/chapters/read.md";
 		collabServer.documents.set(doc, { getText: () => ({ toJSON: () => "# Live edits" }) } as never);

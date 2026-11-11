@@ -516,6 +516,26 @@ test.describe("Editor: content editing", () => {
 		await page.getByRole("button", { name: "Next", exact: true }).click();
 		await expect(page.getByText("Slide 3/3", { exact: true })).toBeVisible();
 		await expect(page.getByRole("button", { name: "Next", exact: true })).toBeDisabled();
+		const includeUrl = `**/api/v1/projects/${projectId}/files/part.md`;
+		let failed = false;
+		await page.route(includeUrl, async (route) => {
+			await route.fulfill({ status: 503, body: "Temporary failure" });
+			failed = true;
+		});
+		await expect.poll(() => failed, { timeout: 10_000 }).toBeTruthy();
+		// Let the failed response reach the resolver before inspecting the frame.
+		await page.evaluate(
+			() => new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve))),
+		);
+		await expect(page.getByText("Slide 3/3", { exact: true })).toBeVisible();
+		const presentation = page.frameLocator('iframe[title="Presentation"]');
+		await expect(presentation.getByRole("heading", { name: "Updated second" })).toBeAttached();
+		await page.unroute(includeUrl);
+		await upload("# Recovered first\n\n---\n\n# Recovered second");
+		await expect(presentation.getByRole("heading", { name: "Recovered second" })).toBeAttached({
+			timeout: 15_000,
+		});
+		await expect(page.getByText("Slide 3/3", { exact: true })).toBeVisible();
 	});
 
 	test("type into the CodeMirror editor and see live preview update", async ({ page }) => {

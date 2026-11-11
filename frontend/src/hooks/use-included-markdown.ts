@@ -32,12 +32,18 @@ export function useIncludedMarkdown(markdown: string, projectId: string, fileId:
 				}
 			} catch {
 				if (!controller.signal.aborted) {
-					setResolved({
-						projectId,
-						fileId,
-						sourceLines: [],
-						result: "> ⚠️ **Include error:** Could not load included Markdown. Retrying…",
-					});
+					// A failed background refresh must not remove slides or reset the
+					// presentation position. Keep the last expansion until retry succeeds.
+					setResolved((current) =>
+						current?.projectId === projectId && current.fileId === fileId
+							? current
+							: {
+									projectId,
+									fileId,
+									sourceLines: [],
+									result: `${markdown}\n\n> ⚠️ **Include error:** Could not load included Markdown. Retrying…`,
+								},
+					);
 				}
 			} finally {
 				if (!controller.signal.aborted) {

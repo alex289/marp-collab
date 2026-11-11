@@ -97,3 +97,31 @@ test("bounds depth, breadth and total expanded size", async () => {
 	ok(size.includes("size limit"));
 	ok(size.length < 1000);
 });
+
+test("strips YAML frontmatter at the first supported terminator without dropping slides", async () => {
+	for (const newline of ["\n", "\r\n"]) {
+		for (const terminator of ["---", "..."]) {
+			for (const body of ["# First", "# First\n\n---\n\n# Second"]) {
+				const child = ["---", "marp: true", terminator, ...body.split("\n")].join(newline);
+				const result = await expandMarkdownIncludes(
+					include("child.md"),
+					"main.md",
+					async () => child,
+				);
+				equal(result, body.replaceAll("\n", newline));
+			}
+		}
+	}
+});
+
+test("strips empty frontmatter before the first included slide", async () => {
+	for (const terminator of ["---", "..."]) {
+		const body = "# First\n\n---\n\n# Second";
+		const result = await expandMarkdownIncludes(
+			include("child.md"),
+			"main.md",
+			async () => `---\n${terminator}\n${body}`,
+		);
+		equal(result, body);
+	}
+});
