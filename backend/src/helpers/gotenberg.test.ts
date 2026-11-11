@@ -73,15 +73,18 @@ describe("Gotenberg PDF request", () => {
 		equal(form.get("preferCssPageSize"), "true");
 		equal(form.get("emulatedMediaType"), "print");
 		equal(form.get("waitDelay"), "2s");
-		equal(form.get("generateDocumentOutline"), "true");
-		const metadata = form.get("metadata");
-		ok(typeof metadata === "string");
-		deepEqual(JSON.parse(metadata), {
-			Title: "Quarterly Review",
-			Creator: "Marp Collab",
-			Author: "Test Author",
-			Subject: "Project status",
-			Keywords: ["one", "two"],
-		});
+		equal(form.get("nativeBookmarks"), "true");
+		const stages = form.get("stages");
+		ok(typeof stages === "string");
+		deepEqual(JSON.parse(stages), [
+			{
+				op: "set-metadata",
+				title: "Quarterly Review",
+				creator: "Marp Collab",
+				author: "Test Author",
+				subject: "Project status",
+				keywords: "one, two",
+			},
+		]);
 	});
 });
