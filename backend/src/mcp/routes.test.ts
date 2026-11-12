@@ -265,20 +265,23 @@ test("rejects JWTs intended for browser sessions", async () => {
 });
 
 test("lists only permitted projects and enforces OAuth write scopes", async () => {
-	const listed = await call("list_projects", {});
+	const listed = await call("list_projects", {}, readToken);
 	deepEqual(listed.structuredContent.projects, [
 		{ id: "training", name: "Training", readOnly: false },
 	]);
-	const denied = await rpc(
-		"tools/call",
-		{
-			name: "create_presentation",
-			arguments: { projectId: "training", fileId: "denied.md", content: "# No" },
-		},
-		readToken,
-	);
-	equal(denied.status, 403);
-	match(denied.headers.get("www-authenticate")!, /presentations:write/);
+	for (const name of ["create_presentation", "edit_presentation"]) {
+		const denied = await rpc(
+			"tools/call",
+			{
+				name,
+				arguments: { projectId: "training", fileId: "denied.md", content: "# No" },
+				_meta: { progressToken: "scope-check" },
+			},
+			readToken,
+		);
+		equal(denied.status, 403);
+		match(denied.headers.get("www-authenticate")!, /presentations:write/);
+	}
 });
 
 test("creates, reads and edits decks without overwriting existing files", async () => {

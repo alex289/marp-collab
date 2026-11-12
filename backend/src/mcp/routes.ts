@@ -3,12 +3,18 @@ import { createMcpHandler } from "@modelcontextprotocol/server";
 import { requireMcpAuth } from "@better-auth/mcp";
 import { verifyOAuthQueryParams } from "@better-auth/oauth-provider";
 import { createInsufficientScopeError } from "better-auth/oauth2";
+import { z } from "zod";
 import { auth } from "../auth.ts";
 import { db } from "../db/db.ts";
 import { MCP_READ_SCOPE, MCP_WRITE_SCOPE, MCP_SCOPES, mcpResource, mcpJwksUrl } from "./config.ts";
 import { createPresentationServer } from "./server.ts";
 
 export const mcpRouter = new Hono();
+
+const writeToolCallSchema = z.object({
+	method: z.literal("tools/call"),
+	params: z.object({ name: z.enum(["create_presentation", "edit_presentation"]) }),
+});
 
 const handleMcp = requireMcpAuth(
 	auth,
@@ -25,18 +31,7 @@ const handleMcp = requireMcpAuth(
 			.clone()
 			.json()
 			.catch(() => null);
-		if (
-			body &&
-			typeof body === "object" &&
-			"method" in body &&
-			body.method === "tools/call" &&
-			"params" in body &&
-			body.params &&
-			typeof body.params === "object" &&
-			"name" in body.params &&
-			(body.params.name === "create_presentation" || body.params.name === "edit_presentation") &&
-			!scopes.has(MCP_WRITE_SCOPE)
-		) {
+		if (writeToolCallSchema.safeParse(body).success && !scopes.has(MCP_WRITE_SCOPE)) {
 			throw createInsufficientScopeError([MCP_WRITE_SCOPE]);
 		}
 		const userId = claims.sub;

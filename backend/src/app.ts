@@ -47,17 +47,17 @@ app.use(
 );
 app.use(compress());
 
-// MCP uses OAuth access tokens; metadata is public. Browser clients need these headers.
 app.use("/mcp", bodyLimit({ maxSize: 4 * 1024 * 1024 }));
+// MCP uses OAuth access tokens. Browser clients need access to authentication headers.
 app.use(
 	"/mcp",
 	cors({
 		origin: "*",
-		// Reflect requested headers, including modern MCP's Mcp-Method/Name/Param-*.
 		exposeHeaders: ["WWW-Authenticate", "MCP-Protocol-Version", "DPoP-Nonce"],
 		allowMethods: ["POST", "OPTIONS"],
 	}),
 );
+// OAuth discovery metadata is public.
 app.use("/.well-known/*", cors({ origin: "*" }));
 app.route("/", mcpRouter);
 
