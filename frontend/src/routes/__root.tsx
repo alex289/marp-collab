@@ -24,10 +24,16 @@ export const Route = createRootRoute({
 		const { data: session } = await authClient.getSession();
 
 		if (!session && location.pathname !== "/login") {
-			throw redirect({ to: "/login" });
+			throw redirect({
+				href: location.pathname === "/consent" ? `/login${location.searchStr}` : "/login",
+			});
 		}
 
-		if (session && location.pathname === "/login") {
+		if (
+			session &&
+			location.pathname === "/login" &&
+			!new URLSearchParams(location.searchStr).has("sig")
+		) {
 			throw redirect({ to: "/" });
 		}
 

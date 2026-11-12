@@ -25,11 +25,24 @@ describe("database initialization and migrations", () => {
 
 	test("user_version equals number of applied migrations", () => {
 		const version = db.pragma("user_version", { simple: true });
-		equal(version, 2);
+		equal(version, 3);
 	});
 
 	test("creates all auth tables", () => {
-		for (const table of ["user", "session", "account", "verification"]) {
+		for (const table of [
+			"user",
+			"session",
+			"account",
+			"verification",
+			"jwks",
+			"oauthClient",
+			"oauthResource",
+			"oauthClientResource",
+			"oauthRefreshToken",
+			"oauthAccessToken",
+			"oauthConsent",
+			"oauthClientAssertion",
+		]) {
 			const row = db
 				.prepare("select name from sqlite_master where type='table' and name=?")
 				.get(table);
@@ -66,6 +79,6 @@ describe("database initialization and migrations", () => {
 	test("runMigrations is idempotent", async () => {
 		const { runMigrations } = await import("./migrations/index.ts");
 		runMigrations();
-		equal(db.pragma("user_version", { simple: true }), 2);
+		equal(db.pragma("user_version", { simple: true }), 3);
 	});
 });

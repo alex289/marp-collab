@@ -11,6 +11,7 @@ services:
       - PORT=8090
       - AUTH_SECRET=supersecretkey_minimum_32_characters
       - AUTH_RATE_LIMIT_ENABLED=false
+      - MCP_ALLOW_DYNAMIC_CLIENT_REGISTRATION=true
       - AUTH_PROVIDER_0_NAME=Mock
       - AUTH_PROVIDER_0_CLIENT_ID=123-456-789
       - AUTH_PROVIDER_0_CLIENT_SECRET=1234567890abcdef

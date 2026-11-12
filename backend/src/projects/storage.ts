@@ -251,6 +251,16 @@ export async function saveDocumentContent(documentName: string, content: string)
 	await writeFile(filePath, content, "utf8");
 }
 
+/** Create without ever overwriting a presentation another client just created. */
+export async function createDocumentContent(documentName: string, content: string): Promise<void> {
+	const filePath = resolveDocumentPath(documentName);
+	if (!filePath) {
+		throw new Error("Invalid document name");
+	}
+	await mkdir(dirname(filePath), { recursive: true });
+	await writeFile(filePath, content, { encoding: "utf8", flag: "wx" });
+}
+
 export async function saveDocumentBinary(documentName: string, data: Uint8Array): Promise<void> {
 	const filePath = resolveDocumentPath(documentName);
 	if (!filePath) {
