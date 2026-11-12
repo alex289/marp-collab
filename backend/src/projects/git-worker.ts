@@ -11,6 +11,8 @@ process.once("message", async (task: GitTask) => {
 	}
 	process.send!(reply, () => process.exit());
 });
+// Stop with the server, which enforces this task's time limit.
+process.once("disconnect", () => process.exit(1));
 
 // If memory runs out anyway, let Linux's OOM killer stop this process rather than the server.
 await writeFile("/proc/self/oom_score_adj", "1000").catch(() => undefined);

@@ -1,7 +1,7 @@
 import { after, before, describe, test } from "node:test";
 import { equal, rejects } from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ProjectGitProcessError, runGitTask } from "./git-process.ts";
@@ -75,11 +75,31 @@ describe("Git task processes", () => {
 	});
 
 	test("stops tasks that run out of heap", async () => {
+		// About 100 MB of objects, which fits the default heap but not the one given here.
 		const grow = await worker(
 			"grow",
-			"const kept = []; for (;;) kept.push({ size: kept.length });",
+			`const kept = Array.from({ length: 1_000_000 }, (_, size) => ({ size, name: String(size) }));
+			process.once("message", () => process.send({ ok: true, result: kept.length }));`,
 		);
 		await rejects(runGitTask(verify, { worker: grow, heapMb: 16 }), ProjectGitProcessError);
+	});
+
+	test("resets the working tree without files a stopped checkout left behind", async () => {
+		const repository = join(root, "reset");
+		const run = (...args: string[]) =>
+			execFileSync("git", ["-C", repository, ...args], { encoding: "utf8" }).trim();
+		execFileSync("git", ["init", "-b", "main", repository]);
+		await writeFile(join(repository, "deck.md"), "# Slides\n");
+		run("add", ".");
+		run("-c", "user.name=T", "-c", "user.email=t@e", "commit", "-m", "Slides");
+		const commit = run("rev-parse", "main");
+		await writeFile(join(repository, "deck.md"), "# Half written");
+		await mkdir(join(repository, "junk"));
+		await writeFile(join(repository, "junk", "partial.bin"), "partial");
+
+		await runGitTask({ type: "reset", repository, branch: "main", commit });
+		equal(run("status", "--porcelain", "--untracked-files=all"), "");
+		equal(await readFile(join(repository, "deck.md"), "utf8"), "# Slides\n");
 	});
 
 	test(

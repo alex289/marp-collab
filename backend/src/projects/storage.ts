@@ -60,16 +60,18 @@ function isMissingFileError(error: unknown): boolean {
 
 const EXCLUDED_FILE_EXTENSIONS = new Set([".yjs"]);
 
-async function ensurePresentationsDir(projectId: string): Promise<void> {
+/** The project's directory, without creating it. */
+export function getProjectDirectoryPath(projectId: string): string {
 	if (!isValidProjectId(projectId)) {
 		throw new Error(`Invalid project id: ${projectId}`);
 	}
-	await mkdir(resolve(presentationsDir, projectId), { recursive: true });
+	return resolve(presentationsDir, projectId);
 }
 
 export async function getProjectDirectory(projectId: string): Promise<string> {
-	await ensurePresentationsDir(projectId);
-	return resolve(presentationsDir, projectId);
+	const dir = getProjectDirectoryPath(projectId);
+	await mkdir(dir, { recursive: true });
+	return dir;
 }
 
 export async function clearProjectDocumentState(projectId: string): Promise<void> {
@@ -79,7 +81,7 @@ export async function clearProjectDocumentState(projectId: string): Promise<void
 }
 
 export async function getDeckFiles(projectId: string): Promise<DeckFile[]> {
-	await ensurePresentationsDir(projectId);
+	await getProjectDirectory(projectId);
 
 	const projectDir = resolve(presentationsDir, projectId);
 	const entries = await Array.fromAsync(
@@ -112,7 +114,7 @@ type ZipSourceEntry = {
 };
 
 export async function createProjectZipStream(projectId: string): Promise<Readable> {
-	await ensurePresentationsDir(projectId);
+	await getProjectDirectory(projectId);
 
 	const projectDir = resolve(presentationsDir, projectId);
 	const zipEntries: ZipSourceEntry[] = [];

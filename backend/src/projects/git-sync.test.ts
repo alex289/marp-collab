@@ -1,7 +1,7 @@
 import { after, before, describe, test, mock } from "node:test";
 import { deepEqual, doesNotMatch, equal, rejects } from "node:assert/strict";
 import fs from "node:fs";
-import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { execFileSync } from "node:child_process";
@@ -12,6 +12,7 @@ describe("project Git sync", () => {
 	let storage: typeof import("./storage.ts");
 	let getProjectGitConfig: typeof import("./git-sync.ts").getProjectGitConfig;
 	let gitSync: typeof import("./git-sync.ts");
+	let MAX_GIT_TREE_FILES: number;
 
 	before(async () => {
 		mock.method(git, "listServerRefs", () => Promise.resolve([]));
@@ -21,6 +22,7 @@ describe("project Git sync", () => {
 		storage = await import("./storage.ts");
 		(await import("./git-process.ts")).runGitTasksInProcess();
 		gitSync = await import("./git-sync.ts");
+		({ MAX_GIT_TREE_FILES } = await import("./git-tasks.ts"));
 		getProjectGitConfig = gitSync.getProjectGitConfig;
 	});
 
@@ -57,6 +59,11 @@ describe("project Git sync", () => {
 			hasCredentials: false,
 			username: null,
 		});
+	});
+
+	test("reads settings without creating the project's directory", async () => {
+		await getProjectGitConfig("missing-project");
+		await rejects(stat(join(tempDir, "presentations", "missing-project")), { code: "ENOENT" });
 	});
 
 	test("persists encrypted credentials with the project", async () => {
@@ -261,6 +268,67 @@ describe("project Git sync", () => {
 				pushed: false,
 			});
 			equal(run(remote, "rev-list", "--count", "slides"), commits);
+		});
+
+		/** Pulls a remote commit that lists one blob under `paths` paths, a pack of a few kilobytes. */
+		async function pullFanOut(
+			t: { mock: typeof mock },
+			content: Buffer,
+			paths: number,
+			error: RegExp,
+		) {
+			mockRemote(t);
+			const projectId = `slides-fanout-${paths}`;
+			const repository = join(await storage.getProjectDirectory(projectId), ".git", "repository");
+			await gitSync.configureProjectGit({
+				projectId,
+				remoteUrl: "https://example.com/repo.git",
+				branch: "slides",
+				credentials: {},
+			});
+			await gitSync.pullProjectFromGit({ projectId, author });
+			const before = await git.resolveRef({ fs, dir: repository, ref: "refs/heads/slides" });
+
+			const blob = execFileSync("git", ["-C", remote, "hash-object", "-w", "--stdin"], {
+				input: content,
+				encoding: "utf8",
+			}).trim();
+			const entries = Array.from(
+				{ length: paths },
+				(_, index) => `100644 blob ${blob}\tf${index}.bin`,
+			);
+			const junk = execFileSync("git", ["-C", remote, "mktree"], {
+				input: `${entries.join("\n")}\n`,
+				encoding: "utf8",
+			}).trim();
+			const tree = execFileSync("git", ["-C", remote, "mktree"], {
+				input: `${run(remote, "ls-tree", "slides")}\n040000 tree ${junk}\tjunk\n`,
+				encoding: "utf8",
+			}).trim();
+			const commit = ["-c", "user.name=T", "-c", "user.email=t@e", "commit-tree", tree];
+			const fanOut = run(remote, ...commit, "-p", "slides", "-m", "Fan out");
+			const previous = run(remote, "rev-parse", "slides");
+			run(remote, "update-ref", "refs/heads/slides", fanOut);
+			try {
+				await rejects(
+					gitSync.pullProjectFromGit({ projectId, author }),
+					(rejection) =>
+						rejection instanceof gitSync.ProjectGitContentError && error.test(rejection.message),
+				);
+				equal(await git.resolveRef({ fs, dir: repository, ref: "refs/heads/slides" }), before);
+				await rejects(stat(join(repository, "junk")), { code: "ENOENT" });
+			} finally {
+				run(remote, "update-ref", "refs/heads/slides", previous);
+			}
+		}
+
+		test("rejects remote trees that list a file at more paths than can be checked out", async (t) => {
+			await pullFanOut(t, Buffer.from("x"), MAX_GIT_TREE_FILES + 1, /at most/);
+		});
+
+		test("rejects remote trees whose files together exceed the size limit on disk", async (t) => {
+			// 130 copies of 8 MB exceed 1 GB, though the blob compresses to a few kilobytes.
+			await pullFanOut(t, Buffer.alloc(8 * 1024 * 1024), 130, /exceeds the size limit/);
 		});
 
 		test("rolls the branch back when applying a pull fails", async (t) => {

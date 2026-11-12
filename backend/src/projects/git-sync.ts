@@ -3,7 +3,7 @@ import { access, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import git from "isomorphic-git";
 import type { ProjectGitResolution } from "./git-merge.ts";
-import { getProjectDirectory } from "./storage.ts";
+import { getProjectDirectory, getProjectDirectoryPath } from "./storage.ts";
 
 import { encryptSecret, decryptSecret } from "../helpers/encryption.ts";
 import { logger } from "../helpers/logger.ts";
@@ -83,10 +83,9 @@ async function saveCredentials(
 	);
 }
 
-async function repositoryDirectory(projectId: string): Promise<string> {
-	const dir = join(await getProjectDirectory(projectId), ".git", "repository");
-	await mkdir(dir, { recursive: true });
-	return dir;
+/** Reading settings must not create directories: it also runs outside the lock that deletion holds. */
+function repositoryDirectory(projectId: string): string {
+	return join(getProjectDirectoryPath(projectId), ".git", "repository");
 }
 
 async function hasGitDirectory(dir: string): Promise<boolean> {
@@ -99,7 +98,7 @@ async function hasGitDirectory(dir: string): Promise<boolean> {
 }
 
 async function getConfiguredProject(projectId: string) {
-	const dir = await repositoryDirectory(projectId);
+	const dir = repositoryDirectory(projectId);
 	if (!(await hasGitDirectory(dir))) {
 		throw new ProjectGitNotConfiguredError("Git sync is not configured");
 	}
@@ -164,7 +163,7 @@ async function resolveCredentials(
 	const existingConfig = await getProjectGitConfig(projectId);
 	const existing =
 		existingConfig.remoteUrl === remoteUrl
-			? await readCredentials(projectId, await repositoryDirectory(projectId))
+			? await readCredentials(projectId, repositoryDirectory(projectId))
 			: {};
 	return {
 		username: credentials.username ?? existing.username,
@@ -193,7 +192,7 @@ export async function saveProjectGitConfig({
 	credentials,
 	folder = "",
 }: ProjectGitSettings): Promise<ProjectGitConfig> {
-	const dir = await repositoryDirectory(projectId);
+	const dir = repositoryDirectory(projectId);
 	const existingConfig = await getProjectGitConfig(projectId);
 	const effectiveCredentials = await resolveCredentials(projectId, remoteUrl, credentials);
 	if (
@@ -203,9 +202,9 @@ export async function saveProjectGitConfig({
 			existingConfig.folder !== folder)
 	) {
 		await rm(dir, { recursive: true, force: true });
-		await mkdir(dir, { recursive: true });
 	}
 
+	await mkdir(dir, { recursive: true });
 	if (!(await hasGitDirectory(dir))) {
 		await git.init({ fs, dir, defaultBranch: branch });
 	}
@@ -277,7 +276,7 @@ export async function pullProjectFromGit({
 	}
 	if (pull.pulled) {
 		try {
-			await syncSupportedFiles(join(dir, folder), projectDirectory, { companionSuffix: ".yjs" });
+			await syncSupportedFiles(join(dir, folder), projectDirectory, { intoProject: true });
 			await reconcileProjectDocumentState(projectId);
 		} catch (error) {
 			await rollBack();

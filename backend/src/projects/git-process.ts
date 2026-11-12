@@ -25,6 +25,12 @@ export const GIT_TASK_LIMITS = {
 
 const WORKER = join(import.meta.dirname, `git-worker${extname(import.meta.filename)}`);
 const MEMORY_CHECK_INTERVAL_MS = 250;
+const TLS_ENVIRONMENT = [
+	"NODE_EXTRA_CA_CERTS",
+	"NODE_USE_SYSTEM_CA",
+	"SSL_CERT_DIR",
+	"SSL_CERT_FILE",
+];
 
 /** The task's process crashed or was stopped, so it may have left its work half done. */
 export class ProjectGitProcessError extends ProjectGitContentError {}
@@ -55,9 +61,13 @@ function runInChildProcess(
 ): Promise<unknown> {
 	const limits = { ...GIT_TASK_LIMITS, ...options };
 	return new Promise((resolve, reject) => {
-		// An empty environment keeps the server's secrets out of the process.
+		// Pass only what TLS needs, keeping the server's secrets out of the process.
 		const child = fork(worker, [], {
-			env: {},
+			env: Object.fromEntries(
+				TLS_ENVIRONMENT.flatMap((name) =>
+					process.env[name] === undefined ? [] : [[name, process.env[name]]],
+				),
+			),
 			execArgv: [`--max-old-space-size=${limits.heapMb}`],
 			stdio: ["ignore", "inherit", "inherit", "ipc"],
 		});
@@ -101,7 +111,9 @@ function runInChildProcess(
 				);
 				reject(
 					new ProjectGitProcessError(
-						"Git sync stopped because the repository took too long or needed too much memory",
+						stopReason === "timeout"
+							? "Git sync stopped because it took too long"
+							: "Git sync stopped because the repository needed too much memory",
 					),
 				);
 			});

@@ -3,7 +3,7 @@ import { equal, rejects } from "node:assert/strict";
 import { mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { ProjectGitContentError, syncSupportedFiles } from "./git-files.ts";
+import { MAX_GIT_DOCUMENT_BYTES, ProjectGitContentError, syncSupportedFiles } from "./git-files.ts";
 
 test("replaces a supported directory with a file while retaining unrelated contents", async () => {
 	const root = await mkdtemp(join(tmpdir(), "marp-git-files-"));
@@ -62,7 +62,7 @@ test("removes a deleted file's collaboration state so its folder can be pruned",
 		await mkdir(join(destination, "slides"), { recursive: true });
 		await writeFile(join(destination, "slides", "deck.md"), "old");
 		await writeFile(join(destination, "slides", "deck.md.yjs"), "state");
-		await syncSupportedFiles(source, destination, { companionSuffix: ".yjs" });
+		await syncSupportedFiles(source, destination, { intoProject: true });
 		await rejects(stat(join(destination, "slides")), { code: "ENOENT" });
 	} finally {
 		await rm(root, { recursive: true, force: true });
@@ -78,9 +78,41 @@ test("keeps a folder named like a deleted file's collaboration state", async () 
 		await mkdir(join(destination, "deck.md.yjs"), { recursive: true });
 		await writeFile(join(destination, "deck.md"), "old");
 		await writeFile(join(destination, "deck.md.yjs", "code.ts"), "code");
-		await syncSupportedFiles(source, destination, { companionSuffix: ".yjs" });
+		await syncSupportedFiles(source, destination, { intoProject: true });
 		await rejects(stat(join(destination, "deck.md")), { code: "ENOENT" });
 		equal(await readFile(join(destination, "deck.md.yjs", "code.ts"), "utf8"), "code");
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
+test("limits documents pulled into the project to what collaboration can load", async () => {
+	const root = await mkdtemp(join(tmpdir(), "marp-git-files-"));
+	try {
+		const source = join(root, "source");
+		await mkdir(source);
+		await writeFile(join(source, "deck.md"), Buffer.alloc(MAX_GIT_DOCUMENT_BYTES + 1, "a"));
+		await rejects(
+			syncSupportedFiles(source, join(root, "project"), { intoProject: true }),
+			/Document exceeds the size limit: deck.md/,
+		);
+		await syncSupportedFiles(source, join(root, "repository"));
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});
+
+test("rejects pulled folders that take the place of a document's collaboration state", async () => {
+	const root = await mkdtemp(join(tmpdir(), "marp-git-files-"));
+	try {
+		const source = join(root, "source");
+		await mkdir(join(source, "deck.md.yjs"), { recursive: true });
+		await writeFile(join(source, "deck.md"), "deck");
+		await writeFile(join(source, "deck.md.yjs", "image.png"), "png");
+		await rejects(
+			syncSupportedFiles(source, join(root, "project"), { intoProject: true }),
+			ProjectGitContentError,
+		);
 	} finally {
 		await rm(root, { recursive: true, force: true });
 	}

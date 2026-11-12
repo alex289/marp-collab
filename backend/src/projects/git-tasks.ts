@@ -1,8 +1,10 @@
 import fs from "node:fs";
+import { readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import git from "isomorphic-git";
 import { ProjectGitContentError, syncSupportedFiles } from "./git-files.ts";
 import { projectGitHttp as http, ProjectGitNetworkError } from "./git-http.ts";
+import { MAX_GIT_OBJECT_BYTES, MAX_GIT_PACK_UNPACKED_BYTES } from "./git-pack-limits.ts";
 import {
 	mergeProjectBranches,
 	ProjectGitConflictError,
@@ -16,6 +18,8 @@ import {
  */
 
 const REMOTE = "origin";
+/** Checking out a tree writes each path, so a blob listed under many paths is written many times. */
+export const MAX_GIT_TREE_FILES = 50_000;
 
 export type GitAuthor = {
 	name: string;
@@ -98,11 +102,11 @@ function authOptions(credentials: GitCredentials) {
 	};
 }
 
-async function assertNoSymlinks(dir: string, tree: ReturnType<typeof git.TREE>): Promise<void> {
+async function assertNoSymlinks(dir: string): Promise<void> {
 	await git.walk({
 		fs,
 		dir,
-		trees: [tree],
+		trees: [git.WORKDIR()],
 		map: async (filepath, [entry]) => {
 			if (entry && (await entry.mode()) === 0o120000) {
 				throw new ProjectGitContentError(`Symbolic links are not supported: ${filepath}`);
@@ -111,8 +115,50 @@ async function assertNoSymlinks(dir: string, tree: ReturnType<typeof git.TREE>):
 	});
 }
 
+/** Rejects trees that would not fit on disk once checked out, counting every path a blob appears at. */
+async function assertTreeWithinLimits(dir: string, ref: string): Promise<void> {
+	const sizes = new Map<string, Promise<number>>();
+	let files = 0;
+	let total = 0;
+	await git.walk({
+		fs,
+		dir,
+		trees: [git.TREE({ ref })],
+		map: async (filepath, [entry]) => {
+			if (!entry || (await entry.type()) !== "blob") {
+				return;
+			}
+			if ((await entry.mode()) === 0o120000) {
+				throw new ProjectGitContentError(`Symbolic links are not supported: ${filepath}`);
+			}
+			const oid = await entry.oid();
+			let size = sizes.get(oid);
+			if (!size) {
+				size = git.readBlob({ fs, dir, oid }).then(({ blob }) => blob.byteLength);
+				sizes.set(oid, size);
+			}
+			files++;
+			if (files > MAX_GIT_TREE_FILES) {
+				throw new ProjectGitContentError(
+					`Git sync supports at most ${MAX_GIT_TREE_FILES} files per repository`,
+				);
+			}
+			// Await before adding: walk visits siblings concurrently, and `total += await size` would
+			// add to a stale total.
+			const bytes = await size;
+			total += bytes;
+			if (bytes > MAX_GIT_OBJECT_BYTES) {
+				throw new ProjectGitContentError(`File exceeds the size limit: ${filepath}`);
+			}
+			if (total > MAX_GIT_PACK_UNPACKED_BYTES) {
+				throw new ProjectGitContentError("Git repository exceeds the size limit");
+			}
+		},
+	});
+}
+
 async function stageProjectFiles(dir: string): Promise<boolean> {
-	await assertNoSymlinks(dir, git.WORKDIR());
+	await assertNoSymlinks(dir);
 
 	const matrix = await git.statusMatrix({ fs, dir });
 	let changed = false;
@@ -197,6 +243,14 @@ async function verifyRemote(remoteUrl: string, credentials: GitCredentials): Pro
 async function resetBranch({ repository: dir, branch, commit }: Repository & { commit: string }) {
 	const ref = branchRef(branch);
 	await git.writeRef({ fs, dir, ref, value: commit, force: true });
+	// A stopped checkout leaves files the index does not know about, which the next sync would
+	// commit, so rebuild the working tree and index from scratch.
+	for (const name of await readdir(dir)) {
+		if (name !== ".git") {
+			await rm(join(dir, name), { recursive: true, force: true });
+		}
+	}
+	await rm(join(dir, ".git", "index"), { force: true });
 	await git.checkout({ fs, dir, ref, force: true });
 	return undefined;
 }
@@ -224,7 +278,7 @@ async function pullRemote({
 			tags: false,
 			...authOptions(credentials),
 		});
-		await assertNoSymlinks(dir, git.TREE({ ref: remoteRef }));
+		await assertTreeWithinLimits(dir, remoteRef);
 
 		const commit = await git.resolveRef({ fs, dir, ref });
 		try {
@@ -241,7 +295,10 @@ async function pullRemote({
 				await git.checkout({ fs, dir, ref, force: true });
 			}
 		} catch (error) {
-			await resetBranch({ ...remote, commit });
+			// Conflicts are reported before the merge touches anything, or after it was aborted.
+			if (!(error instanceof ProjectGitConflictError)) {
+				await resetBranch({ ...remote, commit });
+			}
 			throw error;
 		}
 	}
