@@ -1238,6 +1238,7 @@ test.describe("Navigation", () => {
 		await page.goto("/");
 
 		await page.getByRole("button", { name: "Logout" }).click();
-		await expect(page).toHaveURL("/login");
+		await expect(page).toHaveURL("/login?autoSignIn=false");
+		await expect(page.getByRole("button", { name: "Sign in with Mock" })).toBeVisible();
 	});
 });

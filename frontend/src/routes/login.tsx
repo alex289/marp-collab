@@ -1,4 +1,5 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { createFileRoute, useLocation } from "@tanstack/react-router";
 import { LogIn } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
 import { Button } from "@/components/ui/button";
@@ -21,14 +22,47 @@ function LoginRoute() {
 		fetcher,
 	);
 
-	const handleSignIn = async (providerId: string) => {
-		await authClient.signIn.social({
-			provider: providerId,
-			callbackURL: "/",
-		});
-	};
+	const { searchStr } = useLocation();
+	const search = new URLSearchParams(searchStr);
+	const callbackError = search.has("error");
+	const skipAutoSignIn = search.get("autoSignIn") === "false" || callbackError;
+	const autoSignInStarted = useRef(false);
+	const [signInError, setSignInError] = useState<string | null>(null);
+	const [isSigningIn, setIsSigningIn] = useState(false);
+	const providers = Array.isArray(data?.providers) ? data.providers : [];
 
-	if (isLoading || !data || !Array.isArray(data.providers)) {
+	const singleProviderId = providers.length === 1 ? providers[0].id : undefined;
+
+	const handleSignIn = useCallback(
+		async (providerId: string) => {
+			setSignInError(null);
+			setIsSigningIn(true);
+			try {
+				const result = await authClient.signIn.social({
+					provider: providerId,
+					callbackURL: "/",
+					errorCallbackURL: `/login${searchStr}`,
+				});
+				if (result.error) {
+					throw new Error(result.error.message || "Please try again.");
+				}
+			} catch (cause) {
+				setSignInError(cause instanceof Error ? cause.message : "Please try again.");
+				setIsSigningIn(false);
+			}
+		},
+		[searchStr],
+	);
+
+	useEffect(() => {
+		if (!singleProviderId || error || skipAutoSignIn || autoSignInStarted.current) {
+			return;
+		}
+		autoSignInStarted.current = true;
+		void handleSignIn(singleProviderId);
+	}, [singleProviderId, error, skipAutoSignIn, handleSignIn]);
+
+	if (isSigningIn || (!error && (isLoading || !data))) {
 		return <LoadingScreen />;
 	}
 
@@ -42,15 +76,21 @@ function LoginRoute() {
 				</div>
 
 				<div className="flex flex-col gap-3">
-					{data.providers.length === 0 ? (
-						<ErrorAlert title="No authentication providers configured. Please contact the administrator." />
-					) : error ? (
+					{(signInError || callbackError) && (
+						<ErrorAlert
+							title="Unable to sign in."
+							description={signInError ?? "Please try again."}
+						/>
+					)}
+					{error ? (
 						<ErrorAlert
 							title="Error loading authentication providers."
 							description={error?.message}
 						/>
+					) : providers.length === 0 ? (
+						<ErrorAlert title="No authentication providers configured. Please contact the administrator." />
 					) : (
-						data.providers.map((provider) => (
+						providers.map((provider) => (
 							<Button
 								key={provider.id}
 								className="w-full"

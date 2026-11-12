@@ -8,7 +8,6 @@ const redirectUri = `${baseURL}/mcp-test-callback`;
 test.use({ storageState: { cookies: [], origins: [] } });
 test.beforeEach(async ({ page }) => {
 	await page.goto("/login");
-	await page.getByRole("button", { name: "Sign in with Mock" }).click();
 	await expect(page).toHaveURL("/");
 });
 
@@ -45,8 +44,6 @@ test("authorizes an AI client through existing login and consent", async ({ page
 	await context.clearCookies();
 	await page.route(`${redirectUri}*`, (route) => route.fulfill({ body: "Connected" }));
 	await page.goto(flow.url);
-	await expect(page).toHaveURL(/\/login\?/);
-	await page.getByRole("button", { name: "Sign in with Mock" }).click();
 	await expect(page.getByText("Connect to Marp Collab", { exact: true })).toBeVisible();
 	await expect(
 		page.getByText("Presentation assistant is requesting access to your presentations."),
