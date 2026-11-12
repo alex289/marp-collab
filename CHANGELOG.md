@@ -1,5 +1,23 @@
 # marp-collab
 
+## 0.3.0
+
+### Minor Changes
+
+- [#89](https://github.com/alex289/marp-collab/pull/89) [`19075f8`](https://github.com/alex289/marp-collab/commit/19075f8b4e2096ac8cb2d9567c48c3c1511adf58) Thanks [@alex289](https://github.com/alex289)! - Upgrade Gotenberg to 9
+
+- [#85](https://github.com/alex289/marp-collab/pull/85) [`9b8f611`](https://github.com/alex289/marp-collab/commit/9b8f6111d267f7f642e49162cf008cb57c6b0276) Thanks [@alex289](https://github.com/alex289)! - Add project Git synchronization
+
+- [#43](https://github.com/alex289/marp-collab/pull/43) [`16e5b82`](https://github.com/alex289/marp-collab/commit/16e5b824546a75d0abde2e3944ad9ec1d1e9d079) Thanks [@alex289](https://github.com/alex289)! - Support nested project Markdown includes in previews, slide navigation and PDF export, with automatic refresh and bounded expansion.
+
+- [#92](https://github.com/alex289/marp-collab/pull/92) [`e33a4ce`](https://github.com/alex289/marp-collab/commit/e33a4ce2181acf9a8f389f4e7ba6bfd520c4105a) Thanks [@alex289](https://github.com/alex289)! - Add an MCP server so AI assistants can list, read, create and edit presentations after OAuth login and consent, with edits synchronized to open editors.
+
+### Patch Changes
+
+- [#88](https://github.com/alex289/marp-collab/pull/88) [`ad28838`](https://github.com/alex289/marp-collab/commit/ad28838faafa30aec33a68822789e6fdd6418d5d) Thanks [@dependabot](https://github.com/apps/dependabot)! - Update dependencies and tooling, and migrate OAuth login to Better Auth 1.7. OAuth providers must use `/api/v1/auth/callback/<n>` as the redirect URI in place of `/api/v1/auth/oauth2/callback/<n>`.
+
+  Migrate PDF export to Gotenberg 9. Custom deployments must upgrade the PDF service alongside the app.
+
 ## 0.2.0
 
 ### Minor Changes
