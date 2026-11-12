@@ -2,8 +2,9 @@ import { db } from "../db.ts";
 import { logger } from "../../helpers/logger.ts";
 import migration001 from "./001_auth_setup.ts";
 import migration002 from "./002_projects.ts";
+import migration003 from "./003_mcp_auth.ts";
 
-const migrations = [migration001, migration002];
+const migrations = [migration001, migration002, migration003];
 
 export function runMigrations() {
 	const currentVersion = getCurrentVersion();

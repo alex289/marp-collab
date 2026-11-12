@@ -12,11 +12,15 @@
 		"test": "node --test 'src/**/*.test.ts'"
 	},
 	"dependencies": {
+		"@better-auth/cimd": "^1.7.19",
+		"@better-auth/mcp": "^1.7.19",
+		"@better-auth/oauth-provider": "^1.7.19",
 		"@hocuspocus/server": "^4.8.0",
 		"@hono/node-server": "^2.1.6",
 		"@marp-team/marp-core": "^4.4.0",
+		"@modelcontextprotocol/server": "^2.4.0",
 		"archiver": "^8.0.0",
-		"better-auth": "^1.7.18",
+		"better-auth": "^1.7.19",
 		"better-sqlite3": "^13.0.3",
 		"hono": "^4.13.17",
 		"isomorphic-git": "^1.40.5",

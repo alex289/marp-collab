@@ -10,12 +10,18 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ConsentRouteImport } from './routes/consent'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as PresentationsIdRouteImport } from './routes/presentations/$id'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ConsentRoute = ConsentRouteImport.update({
+  id: '/consent',
+  path: '/consent',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -31,30 +37,34 @@ const PresentationsIdRoute = PresentationsIdRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/consent': typeof ConsentRoute
   '/login': typeof LoginRoute
   '/presentations/$id': typeof PresentationsIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/consent': typeof ConsentRoute
   '/login': typeof LoginRoute
   '/presentations/$id': typeof PresentationsIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/consent': typeof ConsentRoute
   '/login': typeof LoginRoute
   '/presentations/$id': typeof PresentationsIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login' | '/presentations/$id'
+  fullPaths: '/' | '/consent' | '/login' | '/presentations/$id'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/login' | '/presentations/$id'
-  id: '__root__' | '/' | '/login' | '/presentations/$id'
+  to: '/' | '/consent' | '/login' | '/presentations/$id'
+  id: '__root__' | '/' | '/consent' | '/login' | '/presentations/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ConsentRoute: typeof ConsentRoute
   LoginRoute: typeof LoginRoute
   PresentationsIdRoute: typeof PresentationsIdRoute
 }
@@ -66,6 +76,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/consent': {
+      id: '/consent'
+      path: '/consent'
+      fullPath: '/consent'
+      preLoaderRoute: typeof ConsentRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -87,6 +104,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ConsentRoute: ConsentRoute,
   LoginRoute: LoginRoute,
   PresentationsIdRoute: PresentationsIdRoute,
 }

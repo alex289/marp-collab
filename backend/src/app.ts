@@ -16,6 +16,8 @@ import { logger } from "./helpers/logger.ts";
 import apiRouter from "./routes/api.ts";
 import { collabServer } from "./collab/hocuspocus.ts";
 import { apiAuthMiddleware } from "./middleware/api-auth-middleware.ts";
+import { mcpRouter } from "./mcp/routes.ts";
+import { cors } from "hono/cors";
 
 const app = new Hono<{ Variables: HonoVariables }>();
 
@@ -44,6 +46,20 @@ app.use(
 	}),
 );
 app.use(compress());
+
+// MCP uses OAuth access tokens; metadata is public. Browser clients need these headers.
+app.use("/mcp", bodyLimit({ maxSize: 4 * 1024 * 1024 }));
+app.use(
+	"/mcp",
+	cors({
+		origin: "*",
+		// Reflect requested headers, including modern MCP's Mcp-Method/Name/Param-*.
+		exposeHeaders: ["WWW-Authenticate", "MCP-Protocol-Version", "DPoP-Nonce"],
+		allowMethods: ["POST", "OPTIONS"],
+	}),
+);
+app.use("/.well-known/*", cors({ origin: "*" }));
+app.route("/", mcpRouter);
 
 app.on(["GET", "POST"], "/api/v1/auth/*", (c) => {
 	return auth.handler(c.req.raw);

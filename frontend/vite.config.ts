@@ -78,6 +78,8 @@ export default defineConfig(({ mode }) => ({
 		allowedHosts: true,
 		...(mode === "development" && {
 			proxy: {
+				"/mcp": { target: "http://localhost:8787", changeOrigin: true },
+				"/.well-known": { target: "http://localhost:8787", changeOrigin: true },
 				"/api": {
 					target: "http://localhost:8787",
 					changeOrigin: true,
