@@ -1,5 +1,5 @@
 import { glob, readFile, rm } from "node:fs/promises";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import * as Y from "yjs";
 import { toDocumentName } from "./document-identity.ts";
 import {
@@ -35,8 +35,13 @@ export async function reconcileProjectDocumentState(projectId: string): Promise<
 			document.destroy();
 		}
 	}
-	for await (const file of glob("**/*.yjs", { cwd: dir, exclude: [".git/**"] })) {
-		if (!states.has(file)) {
+	for await (const entry of glob("**/*.yjs", {
+		cwd: dir,
+		exclude: [".git/**"],
+		withFileTypes: true,
+	})) {
+		const file = relative(dir, join(entry.parentPath, entry.name));
+		if (entry.isFile() && !states.has(file)) {
 			await rm(join(dir, file));
 		}
 	}

@@ -1,11 +1,11 @@
 import { Hono, type Context } from "hono";
 import z from "zod";
-import git from "isomorphic-git";
 import {
 	broadcastFilesChanged,
 	broadcastGitSyncFinished,
 	flushAndCloseProjectDocuments,
 } from "../../../collab/project-events.ts";
+import { getProjectById } from "../../../db/models/project.ts";
 import { ProjectGitNetworkError } from "../../../projects/git-http.ts";
 import { logger } from "../../../helpers/logger.ts";
 import {
@@ -25,8 +25,10 @@ import {
 	disconnectProjectGit,
 	getProjectGitConfig,
 	ProjectGitContentError,
-	ProjectGitRemoteError,
 	ProjectGitNotConfiguredError,
+	ProjectGitRejectedError,
+	ProjectGitRemoteError,
+	ProjectGitTransportError,
 	pullProjectFromGit,
 	pushProjectToGit,
 	saveProjectGitConfig,
@@ -50,12 +52,22 @@ function serverBusy(c: Context<GitRoutesEnv>) {
 	return c.json({ error: "Too many Git syncs are running. Try again shortly." }, 429);
 }
 
+class ProjectDeletedError extends Error {}
+
+/** Deleting a project holds its Git lock, so a deletion has finished if the project is gone now. */
+function assertProjectExists(projectId: string): void {
+	if (!getProjectById(projectId)) {
+		throw new ProjectDeletedError("Project not found");
+	}
+}
+
 /** Holds the project's sync lock, which makes editors wait and reconnect once it is released. */
 async function withProjectSyncLock<T>(projectId: string, run: () => Promise<T>): Promise<T | null> {
 	if (!startProjectGitSync(projectId)) {
 		return null;
 	}
 	try {
+		assertProjectExists(projectId);
 		return await run();
 	} finally {
 		finishProjectGitSync(projectId);
@@ -73,6 +85,7 @@ async function withProjectConfigureLock<T>(
 		return null;
 	}
 	try {
+		assertProjectExists(projectId);
 		return await run();
 	} finally {
 		finishProjectGitConfigure(projectId);
@@ -115,6 +128,9 @@ app.put("/:projectId/git", requireProjectOwner, async (c) => {
 		const config = await withProjectConfigureLock(projectId, () => saveProjectGitConfig(settings));
 		return config ? c.json(config) : alreadySyncing(c);
 	} catch (error) {
+		if (error instanceof ProjectDeletedError) {
+			return c.json({ error: error.message }, 404);
+		}
 		if (
 			error instanceof ProjectGitRemoteError ||
 			error instanceof ProjectGitContentError ||
@@ -137,11 +153,18 @@ app.put("/:projectId/git", requireProjectOwner, async (c) => {
 
 app.delete("/:projectId/git", requireProjectOwner, async (c) => {
 	const projectId = c.req.param("projectId")!;
-	const config = await withProjectConfigureLock(projectId, async () => {
-		await disconnectProjectGit(projectId);
-		return getProjectGitConfig(projectId);
-	});
-	return config ? c.json(config) : alreadySyncing(c);
+	try {
+		const config = await withProjectConfigureLock(projectId, async () => {
+			await disconnectProjectGit(projectId);
+			return getProjectGitConfig(projectId);
+		});
+		return config ? c.json(config) : alreadySyncing(c);
+	} catch (error) {
+		if (error instanceof ProjectDeletedError) {
+			return c.json({ error: error.message }, 404);
+		}
+		throw error;
+	}
 });
 
 async function runGitAction(
@@ -183,33 +206,23 @@ async function runGitAction(
 			`Git ${action} failed`,
 		);
 
-		if (error instanceof ProjectGitNetworkError) {
+		if (error instanceof ProjectDeletedError) {
+			return c.json({ error: error.message }, 404);
+		}
+		if (error instanceof ProjectGitNetworkError || error instanceof ProjectGitContentError) {
 			return c.json({ error: error.message }, 400);
 		}
 		if (error instanceof ProjectGitNotConfiguredError) {
 			return c.json({ error: error.message }, 409);
 		}
-		if (error instanceof ProjectGitContentError) {
-			return c.json({ error: error.message }, 400);
-		}
 		if (error instanceof ProjectGitConflictError) {
 			return c.json({ error: error.message, conflicts: error.conflicts }, 409);
 		}
-		if (error instanceof git.Errors.MergeConflictError) {
-			return c.json(
-				{ error: "Git pull stopped because remote changes conflict with this project" },
-				409,
-			);
+		if (error instanceof ProjectGitRejectedError) {
+			return c.json({ error: error.message }, 409);
 		}
-		if (
-			error instanceof git.Errors.HttpError ||
-			error instanceof git.Errors.SmartHttpError ||
-			error instanceof git.Errors.UnknownTransportError
-		) {
-			return c.json({ error: "Could not connect to the Git remote or authenticate" }, 502);
-		}
-		if (error instanceof git.Errors.GitPushError || error instanceof git.Errors.PushRejectedError) {
-			return c.json({ error: "The Git remote has changes; pull before pushing" }, 409);
+		if (error instanceof ProjectGitTransportError) {
+			return c.json({ error: error.message }, 502);
 		}
 
 		return c.json({ error: `Git ${action} failed` }, 500);

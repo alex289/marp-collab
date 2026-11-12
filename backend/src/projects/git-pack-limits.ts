@@ -1,5 +1,4 @@
-import { inflate, inflateSync } from "node:zlib";
-import { promisify } from "node:util";
+import { inflateSync } from "node:zlib";
 
 export const MAX_GIT_OBJECT_BYTES = 300 * 1024 * 1024; // 300 MB, as for project imports
 export const MAX_GIT_PACK_UNPACKED_BYTES = 1024 * 1024 * 1024; // 1 GB
@@ -7,11 +6,6 @@ export const MAX_GIT_PACK_OBJECTS = 500_000;
 
 const OFS_DELTA = 6;
 const REF_DELTA = 7;
-// Larger objects inflate on the libuv thread pool; smaller ones are cheaper to inflate inline.
-const INLINE_INFLATE_BYTES = 1024 * 1024;
-const YIELD_INTERVAL_MS = 10;
-
-const inflateAsync = promisify(inflate);
 
 type Inflated = { buffer: Buffer; engine: { bytesWritten: number } };
 
@@ -78,27 +72,28 @@ function readSize(
 	return { value: exact, next: position };
 }
 
-function inflateObject(data: Uint8Array, size: number): Promise<Inflated> | Inflated {
+function inflateObject(data: Uint8Array, size: number): Inflated {
 	// isomorphic-git rejects objects whose inflated size differs from the header, so cap at it.
-	const options = { info: true, maxOutputLength: Math.max(size, 1) };
-	return size > INLINE_INFLATE_BYTES
-		? (inflateAsync(data, options) as unknown as Promise<Inflated>)
-		: (inflateSync(data, options) as unknown as Inflated);
+	return inflateSync(data, {
+		info: true,
+		maxOutputLength: Math.max(size, 1),
+	}) as unknown as Inflated;
 }
 
 /**
  * Rejects packs whose objects would expand beyond the limits once isomorphic-git unpacks them in
  * memory. The compressed transfer limit alone does not bound this, since zlib and deltas compress
- * gigabytes into a few kilobytes.
+ * gigabytes into a few kilobytes. This is a first filter for ordinary oversized repositories:
+ * crafted packs can still make unpacking expensive, which the Git task process limits contain.
  */
-export async function assertGitPackWithinLimits(
+export function assertGitPackWithinLimits(
 	response: Uint8Array,
 	{
 		maxObjectBytes = MAX_GIT_OBJECT_BYTES,
 		maxTotalBytes = MAX_GIT_PACK_UNPACKED_BYTES,
 		maxObjects = MAX_GIT_PACK_OBJECTS,
 	} = {},
-): Promise<void> {
+): void {
 	const pack = packData(response);
 	if (!pack || pack.length < 12) {
 		return;
@@ -111,14 +106,7 @@ export async function assertGitPackWithinLimits(
 	}
 	let position = 12;
 	let total = 0;
-	let lastYield = performance.now();
 	for (let index = 0; index < count; index++) {
-		if (performance.now() - lastYield > YIELD_INTERVAL_MS) {
-			// Keep the server responsive while checking packs with many objects.
-			await new Promise((resolve) => setImmediate(resolve));
-			lastYield = performance.now();
-		}
-
 		const first = pack[position++];
 		if (first === undefined) {
 			throw invalidPack();
@@ -139,7 +127,7 @@ export async function assertGitPackWithinLimits(
 
 		let inflated: Inflated;
 		try {
-			inflated = await inflateObject(pack.subarray(position), size);
+			inflated = inflateObject(pack.subarray(position), size);
 		} catch {
 			throw invalidPack();
 		}

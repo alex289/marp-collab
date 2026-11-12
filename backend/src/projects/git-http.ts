@@ -178,7 +178,7 @@ export function createGitHttpClient(
 						// Check the whole pack before isomorphic-git starts unpacking it.
 						const pack = Buffer.concat(chunks);
 						try {
-							await assertGitPackWithinLimits(pack);
+							assertGitPackWithinLimits(pack);
 						} catch (error) {
 							throw error instanceof GitPackLimitError
 								? new ProjectGitNetworkError(error.message)

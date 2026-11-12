@@ -1,10 +1,15 @@
 import { describe, test, before, after, mock } from "node:test";
-import { deepEqual, equal, ok } from "node:assert/strict";
+import { deepEqual, equal, ok, rejects } from "node:assert/strict";
 import { mkdtemp, readdir, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { Readable } from "node:stream";
-import { startProjectGitSync, finishProjectGitSync } from "../../projects/git-sync-lock.ts";
+import {
+	finishProjectGitConfigure,
+	finishProjectGitSync,
+	startProjectGitConfigure,
+	startProjectGitSync,
+} from "../../projects/git-sync-lock.ts";
 import { Document } from "@hocuspocus/server";
 import git from "isomorphic-git";
 import { Hono } from "hono";
@@ -45,6 +50,7 @@ describe("projects routes", () => {
 		process.env.DATA_PATH = tempDir;
 		process.env.AUTH_SECRET = "test-project-routes-secret";
 
+		(await import("../../projects/git-process.ts")).runGitTasksInProcess();
 		const dbModule = await import("../../db/db.ts");
 		const projectsRouter = (await import("./projects.ts")).default;
 		const projectModel = await import("../../db/models/project.ts");
@@ -687,6 +693,44 @@ describe("projects routes", () => {
 			collabServer.documents.delete(document.name);
 			document.destroy();
 		}
+	});
+
+	test("does not recreate a project deleted while its Git settings were being checked", async (t) => {
+		const { createProject } = await import("../../db/models/project.ts");
+		createProject({ id: "deleted-git-proj", name: "Deleted Git Project", ownerId: "user-1" });
+		const projectDir = await files.getProjectDirectory("deleted-git-proj");
+		const headers = { "content-type": "application/json", "x-test-user-id": "user-1" };
+
+		startProjectGitConfigure("deleted-git-proj");
+		try {
+			const busy = await app.request("/deleted-git-proj", { method: "DELETE", headers });
+			equal(busy.status, 409);
+		} finally {
+			finishProjectGitConfigure("deleted-git-proj");
+		}
+
+		const { promise: checking, resolve: startChecking } = Promise.withResolvers<void>();
+		const { promise: checked, resolve: finishChecking } = Promise.withResolvers<void>();
+		t.mock.method(git, "listServerRefs", async () => {
+			startChecking();
+			await checked;
+			return [];
+		});
+		const save = app.request("/deleted-git-proj/git", {
+			method: "PUT",
+			headers,
+			body: JSON.stringify({
+				remoteUrl: "https://example.com/slides.git",
+				branch: "main",
+				token: "secret-access-token",
+			}),
+		});
+		await checking;
+		equal((await app.request("/deleted-git-proj", { method: "DELETE", headers })).status, 200);
+		finishChecking();
+
+		equal((await save).status, 404);
+		await rejects(stat(projectDir), { code: "ENOENT" });
 	});
 
 	test("rejects Git remotes with a query or fragment", async () => {

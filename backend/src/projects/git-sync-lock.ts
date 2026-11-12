@@ -92,7 +92,7 @@ export function beginProjectWrite(projectId: string): (() => void) | null {
 	};
 }
 
-/** Each Git operation can buffer a 100 MB download and unpack objects of up to 300 MB, so limit how many run at once. */
+/** Each Git operation runs processes that may each use up to GIT_TASK_LIMITS memory, so limit how many run at once. */
 export const MAX_CONCURRENT_GIT_OPERATIONS = 4;
 let runningGitOperations = 0;
 

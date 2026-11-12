@@ -2,28 +2,31 @@ import fs from "node:fs";
 import { access, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import git from "isomorphic-git";
-import { projectGitHttp as http } from "./git-http.ts";
-import { mergeProjectBranches, type ProjectGitResolution } from "./git-merge.ts";
+import type { ProjectGitResolution } from "./git-merge.ts";
 import { getProjectDirectory } from "./storage.ts";
 
 import { encryptSecret, decryptSecret } from "../helpers/encryption.ts";
+import { logger } from "../helpers/logger.ts";
 import { reconcileProjectDocumentState } from "./git-document-state.ts";
 import { ProjectGitContentError, syncSupportedFiles } from "./git-files.ts";
+import { ProjectGitProcessError, runGitTask } from "./git-process.ts";
+import {
+	ProjectGitRejectedError,
+	ProjectGitRemoteError,
+	ProjectGitTransportError,
+	type GitAuthor,
+	type GitCredentials,
+} from "./git-tasks.ts";
 
-export { ProjectGitContentError };
+export {
+	ProjectGitContentError,
+	ProjectGitRejectedError,
+	ProjectGitRemoteError,
+	ProjectGitTransportError,
+};
 
 const REMOTE = "origin";
 const CREDENTIALS_FILE = "marp-collab-credentials";
-
-type GitAuthor = {
-	name: string;
-	email: string;
-};
-
-type GitCredentials = {
-	username?: string;
-	token?: string;
-};
 
 type StoredCredentials = {
 	username?: string;
@@ -39,26 +42,7 @@ export type ProjectGitConfig = {
 	username: string | null;
 };
 
-export class ProjectGitRemoteError extends Error {}
 export class ProjectGitNotConfiguredError extends Error {}
-
-/** Always pass full refs: isomorphic-git writes a bare branch name to `.git/<name>` instead of `refs/heads/`. */
-function branchRef(branch: string): string {
-	return `refs/heads/${branch}`;
-}
-
-function authOptions(credentials: GitCredentials) {
-	if (!credentials.token) {
-		return {};
-	}
-
-	return {
-		onAuth: () => ({
-			username: credentials.username || "git",
-			password: credentials.token,
-		}),
-	};
-}
 
 function credentialsPath(dir: string): string {
 	return join(dir, ".git", CREDENTIALS_FILE);
@@ -114,66 +98,6 @@ async function hasGitDirectory(dir: string): Promise<boolean> {
 	}
 }
 
-async function stageProjectFiles(dir: string): Promise<boolean> {
-	await git.walk({
-		fs,
-		dir,
-		trees: [git.WORKDIR()],
-		map: async (filepath, [entry]) => {
-			if (entry && (await entry.mode()) === 0o120000) {
-				throw new ProjectGitContentError(`Symbolic links are not supported: ${filepath}`);
-			}
-		},
-	});
-
-	const matrix = await git.statusMatrix({ fs, dir });
-	let changed = false;
-
-	for (const [filepath, head, worktree] of matrix) {
-		if (head === worktree) {
-			continue;
-		}
-
-		if (worktree) {
-			await git.add({ fs, dir, filepath });
-		} else {
-			await git.remove({ fs, dir, filepath });
-		}
-		changed = true;
-	}
-
-	return changed;
-}
-
-async function commitProjectFiles(dir: string, branch: string, author: GitAuthor): Promise<void> {
-	const changed = await stageProjectFiles(dir);
-	const hasHead = await git.resolveRef({ fs, dir, ref: branchRef(branch) }).then(
-		() => true,
-		() => false,
-	);
-	if (!changed && hasHead) {
-		return;
-	}
-
-	await git.commit({
-		fs,
-		dir,
-		ref: branchRef(branch),
-		message: "Sync project files",
-		author,
-	});
-}
-
-async function configureBranch(dir: string, branch: string): Promise<void> {
-	await git.setConfig({ fs, dir, path: `branch.${branch}.remote`, value: REMOTE });
-	await git.setConfig({
-		fs,
-		dir,
-		path: `branch.${branch}.merge`,
-		value: `refs/heads/${branch}`,
-	});
-}
-
 async function getConfiguredProject(projectId: string) {
 	const dir = await repositoryDirectory(projectId);
 	if (!(await hasGitDirectory(dir))) {
@@ -194,22 +118,6 @@ async function getConfiguredProject(projectId: string) {
 	const folder = (await git.getConfig({ fs, dir, path: "marp.folder" })) ?? "";
 	const branch = storedBranch || currentBranch || "main";
 	return { dir, branch, remoteUrl: origin.url, credentials, folder };
-}
-
-async function getRemoteBranch(
-	dir: string,
-	remoteUrl: string,
-	branch: string,
-	credentials: GitCredentials,
-) {
-	const refs = await git.listServerRefs({
-		http,
-		url: remoteUrl,
-		prefix: `refs/heads/${branch}`,
-		...authOptions(credentials),
-	});
-
-	return refs.find((ref) => ref.ref === `refs/heads/${branch}`);
 }
 
 export async function getProjectGitConfig(projectId: string): Promise<ProjectGitConfig> {
@@ -270,24 +178,11 @@ export async function verifyProjectGitRemote({
 	remoteUrl,
 	credentials,
 }: Pick<ProjectGitSettings, "projectId" | "remoteUrl" | "credentials">): Promise<void> {
-	const effectiveCredentials = await resolveCredentials(projectId, remoteUrl, credentials);
-	try {
-		// Send supplied credentials on the first request, including for public remotes.
-		await git.listServerRefs({
-			http,
-			url: remoteUrl,
-			...authOptions(effectiveCredentials),
-			headers: effectiveCredentials.token
-				? {
-						Authorization: `Basic ${Buffer.from(`${effectiveCredentials.username || "git"}:${effectiveCredentials.token}`).toString("base64")}`,
-					}
-				: undefined,
-		});
-	} catch {
-		throw new ProjectGitRemoteError(
-			"Could not access the Git repository. Check the URL, username and access token.",
-		);
-	}
+	await runGitTask({
+		type: "verify",
+		remoteUrl,
+		credentials: await resolveCredentials(projectId, remoteUrl, credentials),
+	});
 }
 
 /** Stores verified settings. Run while the project's Git sync lock is held. */
@@ -321,7 +216,8 @@ export async function saveProjectGitConfig({
 	}
 
 	await git.addRemote({ fs, dir, remote: REMOTE, url: remoteUrl, force: true });
-	await configureBranch(dir, branch);
+	await git.setConfig({ fs, dir, path: `branch.${branch}.remote`, value: REMOTE });
+	await git.setConfig({ fs, dir, path: `branch.${branch}.merge`, value: `refs/heads/${branch}` });
 	await git.setConfig({ fs, dir, path: "marp.branch", value: branch });
 	await git.setConfig({ fs, dir, path: "marp.folder", value: folder });
 	await saveCredentials(projectId, dir, effectiveCredentials);
@@ -344,65 +240,52 @@ export async function pullProjectFromGit({
 	resolutions?: Record<string, ProjectGitResolution>;
 }): Promise<{ commit: string; pulled: boolean; overlapping: string[] }> {
 	const { dir, remoteUrl, branch, credentials, folder } = await getConfiguredProject(projectId);
-	const ref = branchRef(branch);
-	await configureBranch(dir, branch);
-	await syncSupportedFiles(await getProjectDirectory(projectId), join(dir, folder));
-	await commitProjectFiles(dir, branch, author);
-
-	const remoteBranch = await getRemoteBranch(dir, remoteUrl, branch, credentials);
-	let pulled = false;
-	let overlapping: string[] = [];
-
-	if (remoteBranch) {
-		await git.fetch({
-			fs,
-			http,
-			dir,
-			remote: REMOTE,
-			ref: branch,
-			singleBranch: true,
-			tags: false,
-			...authOptions(credentials),
-		});
-		await git.walk({
-			fs,
-			dir,
-			trees: [git.TREE({ ref: `refs/remotes/${REMOTE}/${branch}` })],
-			map: async (filepath, [entry]) => {
-				if (entry && (await entry.mode()) === 0o120000) {
-					throw new ProjectGitContentError(`Symbolic links are not supported: ${filepath}`);
-				}
-			},
-		});
-
-		const previousCommit = await git.resolveRef({ fs, dir, ref });
+	const projectDirectory = await getProjectDirectory(projectId);
+	const repository = { repository: dir, branch };
+	const commit = await runGitTask({
+		type: "commit",
+		...repository,
+		projectDirectory,
+		folder,
+		author,
+	});
+	// Otherwise the next sync would commit the stale project files on top of the merge and push a revert.
+	const rollBack = async () => {
 		try {
-			const merge = await mergeProjectBranches({
-				dir,
-				ours: ref,
-				theirs: `refs/remotes/${REMOTE}/${branch}`,
-				author,
-				resolutions,
-			});
-			pulled = !merge.alreadyMerged;
-			overlapping = merge.overlapping;
-
-			if (pulled) {
-				await git.checkout({ fs, dir, ref, force: true });
-				await syncSupportedFiles(join(dir, folder), await getProjectDirectory(projectId), {
-					companionSuffix: ".yjs",
-				});
-				await reconcileProjectDocumentState(projectId);
-			}
+			await runGitTask({ type: "reset", ...repository, commit });
 		} catch (error) {
-			// Otherwise the next sync would commit the stale project files on top of the merge and push a revert.
-			await git.writeRef({ fs, dir, ref, value: previousCommit, force: true });
-			await git.checkout({ fs, dir, ref, force: true });
+			logger.error({ projectId, error }, "Rolling back a failed Git pull failed");
+		}
+	};
+
+	let pull;
+	try {
+		pull = await runGitTask({
+			type: "pull",
+			...repository,
+			remoteUrl,
+			credentials,
+			author,
+			resolutions,
+		});
+	} catch (error) {
+		// The pull task rolls back its own failures, but cannot once its process is stopped.
+		if (error instanceof ProjectGitProcessError) {
+			await rollBack();
+		}
+		throw error;
+	}
+	if (pull.pulled) {
+		try {
+			await syncSupportedFiles(join(dir, folder), projectDirectory, { companionSuffix: ".yjs" });
+			await reconcileProjectDocumentState(projectId);
+		} catch (error) {
+			await rollBack();
 			throw error;
 		}
 	}
 
-	return { commit: await git.resolveRef({ fs, dir, ref }), pulled, overlapping };
+	return pull;
 }
 
 export async function pushProjectToGit({
@@ -413,28 +296,16 @@ export async function pushProjectToGit({
 	author: GitAuthor;
 }): Promise<{ commit: string; pushed: boolean }> {
 	const { dir, remoteUrl, branch, credentials, folder } = await getConfiguredProject(projectId);
-	await configureBranch(dir, branch);
-	await syncSupportedFiles(await getProjectDirectory(projectId), join(dir, folder));
-	await commitProjectFiles(dir, branch, author);
-
-	const [remoteBranch, commit] = await Promise.all([
-		getRemoteBranch(dir, remoteUrl, branch, credentials),
-		git.resolveRef({ fs, dir, ref: branchRef(branch) }),
-	]);
-	const pushed = remoteBranch?.oid !== commit;
-	if (pushed) {
-		await git.push({
-			fs,
-			http,
-			dir,
-			remote: REMOTE,
-			ref: branchRef(branch),
-			remoteRef: branchRef(branch),
-			...authOptions(credentials),
-		});
-	}
-
-	return { commit, pushed };
+	return runGitTask({
+		type: "push",
+		repository: dir,
+		branch,
+		projectDirectory: await getProjectDirectory(projectId),
+		folder,
+		remoteUrl,
+		credentials,
+		author,
+	});
 }
 
 /** Removes the repository, settings and stored access token; project files stay untouched. */

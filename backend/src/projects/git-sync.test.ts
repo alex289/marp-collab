@@ -19,6 +19,7 @@ describe("project Git sync", () => {
 		process.env.DATA_PATH = tempDir;
 		process.env.AUTH_SECRET = "test-git-credential-secret";
 		storage = await import("./storage.ts");
+		(await import("./git-process.ts")).runGitTasksInProcess();
 		gitSync = await import("./git-sync.ts");
 		getProjectGitConfig = gitSync.getProjectGitConfig;
 	});

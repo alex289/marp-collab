@@ -68,3 +68,20 @@ test("removes a deleted file's collaboration state so its folder can be pruned",
 		await rm(root, { recursive: true, force: true });
 	}
 });
+
+test("keeps a folder named like a deleted file's collaboration state", async () => {
+	const root = await mkdtemp(join(tmpdir(), "marp-git-files-"));
+	try {
+		const source = join(root, "source");
+		const destination = join(root, "destination");
+		await mkdir(source);
+		await mkdir(join(destination, "deck.md.yjs"), { recursive: true });
+		await writeFile(join(destination, "deck.md"), "old");
+		await writeFile(join(destination, "deck.md.yjs", "code.ts"), "code");
+		await syncSupportedFiles(source, destination, { companionSuffix: ".yjs" });
+		await rejects(stat(join(destination, "deck.md")), { code: "ENOENT" });
+		equal(await readFile(join(destination, "deck.md.yjs", "code.ts"), "utf8"), "code");
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});

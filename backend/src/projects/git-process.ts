@@ -1,0 +1,126 @@
+import { fork } from "node:child_process";
+import { readFile } from "node:fs/promises";
+import { extname, join } from "node:path";
+import { logger } from "../helpers/logger.ts";
+import { ProjectGitContentError } from "./git-files.ts";
+import {
+	deserializeGitError,
+	handleGitTask,
+	serializeGitError,
+	type GitTask,
+	type GitTaskReply,
+	type GitTaskResult,
+} from "./git-tasks.ts";
+
+/**
+ * A remote can send objects that make isomorphic-git exhaust memory or CPU while unpacking them,
+ * so each task runs in its own process that is stopped once it exceeds these limits.
+ */
+export const GIT_TASK_LIMITS = {
+	timeoutMs: 3 * 60_000,
+	heapMb: 512,
+	// Buffers live outside the JavaScript heap, so also watch the process's resident memory.
+	residentBytes: 1536 * 1024 * 1024,
+};
+
+const WORKER = join(import.meta.dirname, `git-worker${extname(import.meta.filename)}`);
+const MEMORY_CHECK_INTERVAL_MS = 250;
+
+/** The task's process crashed or was stopped, so it may have left its work half done. */
+export class ProjectGitProcessError extends ProjectGitContentError {}
+
+type GitTaskOptions = Partial<typeof GIT_TASK_LIMITS> & { worker?: string };
+
+let inProcess = false;
+
+/** Lets tests run tasks in the test's process, so they can stub isomorphic-git's network calls. */
+export function runGitTasksInProcess(): void {
+	inProcess = true;
+}
+
+/** Resident memory from Linux's /proc, or null where that is unavailable. */
+async function residentBytes(pid: number): Promise<number | null> {
+	try {
+		const status = await readFile(`/proc/${pid}/status`, "utf8");
+		const match = /^VmRSS:\s+(\d+) kB$/m.exec(status);
+		return match ? Number(match[1]) * 1024 : null;
+	} catch {
+		return null;
+	}
+}
+
+function runInChildProcess(
+	task: GitTask,
+	{ worker = WORKER, ...options }: GitTaskOptions,
+): Promise<unknown> {
+	const limits = { ...GIT_TASK_LIMITS, ...options };
+	return new Promise((resolve, reject) => {
+		// An empty environment keeps the server's secrets out of the process.
+		const child = fork(worker, [], {
+			env: {},
+			execArgv: [`--max-old-space-size=${limits.heapMb}`],
+			stdio: ["ignore", "inherit", "inherit", "ipc"],
+		});
+		let settled = false;
+		let stopReason: string | undefined;
+		const settle = (finish: () => void) => {
+			if (!settled) {
+				settled = true;
+				clearTimeout(timeout);
+				clearInterval(memoryCheck);
+				finish();
+			}
+		};
+		const stop = (reason: string) => {
+			stopReason ??= reason;
+			child.kill("SIGKILL");
+		};
+		const timeout = setTimeout(() => stop("timeout"), limits.timeoutMs);
+		const memoryCheck = setInterval(async () => {
+			const resident = child.pid ? await residentBytes(child.pid) : null;
+			if (resident === null) {
+				clearInterval(memoryCheck);
+			} else if (resident > limits.residentBytes) {
+				stop("memory");
+			}
+		}, MEMORY_CHECK_INTERVAL_MS);
+
+		child.on("message", (reply: GitTaskReply) => {
+			settle(() => (reply.ok ? resolve(reply.result) : reject(deserializeGitError(reply.error))));
+			child.kill("SIGKILL");
+		});
+		child.on("error", (error) => {
+			settle(() => reject(error));
+			child.kill("SIGKILL");
+		});
+		child.on("exit", (code, signal) => {
+			settle(() => {
+				logger.warn(
+					{ task: task.type, code, signal, reason: stopReason },
+					"Git task process stopped",
+				);
+				reject(
+					new ProjectGitProcessError(
+						"Git sync stopped because the repository took too long or needed too much memory",
+					),
+				);
+			});
+		});
+		child.send(task);
+	});
+}
+
+async function runHere(task: GitTask): Promise<unknown> {
+	try {
+		return structuredClone(await handleGitTask(task));
+	} catch (error) {
+		throw deserializeGitError(serializeGitError(error));
+	}
+}
+
+export async function runGitTask<T extends GitTask>(
+	task: T,
+	options: GitTaskOptions = {},
+): Promise<GitTaskResult<T>> {
+	return (await (inProcess ? runHere(task) : runInChildProcess(task, options))) as GitTaskResult<T>;
+}

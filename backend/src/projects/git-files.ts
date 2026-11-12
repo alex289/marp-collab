@@ -1,4 +1,4 @@
-import { copyFile, mkdir, readdir, rm, rmdir, stat } from "node:fs/promises";
+import { copyFile, lstat, mkdir, readdir, rm, rmdir, stat } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { getFileType } from "../helpers/file-allowlist.ts";
 import {
@@ -63,6 +63,14 @@ async function removeEmptiedParents(root: string, path: string): Promise<void> {
 	}
 }
 
+/** Remove `path` if it is a file; a folder of the same name is the user's to keep. */
+async function removeFile(path: string): Promise<void> {
+	const stats = await lstat(path).catch(() => null);
+	if (stats?.isFile()) {
+		await rm(path);
+	}
+}
+
 /**
  * Replace only supported files, retaining unrelated repository contents. Pass `companionSuffix`
  * when the destination is the project, so a removed file's collaboration state goes with it.
@@ -81,7 +89,7 @@ export async function syncSupportedFiles(
 		if (!files.has(path)) {
 			await rm(join(destination, path));
 			if (companionSuffix) {
-				await rm(join(destination, `${path}${companionSuffix}`), { force: true });
+				await removeFile(join(destination, `${path}${companionSuffix}`));
 			}
 			await removeEmptiedParents(destination, path);
 		}

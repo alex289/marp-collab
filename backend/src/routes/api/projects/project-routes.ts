@@ -1,4 +1,7 @@
-import { beginProjectWrite } from "../../../projects/git-sync-lock.ts";
+import {
+	finishProjectGitConfigure,
+	startProjectGitConfigure,
+} from "../../../projects/git-sync-lock.ts";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import z from "zod";
@@ -114,8 +117,8 @@ app.delete("/:projectId", async (c) => {
 		return c.json({ error: "Project not found or you don't have permission to delete it" }, 404);
 	}
 
-	const release = beginProjectWrite(projectId);
-	if (!release) {
+	// Deleting removes the project's Git repository too, so it excludes Git syncs and settings changes.
+	if (!startProjectGitConfigure(projectId)) {
 		return c.json({ error: "This project is syncing with Git" }, 409);
 	}
 
@@ -129,7 +132,7 @@ app.delete("/:projectId", async (c) => {
 
 		return c.json({ success: true });
 	} finally {
-		release();
+		finishProjectGitConfigure(projectId);
 	}
 });
 
