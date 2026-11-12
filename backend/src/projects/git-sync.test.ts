@@ -12,7 +12,7 @@ describe("project Git sync", () => {
 	let storage: typeof import("./storage.ts");
 	let getProjectGitConfig: typeof import("./git-sync.ts").getProjectGitConfig;
 	let gitSync: typeof import("./git-sync.ts");
-	let MAX_GIT_TREE_FILES: number;
+	let GIT_TREE_LIMITS: typeof import("./git-tasks.ts").GIT_TREE_LIMITS;
 
 	before(async () => {
 		mock.method(git, "listServerRefs", () => Promise.resolve([]));
@@ -22,7 +22,7 @@ describe("project Git sync", () => {
 		storage = await import("./storage.ts");
 		(await import("./git-process.ts")).runGitTasksInProcess();
 		gitSync = await import("./git-sync.ts");
-		({ MAX_GIT_TREE_FILES } = await import("./git-tasks.ts"));
+		({ GIT_TREE_LIMITS } = await import("./git-tasks.ts"));
 		getProjectGitConfig = gitSync.getProjectGitConfig;
 	});
 
@@ -270,16 +270,11 @@ describe("project Git sync", () => {
 			equal(run(remote, "rev-list", "--count", "slides"), commits);
 		});
 
-		/** Pulls a remote commit that lists one blob under `paths` paths, a pack of a few kilobytes. */
-		async function pullFanOut(
-			t: { mock: typeof mock },
-			content: Buffer,
-			paths: number,
-			error: RegExp,
-		) {
+		/** Configures a project on the remote and pulls it once. */
+		async function pulledProject(t: { mock: typeof mock }, projectId: string) {
 			mockRemote(t);
-			const projectId = `slides-fanout-${paths}`;
-			const repository = join(await storage.getProjectDirectory(projectId), ".git", "repository");
+			const dir = await storage.getProjectDirectory(projectId);
+			const repository = join(dir, ".git", "repository");
 			await gitSync.configureProjectGit({
 				projectId,
 				remoteUrl: "https://example.com/repo.git",
@@ -287,18 +282,28 @@ describe("project Git sync", () => {
 				credentials: {},
 			});
 			await gitSync.pullProjectFromGit({ projectId, author });
-			const before = await git.resolveRef({ fs, dir: repository, ref: "refs/heads/slides" });
+			return { dir, repository };
+		}
 
+		/**
+		 * Pulls a remote commit that adds `names` in a `junk` folder, all one blob, so the pack is a
+		 * few kilobytes, and expects the pull to fail without checking anything out.
+		 */
+		async function pullJunk(
+			t: { mock: typeof mock },
+			projectId: string,
+			content: Buffer,
+			names: string[],
+			error: RegExp,
+		) {
+			const { repository } = await pulledProject(t, projectId);
+			const before = await git.resolveRef({ fs, dir: repository, ref: "refs/heads/slides" });
 			const blob = execFileSync("git", ["-C", remote, "hash-object", "-w", "--stdin"], {
 				input: content,
 				encoding: "utf8",
 			}).trim();
-			const entries = Array.from(
-				{ length: paths },
-				(_, index) => `100644 blob ${blob}\tf${index}.bin`,
-			);
 			const junk = execFileSync("git", ["-C", remote, "mktree"], {
-				input: `${entries.join("\n")}\n`,
+				input: names.map((name) => `100644 blob ${blob}\t${name}\n`).join(""),
 				encoding: "utf8",
 			}).trim();
 			const tree = execFileSync("git", ["-C", remote, "mktree"], {
@@ -306,14 +311,20 @@ describe("project Git sync", () => {
 				encoding: "utf8",
 			}).trim();
 			const commit = ["-c", "user.name=T", "-c", "user.email=t@e", "commit-tree", tree];
-			const fanOut = run(remote, ...commit, "-p", "slides", "-m", "Fan out");
 			const previous = run(remote, "rev-parse", "slides");
-			run(remote, "update-ref", "refs/heads/slides", fanOut);
+			run(
+				remote,
+				"update-ref",
+				"refs/heads/slides",
+				run(remote, ...commit, "-p", previous, "-m", "Junk"),
+			);
 			try {
 				await rejects(
 					gitSync.pullProjectFromGit({ projectId, author }),
 					(rejection) =>
-						rejection instanceof gitSync.ProjectGitContentError && error.test(rejection.message),
+						rejection instanceof gitSync.ProjectGitContentError &&
+						error.test(rejection.message) &&
+						rejection.message.length < 2000,
 				);
 				equal(await git.resolveRef({ fs, dir: repository, ref: "refs/heads/slides" }), before);
 				await rejects(stat(join(repository, "junk")), { code: "ENOENT" });
@@ -322,13 +333,87 @@ describe("project Git sync", () => {
 			}
 		}
 
+		const names = (count: number) => Array.from({ length: count }, (_, index) => `f${index}.bin`);
+
+		/** Lowers the tree limits for one test, so it needs few files. */
+		function limitTree(
+			t: { after: (fn: () => void) => void },
+			limits: Partial<typeof GIT_TREE_LIMITS>,
+		) {
+			const saved = { ...GIT_TREE_LIMITS };
+			Object.assign(GIT_TREE_LIMITS, limits);
+			t.after(() => Object.assign(GIT_TREE_LIMITS, saved));
+		}
+
 		test("rejects remote trees that list a file at more paths than can be checked out", async (t) => {
-			await pullFanOut(t, Buffer.from("x"), MAX_GIT_TREE_FILES + 1, /at most/);
+			limitTree(t, { entries: 100 });
+			await pullJunk(t, "slides-fanout-count", Buffer.from("x"), names(100), /at most/);
 		});
 
 		test("rejects remote trees whose files together exceed the size limit on disk", async (t) => {
 			// 130 copies of 8 MB exceed 1 GB, though the blob compresses to a few kilobytes.
-			await pullFanOut(t, Buffer.alloc(8 * 1024 * 1024), 130, /exceeds the size limit/);
+			await pullJunk(
+				t,
+				"slides-fanout-size",
+				Buffer.alloc(8 * 1024 * 1024),
+				names(130),
+				/exceeds the size limit/,
+			);
+		});
+
+		test("rejects paths too long to check out, without quoting them", async (t) => {
+			await pullJunk(
+				t,
+				"slides-long-name",
+				Buffer.from("x"),
+				[`${"x".repeat(5000)}.bin`],
+				/too long/,
+			);
+		});
+
+		test("checks the merged tree too, since it keeps the project's files", async (t) => {
+			const projectId = "slides-merged-limit";
+			const { dir } = await pulledProject(t, projectId);
+			for (const name of names(40)) {
+				await writeFile(join(dir, `${name}.md`), "slide\n");
+			}
+			// The remote's tree fits, but together with the project's 40 files the merge does not.
+			limitTree(t, { entries: 60 });
+			await pullJunk(t, projectId, Buffer.from("x"), names(40), /at most/);
+		});
+
+		test("finishes an interrupted rollback before committing again", async (t) => {
+			const { repository } = await pulledProject(t, "slides-interrupted-rollback");
+			await writeFile(join(remote, "code.ts"), "private code\n");
+			run(remote, "add", ".");
+			run(remote, "-c", "user.name=T", "-c", "user.email=t@e", "commit", "-m", "Code");
+			await gitSync.pullProjectFromGit({ projectId: "slides-interrupted-rollback", author });
+			const commit = await git.resolveRef({ fs, dir: repository, ref: "refs/heads/slides" });
+
+			// A rollback that was stopped after clearing the working tree, before checking out again.
+			await writeFile(join(repository, ".git", "marp-collab-reset"), commit);
+			await rm(join(repository, "code.ts"));
+			await rm(join(repository, ".git", "index"));
+			await gitSync.pushProjectToGit({ projectId: "slides-interrupted-rollback", author });
+			equal(run(remote, "show", "slides:code.ts"), "private code");
+			await rejects(stat(join(repository, ".git", "marp-collab-reset")), { code: "ENOENT" });
+		});
+
+		test("commits project files the remote's .gitignore matches", async (t) => {
+			const { dir } = await pulledProject(t, "slides-ignored");
+			await writeFile(join(remote, ".gitignore"), "*.md\n");
+			run(remote, "add", ".gitignore");
+			run(remote, "-c", "user.name=T", "-c", "user.email=t@e", "commit", "-m", "Ignore");
+			try {
+				await gitSync.pullProjectFromGit({ projectId: "slides-ignored", author });
+				await writeFile(join(dir, "ignored.md"), "Ignored\n");
+				await gitSync.pushProjectToGit({ projectId: "slides-ignored", author });
+				equal(run(remote, "show", "slides:ignored.md"), "Ignored");
+			} finally {
+				run(remote, "rm", "-q", "--cached", ".gitignore");
+				await rm(join(remote, ".gitignore"));
+				run(remote, "-c", "user.name=T", "-c", "user.email=t@e", "commit", "-q", "-m", "Unignore");
+			}
 		});
 
 		test("rolls the branch back when applying a pull fails", async (t) => {

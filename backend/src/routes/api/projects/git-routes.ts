@@ -26,6 +26,7 @@ import {
 	getProjectGitConfig,
 	ProjectGitContentError,
 	ProjectGitNotConfiguredError,
+	ProjectGitProcessError,
 	ProjectGitRejectedError,
 	ProjectGitRemoteError,
 	ProjectGitTransportError,
@@ -134,7 +135,8 @@ app.put("/:projectId/git", requireProjectOwner, async (c) => {
 		if (
 			error instanceof ProjectGitRemoteError ||
 			error instanceof ProjectGitContentError ||
-			error instanceof ProjectGitNetworkError
+			error instanceof ProjectGitNetworkError ||
+			(error instanceof ProjectGitProcessError && error.exceededLimit)
 		) {
 			return c.json({ error: error.message }, 400);
 		}
@@ -209,7 +211,11 @@ async function runGitAction(
 		if (error instanceof ProjectDeletedError) {
 			return c.json({ error: error.message }, 404);
 		}
-		if (error instanceof ProjectGitNetworkError || error instanceof ProjectGitContentError) {
+		if (
+			error instanceof ProjectGitNetworkError ||
+			error instanceof ProjectGitContentError ||
+			(error instanceof ProjectGitProcessError && error.exceededLimit)
+		) {
 			return c.json({ error: error.message }, 400);
 		}
 		if (error instanceof ProjectGitNotConfiguredError) {

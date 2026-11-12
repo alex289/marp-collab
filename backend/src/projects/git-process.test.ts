@@ -1,11 +1,13 @@
 import { after, before, describe, test } from "node:test";
-import { equal, rejects } from "node:assert/strict";
+import { equal, ok, rejects } from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { ProjectGitProcessError, runGitTask } from "./git-process.ts";
-import { ProjectGitRemoteError, type GitTask } from "./git-tasks.ts";
+import { ProjectGitConflictError } from "./git-merge.ts";
+import { ProjectGitContentError } from "./git-files.ts";
+import { ProjectGitRemoteError, serializeGitError, type GitTask } from "./git-tasks.ts";
 
 describe("Git task processes", () => {
 	const verify: GitTask = {
@@ -55,6 +57,17 @@ describe("Git task processes", () => {
 		await rejects(runGitTask(verify), ProjectGitRemoteError);
 	});
 
+	test("keeps errors small, whatever paths they quote", () => {
+		const content = serializeGitError(new ProjectGitContentError(`File: ${"x".repeat(100_000)}`));
+		ok("message" in content && content.message.length <= 1001);
+		const conflicts = serializeGitError(
+			new ProjectGitConflictError(
+				Array.from({ length: 10_000 }, (_, index) => ({ path: `${index}.png`, type: "binary" })),
+			),
+		);
+		ok("conflicts" in conflicts && conflicts.conflicts.length === 200);
+	});
+
 	test("keeps the server's environment out of tasks", async () => {
 		process.env.MARP_TEST_SECRET = "secret";
 		try {
@@ -71,7 +84,10 @@ describe("Git task processes", () => {
 
 	test("stops tasks that take too long", async () => {
 		const hang = await worker("hang", "setInterval(() => {}, 1000);");
-		await rejects(runGitTask(verify, { worker: hang, timeoutMs: 200 }), ProjectGitProcessError);
+		await rejects(
+			runGitTask(verify, { worker: hang, timeoutMs: 200 }),
+			(error) => error instanceof ProjectGitProcessError && error.exceededLimit,
+		);
 	});
 
 	test("stops tasks that run out of heap", async () => {
@@ -81,7 +97,18 @@ describe("Git task processes", () => {
 			`const kept = Array.from({ length: 1_000_000 }, (_, size) => ({ size, name: String(size) }));
 			process.once("message", () => process.send({ ok: true, result: kept.length }));`,
 		);
-		await rejects(runGitTask(verify, { worker: grow, heapMb: 16 }), ProjectGitProcessError);
+		await rejects(
+			runGitTask(verify, { worker: grow, heapMb: 16 }),
+			(error) => error instanceof ProjectGitProcessError && error.exceededLimit,
+		);
+	});
+
+	test("reports other process failures as faults rather than limits", async () => {
+		const exit = await worker("exit", "process.exit(3);");
+		await rejects(
+			runGitTask(verify, { worker: exit }),
+			(error) => error instanceof ProjectGitProcessError && !error.exceededLimit,
+		);
 	});
 
 	test("resets the working tree without files a stopped checkout left behind", async () => {

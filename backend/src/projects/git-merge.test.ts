@@ -1,7 +1,8 @@
 import { after, before, describe, test } from "node:test";
 import { deepEqual, equal, match, rejects } from "node:assert/strict";
 import fs from "node:fs";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import git from "isomorphic-git";
@@ -19,6 +20,13 @@ async function deleteFile(dir: string, filepath: string) {
 	await rm(join(dir, filepath));
 	await git.remove({ fs, dir, filepath });
 	await git.commit({ fs, dir, message: `Delete ${filepath}`, author });
+}
+
+/** Merges like a pull does: the merge leaves the working tree alone until it is checked out. */
+async function merge(options: Parameters<typeof mergeProjectBranches>[0]) {
+	const result = await mergeProjectBranches(options);
+	await git.checkout({ fs, dir: options.dir, ref: options.ours, force: true });
+	return result;
 }
 
 describe("project Git merge", () => {
@@ -42,7 +50,7 @@ describe("project Git merge", () => {
 		await commitFile(dir, "slides.md", "# Slides\n\nRemote paragraph\n");
 		await git.checkout({ fs, dir, ref: "main", force: true });
 
-		const merge = await mergeProjectBranches({
+		const result = await merge({
 			dir,
 			ours: "refs/heads/main",
 			theirs: "remote",
@@ -52,7 +60,7 @@ describe("project Git merge", () => {
 		const content = await readFile(join(dir, "slides.md"), "utf8");
 		match(content, /Project paragraph/);
 		match(content, /Remote paragraph/);
-		deepEqual(merge.overlapping, ["slides.md"]);
+		deepEqual(result.overlapping, ["slides.md"]);
 	});
 
 	test("merges files that differ only in line endings without duplicating them", () => {
@@ -86,7 +94,7 @@ describe("project Git merge", () => {
 			},
 		);
 
-		await mergeProjectBranches({
+		await merge({
 			dir,
 			ours: "refs/heads/main",
 			theirs: "remote",
@@ -117,7 +125,7 @@ describe("project Git merge", () => {
 			},
 		);
 
-		await mergeProjectBranches({
+		await merge({
 			dir,
 			ours: "refs/heads/main",
 			theirs: "remote",
@@ -147,7 +155,7 @@ describe("project Git merge", () => {
 			},
 		);
 
-		await mergeProjectBranches({
+		await merge({
 			dir,
 			ours: "refs/heads/main",
 			theirs: "remote",
@@ -184,7 +192,7 @@ describe("project Git merge", () => {
 			},
 		);
 
-		await mergeProjectBranches({
+		await merge({
 			dir,
 			ours: "refs/heads/main",
 			theirs: "remote",
@@ -199,5 +207,46 @@ describe("project Git merge", () => {
 			filepath: "notes.md",
 		});
 		equal(Buffer.from(blob).toString(), "Project notes\n");
+	});
+
+	test("keeps the remote's other changes when resolving a conflict", async () => {
+		for (const resolution of ["remote", "project"] as const) {
+			const dir = join(tempDir, `resolve-${resolution}`);
+			await git.init({ fs, dir, defaultBranch: "main" });
+			await commitFile(dir, "keep.md", "Base\n");
+			await commitFile(dir, "other.md", "Other\n");
+			await mkdir(join(dir, "images"));
+			await commitFile(dir, "images/image.png", new Uint8Array([0, 1, 2]));
+			await git.branch({ fs, dir, ref: "remote" });
+			await commitFile(dir, "images/image.png", new Uint8Array([3, 4, 5]));
+			await git.checkout({ fs, dir, ref: "remote", force: true });
+			await commitFile(dir, "keep.md", "Remote edit\n");
+			await deleteFile(dir, "other.md");
+			await commitFile(dir, "new.md", "New\n");
+			await commitFile(dir, "images/image.png", new Uint8Array([6, 7, 8]));
+			await git.checkout({ fs, dir, ref: "main", force: true });
+
+			await mergeProjectBranches({
+				dir,
+				ours: "refs/heads/main",
+				theirs: "remote",
+				author,
+				resolutions: { "images/image.png": resolution },
+			});
+			// Nothing is written until the result is checked out.
+			await rejects(readFile(join(dir, "new.md")), { code: "ENOENT" });
+
+			const oid = await git.resolveRef({ fs, dir, ref: "refs/heads/main" });
+			const read = async (filepath: string) =>
+				Buffer.from((await git.readBlob({ fs, dir, oid, filepath })).blob);
+			equal((await read("keep.md")).toString(), "Remote edit\n");
+			equal((await read("new.md")).toString(), "New\n");
+			await rejects(read("other.md"), git.Errors.NotFoundError);
+			deepEqual(
+				[...(await read("images/image.png"))],
+				resolution === "remote" ? [6, 7, 8] : [3, 4, 5],
+			);
+			execFileSync("git", ["-C", dir, "fsck", "--strict", "--no-dangling"]);
+		}
 	});
 });

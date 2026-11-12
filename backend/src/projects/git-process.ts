@@ -2,7 +2,6 @@ import { fork } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import { extname, join } from "node:path";
 import { logger } from "../helpers/logger.ts";
-import { ProjectGitContentError } from "./git-files.ts";
 import {
 	deserializeGitError,
 	handleGitTask,
@@ -33,7 +32,32 @@ const TLS_ENVIRONMENT = [
 ];
 
 /** The task's process crashed or was stopped, so it may have left its work half done. */
-export class ProjectGitProcessError extends ProjectGitContentError {}
+export class ProjectGitProcessError extends Error {
+	/** Stopped at a limit, which the repository's contents caused rather than a fault. */
+	readonly exceededLimit: boolean;
+
+	constructor(message: string, exceededLimit: boolean) {
+		super(message);
+		this.exceededLimit = exceededLimit;
+	}
+}
+
+/** How much of the process's error output to keep for the log. */
+const STDERR_TAIL_BYTES = 4096;
+
+function processError(reason: string | undefined, signal: NodeJS.Signals | null) {
+	if (reason === "timeout") {
+		return new ProjectGitProcessError("Git sync stopped because it took too long", true);
+	}
+	// V8 aborts when the heap limit is reached; the kernel's OOM killer sends SIGKILL.
+	if (reason === "memory" || signal === "SIGABRT" || signal === "SIGKILL") {
+		return new ProjectGitProcessError(
+			"Git sync stopped because the repository needed too much memory",
+			true,
+		);
+	}
+	return new ProjectGitProcessError("Git sync failed unexpectedly", false);
+}
 
 type GitTaskOptions = Partial<typeof GIT_TASK_LIMITS> & { worker?: string };
 
@@ -69,7 +93,12 @@ function runInChildProcess(
 				),
 			),
 			execArgv: [`--max-old-space-size=${limits.heapMb}`],
-			stdio: ["ignore", "inherit", "inherit", "ipc"],
+			// Output can quote the remote's paths at any length, so keep only a short tail for the log.
+			stdio: ["ignore", "ignore", "pipe", "ipc"],
+		});
+		let stderr = Buffer.alloc(0);
+		child.stderr?.on("data", (chunk: Buffer) => {
+			stderr = Buffer.concat([stderr, chunk]).subarray(-STDERR_TAIL_BYTES);
 		});
 		let settled = false;
 		let stopReason: string | undefined;
@@ -106,16 +135,10 @@ function runInChildProcess(
 		child.on("exit", (code, signal) => {
 			settle(() => {
 				logger.warn(
-					{ task: task.type, code, signal, reason: stopReason },
+					{ task: task.type, code, signal, reason: stopReason, stderr: stderr.toString() },
 					"Git task process stopped",
 				);
-				reject(
-					new ProjectGitProcessError(
-						stopReason === "timeout"
-							? "Git sync stopped because it took too long"
-							: "Git sync stopped because the repository needed too much memory",
-					),
-				);
+				reject(processError(stopReason, signal));
 			});
 		});
 		child.send(task);

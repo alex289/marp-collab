@@ -117,3 +117,26 @@ test("rejects pulled folders that take the place of a document's collaboration s
 		await rm(root, { recursive: true, force: true });
 	}
 });
+
+test("changes nothing when something that stays is where a copied file goes", async () => {
+	const root = await mkdtemp(join(tmpdir(), "marp-git-files-"));
+	try {
+		const source = join(root, "source");
+		const destination = join(root, "destination");
+		await mkdir(source);
+		await writeFile(join(source, "b.md"), "new");
+		await writeFile(join(source, "z.md"), "new");
+		await mkdir(join(destination, "z.md"), { recursive: true });
+		await writeFile(join(destination, "a.md"), "old");
+		await writeFile(join(destination, "a.md.yjs"), "state");
+		await writeFile(join(destination, "b.md"), "old");
+		await rejects(
+			syncSupportedFiles(source, destination, { intoProject: true }),
+			/z.md is in the way/,
+		);
+		equal(await readFile(join(destination, "a.md.yjs"), "utf8"), "state");
+		equal(await readFile(join(destination, "b.md"), "utf8"), "old");
+	} finally {
+		await rm(root, { recursive: true, force: true });
+	}
+});

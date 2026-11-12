@@ -1,8 +1,6 @@
 import fs from "node:fs";
-import { mkdir, rm, writeFile } from "node:fs/promises";
-import { dirname, resolve, sep } from "node:path";
 import { diff3Merge } from "node-diff3";
-import git, { type WalkerEntry } from "isomorphic-git";
+import git, { type TreeEntry as GitTreeEntry, type WalkerEntry } from "isomorphic-git";
 import { isEditableExtension } from "../helpers/file-allowlist.ts";
 
 type GitAuthor = {
@@ -139,38 +137,84 @@ export function mergeTextFiles(
 	return { text: crlf ? merged.replaceAll("\n", "\r\n") : merged, overlapping };
 }
 
-function projectPath(dir: string, filepath: string): string {
-	const root = resolve(dir);
-	const path = resolve(root, filepath);
-	if (!path.startsWith(`${root}${sep}`)) {
-		throw new Error(`Invalid Git path: ${filepath}`);
+const RESOLVED_REF = "refs/marp-collab/resolved";
+
+/** The entry at `path` in a tree, or null where nothing is. */
+async function findEntry(dir: string, tree: string, path: string[]): Promise<GitTreeEntry | null> {
+	const [name, ...rest] = path;
+	const { tree: entries } = await git.readTree({ fs, dir, oid: tree });
+	const entry = entries.find((candidate) => candidate.path === name);
+	if (!entry || rest.length === 0) {
+		return entry ?? null;
 	}
-	return path;
+	return entry.type === "tree" ? findEntry(dir, entry.oid, rest) : null;
 }
 
-async function keepVersion(dir: string, ref: string, filepath: string): Promise<void> {
-	const { blob } = await git.readBlob({ fs, dir, oid: ref, filepath });
-	const path = projectPath(dir, filepath);
-	await mkdir(dirname(path), { recursive: true });
-	await writeFile(path, blob);
-	await git.add({ fs, dir, filepath });
-}
-
-async function deleteVersion(dir: string, filepath: string): Promise<void> {
-	await rm(projectPath(dir, filepath), { force: true });
-	await git.remove({ fs, dir, filepath });
-}
-
-async function applyResolution(
+/** Writes a copy of `tree` with `entry` at `path`, or without anything there. Returns null for an empty tree. */
+async function replaceEntry(
 	dir: string,
-	filepath: string,
-	resolution: ProjectGitResolution,
-	ourOid: string,
-	theirOid: string,
-): Promise<void> {
-	await keepVersion(dir, resolution === "project" ? ourOid : theirOid, filepath);
+	tree: string | null,
+	path: string[],
+	entry: GitTreeEntry | null,
+): Promise<string | null> {
+	const [name, ...rest] = path;
+	const entries = tree ? (await git.readTree({ fs, dir, oid: tree })).tree : [];
+	let replacement: GitTreeEntry | null = entry && { ...entry, path: name! };
+	if (rest.length > 0) {
+		const current = entries.find((candidate) => candidate.path === name);
+		const subtree = await replaceEntry(
+			dir,
+			current?.type === "tree" ? current.oid : null,
+			rest,
+			entry,
+		);
+		replacement = subtree ? { mode: "040000", path: name!, oid: subtree, type: "tree" } : null;
+	}
+	const result = entries.filter((candidate) => candidate.path !== name);
+	if (replacement) {
+		result.push(replacement);
+	}
+	return result.length > 0 ? git.writeTree({ fs, dir, tree: result }) : null;
 }
 
+/**
+ * Commits on top of `commit` the versions `source` has at `paths`, without touching the working
+ * tree. Merging afterwards then finds nothing to resolve at those paths.
+ */
+async function takeVersions(
+	dir: string,
+	commit: string,
+	source: string,
+	paths: string[],
+	author: GitAuthor,
+	ref?: string,
+): Promise<string> {
+	const [{ commit: target }, { commit: from }] = await Promise.all([
+		git.readCommit({ fs, dir, oid: commit }),
+		git.readCommit({ fs, dir, oid: source }),
+	]);
+	let tree: string = target.tree;
+	for (const path of paths) {
+		const parts = path.split("/");
+		tree =
+			(await replaceEntry(dir, tree, parts, await findEntry(dir, from.tree, parts))) ??
+			(await git.writeTree({ fs, dir, tree: [] }));
+	}
+	return git.commit({
+		fs,
+		dir,
+		message: "Resolve Git pull conflicts",
+		author,
+		tree,
+		parent: [commit],
+		...(ref ? { ref } : { noUpdateBranch: true }),
+	});
+}
+
+/**
+ * Merges `theirs` into `ours` without touching the working tree or index, so the caller can check
+ * the result before checking it out. Conflicts need a resolution in `resolutions`.
+ */
 export async function mergeProjectBranches({
 	dir,
 	ours,
@@ -185,20 +229,37 @@ export async function mergeProjectBranches({
 	resolutions?: Record<string, ProjectGitResolution>;
 }): Promise<{ alreadyMerged: boolean; overlapping: string[] }> {
 	const { conflicts, ourOid, theirOid } = await findConflicts(dir, ours, theirs);
-	const overlapping = new Set<string>();
 	const unresolved = conflicts.filter((conflict) => !resolutions[conflict.path]);
 	if (unresolved.length > 0) {
 		throw new ProjectGitConflictError(unresolved);
 	}
 
+	// Give each conflicting path its chosen version on the other side too, so the merge is clean.
+	const resolvedAs = (resolution: ProjectGitResolution) =>
+		conflicts
+			.filter((conflict) => resolutions[conflict.path] === resolution)
+			.map(({ path }) => path);
+	const remotePaths = resolvedAs("remote");
+	const projectPaths = resolvedAs("project");
+	if (remotePaths.length > 0) {
+		await takeVersions(dir, ourOid, theirOid, remotePaths, author, ours);
+	}
+	const resolvedTheirs =
+		projectPaths.length > 0
+			? await takeVersions(dir, theirOid, ourOid, projectPaths, author)
+			: theirOid;
+
+	const overlapping = new Set<string>();
+	await git.writeRef({ fs, dir, ref: RESOLVED_REF, value: resolvedTheirs, force: true });
 	try {
 		const merge = await git.merge({
 			fs,
 			dir,
 			ours,
-			theirs,
+			theirs: RESOLVED_REF,
 			author,
-			abortOnConflict: false,
+			message: `Merge ${theirs} into ${ours}`,
+			abortOnConflict: true,
 			allowUnrelatedHistories: true,
 			mergeDriver: ({ contents, path }) => {
 				if (!isEditableExtension(path)) {
@@ -211,75 +272,8 @@ export async function mergeProjectBranches({
 				return { cleanMerge: true, mergedText: merged.text };
 			},
 		});
-
-		await git.checkout({ fs, dir, ref: ours, force: true });
-		const addAdd = conflicts.filter((conflict) => conflict.type === "add-add");
-		for (const conflict of addAdd) {
-			await applyResolution(dir, conflict.path, resolutions[conflict.path]!, ourOid, theirOid);
-		}
-		if (addAdd.length > 0) {
-			await git.commit({ fs, dir, ref: ours, message: "Resolve Git pull conflicts", author });
-		}
-
 		return { alreadyMerged: Boolean(merge.alreadyMerged), overlapping: [...overlapping].sort() };
-	} catch (error) {
-		if (!(error instanceof git.Errors.MergeConflictError)) {
-			throw error;
-		}
-
-		try {
-			const resolved = new Set<string>();
-			for (const filepath of error.data.bothModified) {
-				const resolution = resolutions[filepath];
-				if (!resolution) {
-					throw new ProjectGitConflictError([{ path: filepath, type: "binary" }]);
-				}
-				await applyResolution(dir, filepath, resolution, ourOid, theirOid);
-				resolved.add(filepath);
-			}
-			for (const filepath of error.data.deleteByUs) {
-				const resolution = resolutions[filepath];
-				if (!resolution) {
-					throw new ProjectGitConflictError([{ path: filepath, type: "project-deleted" }]);
-				}
-				if (resolution === "remote") {
-					await keepVersion(dir, theirOid, filepath);
-				} else {
-					await deleteVersion(dir, filepath);
-				}
-				resolved.add(filepath);
-			}
-			for (const filepath of error.data.deleteByTheirs) {
-				const resolution = resolutions[filepath];
-				if (!resolution) {
-					throw new ProjectGitConflictError([{ path: filepath, type: "remote-deleted" }]);
-				}
-				if (resolution === "project") {
-					await keepVersion(dir, ourOid, filepath);
-				} else {
-					await deleteVersion(dir, filepath);
-				}
-				resolved.add(filepath);
-			}
-			for (const conflict of conflicts) {
-				if (conflict.type === "add-add" && !resolved.has(conflict.path)) {
-					await applyResolution(dir, conflict.path, resolutions[conflict.path]!, ourOid, theirOid);
-				}
-			}
-
-			await git.commit({
-				fs,
-				dir,
-				ref: ours,
-				message: `Merge ${theirs} into ${ours}`,
-				parent: [ourOid, theirOid],
-				author,
-			});
-			await git.checkout({ fs, dir, ref: ours, force: true });
-			return { alreadyMerged: false, overlapping: [...overlapping].sort() };
-		} catch (resolutionError) {
-			await git.abortMerge({ fs, dir, commit: ourOid }).catch(() => undefined);
-			throw resolutionError;
-		}
+	} finally {
+		await git.deleteRef({ fs, dir, ref: RESOLVED_REF });
 	}
 }

@@ -1,5 +1,5 @@
 import { copyFile, lstat, mkdir, readdir, rm, rmdir, stat } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { dirname, join, relative } from "node:path";
 import { getFileType, isEditableExtension } from "../helpers/file-allowlist.ts";
 import {
 	MAX_IMPORT_ENTRY_COUNT,
@@ -101,6 +101,46 @@ async function removeFile(path: string): Promise<void> {
 	}
 }
 
+/** Whether removing the files in `removed` empties the folder at `path`, so it is pruned. */
+async function emptiedBy(root: string, path: string, removed: Set<string>): Promise<boolean> {
+	const entries = await readdir(join(root, path), { recursive: true, withFileTypes: true });
+	const paths = (isDirectory: boolean) =>
+		entries
+			.filter((entry) => entry.isDirectory() === isDirectory)
+			.map((entry) => relative(root, join(entry.parentPath, entry.name)));
+	const files = paths(false);
+	// Only the parents of removed files are pruned, so a folder without one below it stays.
+	return (
+		files.every((file) => removed.has(file)) &&
+		[path, ...paths(true)].every((folder) => files.some((file) => file.startsWith(`${folder}/`)))
+	);
+}
+
+/** Fails before anything changes if a file or folder that stays is where a copied file goes. */
+async function assertNothingInTheWay(
+	destination: string,
+	files: Iterable<string>,
+	removed: Set<string>,
+): Promise<void> {
+	for (const path of files) {
+		const parts = path.split("/");
+		for (let index = 1; index <= parts.length; index++) {
+			const current = parts.slice(0, index).join("/");
+			const stats = await lstat(join(destination, current)).catch(() => null);
+			if (!stats) {
+				break;
+			}
+			const blocked =
+				index < parts.length
+					? !stats.isDirectory() && !removed.has(current)
+					: stats.isDirectory() && !(await emptiedBy(destination, current, removed));
+			if (blocked) {
+				throw new ProjectGitContentError(`Cannot copy ${path}: ${current} is in the way`);
+			}
+		}
+	}
+}
+
 /**
  * Replace only supported files, retaining unrelated repository contents. Pass `intoProject` when
  * the destination is the project, so pulled documents stay within what collaboration can load and
@@ -116,14 +156,22 @@ export async function syncSupportedFiles(
 	const sourceFiles = await supportedFiles(source);
 	await assertWithinLimits(source, sourceFiles, intoProject);
 	const files = new Set(sourceFiles);
-	for (const path of await supportedFiles(destination)) {
-		if (!files.has(path)) {
-			await rm(join(destination, path));
-			if (intoProject) {
-				await removeFile(join(destination, `${path}${STATE_SUFFIX}`));
+	const removedFiles = (await supportedFiles(destination)).filter((path) => !files.has(path));
+	const removed = new Set(removedFiles);
+	if (intoProject) {
+		for (const path of removedFiles) {
+			if ((await lstat(join(destination, `${path}${STATE_SUFFIX}`)).catch(() => null))?.isFile()) {
+				removed.add(`${path}${STATE_SUFFIX}`);
 			}
-			await removeEmptiedParents(destination, path);
 		}
+	}
+	await assertNothingInTheWay(destination, files, removed);
+	for (const path of removedFiles) {
+		await rm(join(destination, path));
+		if (intoProject) {
+			await removeFile(join(destination, `${path}${STATE_SUFFIX}`));
+		}
+		await removeEmptiedParents(destination, path);
 	}
 	for (const path of files) {
 		await mkdir(dirname(join(destination, path)), { recursive: true });

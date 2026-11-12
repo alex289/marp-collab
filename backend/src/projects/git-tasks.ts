@@ -18,8 +18,16 @@ import {
  */
 
 const REMOTE = "origin";
-/** Checking out a tree writes each path, so a blob listed under many paths is written many times. */
-export const MAX_GIT_TREE_FILES = 50_000;
+/**
+ * Checking out a tree writes each path, so a blob listed under many paths is written many times.
+ * Tests lower these.
+ */
+export const GIT_TREE_LIMITS = { entries: 50_000, bytes: MAX_GIT_PACK_UNPACKED_BYTES };
+// Common file system limits; longer names would also reach logs and responses in error messages.
+const MAX_GIT_NAME_BYTES = 255;
+const MAX_GIT_PATH_BYTES = 4096;
+const MAX_ERROR_MESSAGE_LENGTH = 1000;
+const MAX_REPORTED_CONFLICTS = 200;
 
 export type GitAuthor = {
 	name: string;
@@ -115,17 +123,39 @@ async function assertNoSymlinks(dir: string): Promise<void> {
 	});
 }
 
-/** Rejects trees that would not fit on disk once checked out, counting every path a blob appears at. */
-async function assertTreeWithinLimits(dir: string, ref: string): Promise<void> {
-	const sizes = new Map<string, Promise<number>>();
-	let files = 0;
+/** Sizes of blobs already read, by object id; reading a blob is the only way to learn its size. */
+type BlobSizes = Map<string, number>;
+
+/**
+ * Rejects trees that would not fit on disk once checked out, counting every path a blob appears
+ * at, and paths too long to check out.
+ */
+async function assertTreeWithinLimits(dir: string, ref: string, sizes: BlobSizes): Promise<void> {
+	let entries = 0;
 	let total = 0;
 	await git.walk({
 		fs,
 		dir,
 		trees: [git.TREE({ ref })],
 		map: async (filepath, [entry]) => {
-			if (!entry || (await entry.type()) !== "blob") {
+			if (!entry || filepath === ".") {
+				return;
+			}
+			const name = filepath.slice(filepath.lastIndexOf("/") + 1);
+			if (
+				Buffer.byteLength(name) > MAX_GIT_NAME_BYTES ||
+				Buffer.byteLength(filepath) > MAX_GIT_PATH_BYTES
+			) {
+				throw new ProjectGitContentError("Git repository contains a path that is too long");
+			}
+			// Folders count too: checking them out creates them even when they are empty.
+			entries++;
+			if (entries > GIT_TREE_LIMITS.entries) {
+				throw new ProjectGitContentError(
+					`Git sync supports at most ${GIT_TREE_LIMITS.entries} files and folders per repository`,
+				);
+			}
+			if ((await entry.type()) !== "blob") {
 				return;
 			}
 			if ((await entry.mode()) === 0o120000) {
@@ -133,26 +163,25 @@ async function assertTreeWithinLimits(dir: string, ref: string): Promise<void> {
 			}
 			const oid = await entry.oid();
 			let size = sizes.get(oid);
-			if (!size) {
-				size = git.readBlob({ fs, dir, oid }).then(({ blob }) => blob.byteLength);
+			if (size === undefined) {
+				size = (await git.readBlob({ fs, dir, oid })).blob.byteLength;
 				sizes.set(oid, size);
 			}
-			files++;
-			if (files > MAX_GIT_TREE_FILES) {
-				throw new ProjectGitContentError(
-					`Git sync supports at most ${MAX_GIT_TREE_FILES} files per repository`,
-				);
-			}
-			// Await before adding: walk visits siblings concurrently, and `total += await size` would
-			// add to a stale total.
-			const bytes = await size;
-			total += bytes;
-			if (bytes > MAX_GIT_OBJECT_BYTES) {
+			if (size > MAX_GIT_OBJECT_BYTES) {
 				throw new ProjectGitContentError(`File exceeds the size limit: ${filepath}`);
 			}
-			if (total > MAX_GIT_PACK_UNPACKED_BYTES) {
+			total += size;
+			if (total > GIT_TREE_LIMITS.bytes) {
 				throw new ProjectGitContentError("Git repository exceeds the size limit");
 			}
+		},
+		// One entry at a time, so only one blob is in memory and the totals stay consistent.
+		iterate: async (walk, children) => {
+			const results = [];
+			for (const child of children) {
+				results.push(await walk(child));
+			}
+			return results;
 		},
 	});
 }
@@ -160,16 +189,18 @@ async function assertTreeWithinLimits(dir: string, ref: string): Promise<void> {
 async function stageProjectFiles(dir: string): Promise<boolean> {
 	await assertNoSymlinks(dir);
 
-	const matrix = await git.statusMatrix({ fs, dir });
+	// Include ignored files: the remote's .gitignore must not keep project files out of commits.
+	const matrix = await git.statusMatrix({ fs, dir, ignored: true });
 	let changed = false;
 
 	for (const [filepath, head, worktree] of matrix) {
-		if (head === worktree) {
+		// Listing ignored files also lists the repository's own .git folder.
+		if (head === worktree || filepath.split("/").includes(".git")) {
 			continue;
 		}
 
 		if (worktree) {
-			await git.add({ fs, dir, filepath });
+			await git.add({ fs, dir, filepath, force: true });
 		} else {
 			await git.remove({ fs, dir, filepath });
 		}
@@ -278,10 +309,13 @@ async function pullRemote({
 			tags: false,
 			...authOptions(credentials),
 		});
-		await assertTreeWithinLimits(dir, remoteRef);
+		const sizes: BlobSizes = new Map();
+		await assertTreeWithinLimits(dir, remoteRef, sizes);
 
 		const commit = await git.resolveRef({ fs, dir, ref });
+		let checkingOut = false;
 		try {
+			// The merge only writes Git objects, so its result can be checked before checking it out.
 			const merge = await mergeProjectBranches({
 				dir,
 				ours: ref,
@@ -292,12 +326,15 @@ async function pullRemote({
 			pulled = !merge.alreadyMerged;
 			overlapping = merge.overlapping;
 			if (pulled) {
+				await assertTreeWithinLimits(dir, ref, sizes);
+				checkingOut = true;
 				await git.checkout({ fs, dir, ref, force: true });
 			}
 		} catch (error) {
-			// Conflicts are reported before the merge touches anything, or after it was aborted.
-			if (!(error instanceof ProjectGitConflictError)) {
+			if (checkingOut) {
 				await resetBranch({ ...remote, commit });
+			} else {
+				await git.writeRef({ fs, dir, ref, value: commit, force: true });
 			}
 			throw error;
 		}
@@ -342,19 +379,30 @@ export function handleGitTask(task: GitTask): Promise<GitTaskResults[keyof GitTa
 	}
 }
 
+/** Messages can quote paths from the remote, which may be very long. */
+function shorten(message: string): string {
+	return message.length > MAX_ERROR_MESSAGE_LENGTH
+		? `${message.slice(0, MAX_ERROR_MESSAGE_LENGTH)}…`
+		: message;
+}
+
 /** Error classes do not survive the process boundary, so errors travel as plain data. */
 export function serializeGitError(error: unknown): SerializedGitError {
 	if (error instanceof ProjectGitConflictError) {
-		return { type: "conflict", conflicts: error.conflicts };
+		// Resolving these and pulling again reports any further conflicts.
+		return { type: "conflict", conflicts: error.conflicts.slice(0, MAX_REPORTED_CONFLICTS) };
 	}
 	if (error instanceof ProjectGitContentError) {
-		return { type: "content", message: error.message };
+		return { type: "content", message: shorten(error.message) };
 	}
 	if (error instanceof ProjectGitNetworkError) {
-		return { type: "network", message: error.message };
+		return { type: "network", message: shorten(error.message) };
 	}
 	if (error instanceof ProjectGitRemoteError) {
-		return { type: "remote", message: error.message };
+		return { type: "remote", message: shorten(error.message) };
+	}
+	if (error instanceof git.Errors.UnsafeFilepathError) {
+		return { type: "content", message: "Git repository contains an unsafe path" };
 	}
 	if (error instanceof git.Errors.MergeConflictError) {
 		return {
@@ -374,7 +422,7 @@ export function serializeGitError(error: unknown): SerializedGitError {
 	}
 	return {
 		type: "failed",
-		message: error instanceof Error ? `${error.name}: ${error.message}` : String(error),
+		message: shorten(error instanceof Error ? `${error.name}: ${error.message}` : String(error)),
 	};
 }
 

@@ -20,6 +20,7 @@ import {
 
 export {
 	ProjectGitContentError,
+	ProjectGitProcessError,
 	ProjectGitRejectedError,
 	ProjectGitRemoteError,
 	ProjectGitTransportError,
@@ -27,6 +28,8 @@ export {
 
 const REMOTE = "origin";
 const CREDENTIALS_FILE = "marp-collab-credentials";
+/** Holds the commit to reset to while a rollback has not finished. */
+const RESET_FILE = "marp-collab-reset";
 
 type StoredCredentials = {
 	username?: string;
@@ -229,6 +232,19 @@ export async function configureProjectGit(settings: ProjectGitSettings): Promise
 	return saveProjectGitConfig(settings);
 }
 
+/**
+ * Completes a rollback that was interrupted, before anything new is committed: the repository's
+ * working tree may be missing files, which a commit would record as deleted.
+ */
+async function finishRollback(dir: string, branch: string): Promise<void> {
+	const marker = join(dir, ".git", RESET_FILE);
+	const commit = await readFile(marker, "utf8").catch(() => null);
+	if (commit) {
+		await runGitTask({ type: "reset", repository: dir, branch, commit: commit.trim() });
+		await rm(marker);
+	}
+}
+
 export async function pullProjectFromGit({
 	projectId,
 	author,
@@ -241,6 +257,7 @@ export async function pullProjectFromGit({
 	const { dir, remoteUrl, branch, credentials, folder } = await getConfiguredProject(projectId);
 	const projectDirectory = await getProjectDirectory(projectId);
 	const repository = { repository: dir, branch };
+	await finishRollback(dir, branch);
 	const commit = await runGitTask({
 		type: "commit",
 		...repository,
@@ -250,10 +267,14 @@ export async function pullProjectFromGit({
 	});
 	// Otherwise the next sync would commit the stale project files on top of the merge and push a revert.
 	const rollBack = async () => {
+		await writeFile(join(dir, ".git", RESET_FILE), commit);
 		try {
-			await runGitTask({ type: "reset", ...repository, commit });
+			await finishRollback(dir, branch);
 		} catch (error) {
-			logger.error({ projectId, error }, "Rolling back a failed Git pull failed");
+			logger.error(
+				{ projectId, error },
+				"Rolling back a failed Git pull failed; retrying on next sync",
+			);
 		}
 	};
 
@@ -279,6 +300,10 @@ export async function pullProjectFromGit({
 			await syncSupportedFiles(join(dir, folder), projectDirectory, { intoProject: true });
 			await reconcileProjectDocumentState(projectId);
 		} catch (error) {
+			// Keep collaboration state in line with whatever files were copied before the failure.
+			await reconcileProjectDocumentState(projectId).catch((reconcileError: unknown) =>
+				logger.error({ projectId, error: reconcileError }, "Updating collaboration state failed"),
+			);
 			await rollBack();
 			throw error;
 		}
@@ -295,6 +320,7 @@ export async function pushProjectToGit({
 	author: GitAuthor;
 }): Promise<{ commit: string; pushed: boolean }> {
 	const { dir, remoteUrl, branch, credentials, folder } = await getConfiguredProject(projectId);
+	await finishRollback(dir, branch);
 	return runGitTask({
 		type: "push",
 		repository: dir,
