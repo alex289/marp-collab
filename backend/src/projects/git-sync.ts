@@ -2,7 +2,7 @@ import fs from "node:fs";
 import { access, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import git from "isomorphic-git";
-import type { ProjectGitResolution } from "./git-merge.ts";
+import { ProjectGitConflictError, type ProjectGitResolution } from "./git-merge.ts";
 import { getProjectDirectory, getProjectDirectoryPath } from "./storage.ts";
 
 import { encryptSecret, decryptSecret } from "../helpers/encryption.ts";
@@ -265,9 +265,12 @@ export async function pullProjectFromGit({
 		folder,
 		author,
 	});
-	// Otherwise the next sync would commit the stale project files on top of the merge and push a revert.
+	// Until the pulled files are in the project, the repository is ahead of it, and committing the
+	// project would push a revert. So whatever stops the pull, even a server restart, the next sync
+	// rolls the repository back first.
+	const marker = join(dir, ".git", RESET_FILE);
+	await writeFile(marker, commit);
 	const rollBack = async () => {
-		await writeFile(join(dir, ".git", RESET_FILE), commit);
 		try {
 			await finishRollback(dir, branch);
 		} catch (error) {
@@ -289,8 +292,10 @@ export async function pullProjectFromGit({
 			resolutions,
 		});
 	} catch (error) {
-		// The pull task rolls back its own failures, but cannot once its process is stopped.
-		if (error instanceof ProjectGitProcessError) {
+		// Conflicts are found before anything changes; other failures may have stopped half way.
+		if (error instanceof ProjectGitConflictError) {
+			await rm(marker);
+		} else {
 			await rollBack();
 		}
 		throw error;
@@ -308,6 +313,7 @@ export async function pullProjectFromGit({
 			throw error;
 		}
 	}
+	await rm(marker);
 
 	return pull;
 }

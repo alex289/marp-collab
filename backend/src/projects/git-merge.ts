@@ -2,6 +2,7 @@ import fs from "node:fs";
 import { diff3Merge } from "node-diff3";
 import git, { type TreeEntry as GitTreeEntry, type WalkerEntry } from "isomorphic-git";
 import { isEditableExtension } from "../helpers/file-allowlist.ts";
+import { ProjectGitContentError } from "./git-files.ts";
 
 type GitAuthor = {
 	name: string;
@@ -54,6 +55,7 @@ async function findConflicts(dir: string, ours: string, theirs: string) {
 	const mergeBases = await git.findMergeBase({ fs, dir, oids: [ourOid, theirOid] });
 	const baseOid = mergeBases[0] ?? (await git.writeTree({ fs, dir, tree: [] }));
 	const conflicts: ProjectGitConflict[] = [];
+	const overlapping: string[] = [];
 
 	await git.walk({
 		fs,
@@ -75,7 +77,28 @@ async function findConflicts(dir: string, ours: string, theirs: string) {
 				return;
 			}
 
-			if (!base && project?.type === "blob" && remote?.type === "blob") {
+			// Git cannot merge these, and the user has to choose a new name rather than a side.
+			if (project && remote && project.type !== remote.type) {
+				throw new ProjectGitContentError(
+					`Git pull cannot merge ${path}: it is a file on one side and a folder on the other. Rename or remove it in the project, then pull again.`,
+				);
+			}
+			if (
+				base?.type === "blob" &&
+				project?.type === "blob" &&
+				remote?.type === "blob" &&
+				isEditableExtension(path)
+			) {
+				// isomorphic-git gives the merge driver only the file name, so find overlaps here.
+				const [baseText, projectText, remoteText] = await Promise.all(
+					[base, project, remote].map(async ({ oid }) =>
+						Buffer.from((await git.readBlob({ fs, dir, oid })).blob).toString(),
+					),
+				);
+				if (mergeTextFiles(baseText!, projectText!, remoteText!).overlapping) {
+					overlapping.push(path);
+				}
+			} else if (!base && project?.type === "blob" && remote?.type === "blob") {
 				conflicts.push({ path, type: "add-add" });
 			} else if (base?.type === "blob" && project?.type === "blob" && !remote) {
 				conflicts.push({ path, type: "remote-deleted" });
@@ -91,7 +114,12 @@ async function findConflicts(dir: string, ours: string, theirs: string) {
 		},
 	});
 
-	return { conflicts: conflicts.sort((a, b) => a.path.localeCompare(b.path)), ourOid, theirOid };
+	return {
+		conflicts: conflicts.sort((a, b) => a.path.localeCompare(b.path)),
+		overlapping: overlapping.sort(),
+		ourOid,
+		theirOid,
+	};
 }
 
 const LINEBREAKS = /^.*(?:\n|$)/gm;
@@ -228,7 +256,7 @@ export async function mergeProjectBranches({
 	author: GitAuthor;
 	resolutions?: Record<string, ProjectGitResolution>;
 }): Promise<{ alreadyMerged: boolean; overlapping: string[] }> {
-	const { conflicts, ourOid, theirOid } = await findConflicts(dir, ours, theirs);
+	const { conflicts, overlapping, ourOid, theirOid } = await findConflicts(dir, ours, theirs);
 	const unresolved = conflicts.filter((conflict) => !resolutions[conflict.path]);
 	if (unresolved.length > 0) {
 		throw new ProjectGitConflictError(unresolved);
@@ -249,7 +277,6 @@ export async function mergeProjectBranches({
 			? await takeVersions(dir, theirOid, ourOid, projectPaths, author)
 			: theirOid;
 
-	const overlapping = new Set<string>();
 	await git.writeRef({ fs, dir, ref: RESOLVED_REF, value: resolvedTheirs, force: true });
 	try {
 		const merge = await git.merge({
@@ -261,18 +288,16 @@ export async function mergeProjectBranches({
 			message: `Merge ${theirs} into ${ours}`,
 			abortOnConflict: true,
 			allowUnrelatedHistories: true,
-			mergeDriver: ({ contents, path }) => {
-				if (!isEditableExtension(path)) {
-					return { cleanMerge: false, mergedText: contents[1] ?? "" };
-				}
-				const merged = mergeTextFiles(contents[0] ?? "", contents[1] ?? "", contents[2] ?? "");
-				if (merged.overlapping) {
-					overlapping.add(path);
-				}
-				return { cleanMerge: true, mergedText: merged.text };
-			},
+			mergeDriver: ({ contents, path }) =>
+				isEditableExtension(path)
+					? {
+							cleanMerge: true,
+							mergedText: mergeTextFiles(contents[0] ?? "", contents[1] ?? "", contents[2] ?? "")
+								.text,
+						}
+					: { cleanMerge: false, mergedText: contents[1] ?? "" },
 		});
-		return { alreadyMerged: Boolean(merge.alreadyMerged), overlapping: [...overlapping].sort() };
+		return { alreadyMerged: Boolean(merge.alreadyMerged), overlapping };
 	} finally {
 		await git.deleteRef({ fs, dir, ref: RESOLVED_REF });
 	}

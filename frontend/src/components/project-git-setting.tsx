@@ -85,11 +85,13 @@ export function ProjectGitControls({
 			};
 			if (response.status === 409 && result.conflicts?.length) {
 				setConflicts(result.conflicts);
-				setResolutions(
-					Object.fromEntries(
+				// Large pulls report conflicts in batches, so keep the choices made for earlier ones.
+				setResolutions({
+					...conflictResolutions,
+					...Object.fromEntries(
 						result.conflicts.map((conflict) => [conflict.path, "project" as const]),
 					),
-				);
+				});
 				return;
 			}
 			if (!response.ok) {

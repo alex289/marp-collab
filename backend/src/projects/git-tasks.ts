@@ -155,7 +155,11 @@ async function assertTreeWithinLimits(dir: string, ref: string, sizes: BlobSizes
 					`Git sync supports at most ${GIT_TREE_LIMITS.entries} files and folders per repository`,
 				);
 			}
-			if ((await entry.type()) !== "blob") {
+			const type = await entry.type();
+			if (type === "commit") {
+				throw new ProjectGitContentError(`Git submodules are not supported: ${filepath}`);
+			}
+			if (type !== "blob") {
 				return;
 			}
 			if ((await entry.mode()) === 0o120000) {
@@ -403,6 +407,9 @@ export function serializeGitError(error: unknown): SerializedGitError {
 	}
 	if (error instanceof git.Errors.UnsafeFilepathError) {
 		return { type: "content", message: "Git repository contains an unsafe path" };
+	}
+	if (error instanceof git.Errors.ObjectTypeError) {
+		return { type: "content", message: "Git repository contains an invalid object" };
 	}
 	if (error instanceof git.Errors.MergeConflictError) {
 		return {

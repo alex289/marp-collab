@@ -6,6 +6,7 @@ import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import git from "isomorphic-git";
+import { ProjectGitContentError } from "./git-files.ts";
 import { mergeProjectBranches, mergeTextFiles, ProjectGitConflictError } from "./git-merge.ts";
 
 const author = { name: "Test User", email: "test@example.com" };
@@ -248,5 +249,46 @@ describe("project Git merge", () => {
 			);
 			execFileSync("git", ["-C", dir, "fsck", "--strict", "--no-dangling"]);
 		}
+	});
+
+	test("reports overlapping files by their full path", async () => {
+		const dir = join(tempDir, "nested-overlap");
+		await git.init({ fs, dir, defaultBranch: "main" });
+		await mkdir(join(dir, "a"));
+		await mkdir(join(dir, "b"));
+		for (const folder of ["a", "b"]) {
+			await commitFile(dir, `${folder}/slides.md`, "# Slides\n");
+		}
+		await git.branch({ fs, dir, ref: "remote" });
+		for (const folder of ["a", "b"]) {
+			await commitFile(dir, `${folder}/slides.md`, "# Project\n");
+		}
+		await git.checkout({ fs, dir, ref: "remote", force: true });
+		await commitFile(dir, "a/slides.md", "# Remote\n");
+		await git.checkout({ fs, dir, ref: "main", force: true });
+
+		const result = await merge({ dir, ours: "refs/heads/main", theirs: "remote", author });
+		deepEqual(result.overlapping, ["a/slides.md"]);
+	});
+
+	test("explains a file that is a folder on the other side", async () => {
+		const dir = join(tempDir, "file-folder");
+		await git.init({ fs, dir, defaultBranch: "main" });
+		await commitFile(dir, "slides.md", "# Slides\n");
+		await git.branch({ fs, dir, ref: "remote" });
+		await commitFile(dir, "notes.md", "Project notes\n");
+		await git.checkout({ fs, dir, ref: "remote", force: true });
+		await mkdir(join(dir, "notes.md"));
+		await commitFile(dir, "notes.md/remote.md", "Remote notes\n");
+		await git.checkout({ fs, dir, ref: "main", force: true });
+		const before = await git.resolveRef({ fs, dir, ref: "refs/heads/main" });
+
+		await rejects(
+			mergeProjectBranches({ dir, ours: "refs/heads/main", theirs: "remote", author }),
+			(error) =>
+				error instanceof ProjectGitContentError &&
+				/notes\.md: it is a file on one side and a folder on the other/.test(error.message),
+		);
+		equal(await git.resolveRef({ fs, dir, ref: "refs/heads/main" }), before);
 	});
 });

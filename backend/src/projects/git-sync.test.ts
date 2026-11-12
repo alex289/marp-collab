@@ -383,20 +383,71 @@ describe("project Git sync", () => {
 		});
 
 		test("finishes an interrupted rollback before committing again", async (t) => {
-			const { repository } = await pulledProject(t, "slides-interrupted-rollback");
+			const projectId = "slides-interrupted-rollback";
+			const { repository } = await pulledProject(t, projectId);
 			await writeFile(join(remote, "code.ts"), "private code\n");
 			run(remote, "add", ".");
 			run(remote, "-c", "user.name=T", "-c", "user.email=t@e", "commit", "-m", "Code");
-			await gitSync.pullProjectFromGit({ projectId: "slides-interrupted-rollback", author });
+			await gitSync.pullProjectFromGit({ projectId, author });
 			const commit = await git.resolveRef({ fs, dir: repository, ref: "refs/heads/slides" });
 
-			// A rollback that was stopped after clearing the working tree, before checking out again.
-			await writeFile(join(repository, ".git", "marp-collab-reset"), commit);
-			await rm(join(repository, "code.ts"));
-			await rm(join(repository, ".git", "index"));
-			await gitSync.pushProjectToGit({ projectId: "slides-interrupted-rollback", author });
+			for (const sync of [gitSync.pullProjectFromGit, gitSync.pushProjectToGit]) {
+				// A rollback that was stopped after clearing the working tree, before checking out again.
+				await writeFile(join(repository, ".git", "marp-collab-reset"), commit);
+				await rm(join(repository, "code.ts"));
+				await rm(join(repository, ".git", "index"));
+				await sync({ projectId, author });
+				const head = await git.resolveRef({ fs, dir: repository, ref: "refs/heads/slides" });
+				const { blob } = await git.readBlob({
+					fs,
+					dir: repository,
+					oid: head,
+					filepath: "code.ts",
+				});
+				equal(Buffer.from(blob).toString(), "private code\n");
+				await rejects(stat(join(repository, ".git", "marp-collab-reset")), { code: "ENOENT" });
+			}
 			equal(run(remote, "show", "slides:code.ts"), "private code");
-			await rejects(stat(join(repository, ".git", "marp-collab-reset")), { code: "ENOENT" });
+		});
+
+		test("marks the repository for rollback until pulled files are in the project", async (t) => {
+			const projectId = "slides-rollback-marker";
+			const { repository } = await pulledProject(t, projectId);
+			const marker = join(repository, ".git", "marp-collab-reset");
+			let markedWhilePulling = false;
+			t.mock.method(git, "fetch", async ({ dir }: { dir: string }) => {
+				markedWhilePulling = (await stat(marker).catch(() => null)) !== null;
+				run(dir, "fetch", remote, "+slides:refs/remotes/origin/slides");
+			});
+			await gitSync.pullProjectFromGit({ projectId, author });
+			equal(markedWhilePulling, true);
+			await rejects(stat(marker), { code: "ENOENT" });
+		});
+
+		test("rejects submodules", async (t) => {
+			const { repository } = await pulledProject(t, "slides-submodule");
+			const before = await git.resolveRef({ fs, dir: repository, ref: "refs/heads/slides" });
+			const tree = execFileSync("git", ["-C", remote, "mktree"], {
+				input: `${run(remote, "ls-tree", "slides")}\n160000 commit ${before}\tmodule\n`,
+				encoding: "utf8",
+			}).trim();
+			const previous = run(remote, "rev-parse", "slides");
+			const commit = ["-c", "user.name=T", "-c", "user.email=t@e", "commit-tree", tree];
+			run(
+				remote,
+				"update-ref",
+				"refs/heads/slides",
+				run(remote, ...commit, "-p", previous, "-m", "Module"),
+			);
+			try {
+				await rejects(
+					gitSync.pullProjectFromGit({ projectId: "slides-submodule", author }),
+					/submodules/,
+				);
+				equal(await git.resolveRef({ fs, dir: repository, ref: "refs/heads/slides" }), before);
+			} finally {
+				run(remote, "update-ref", "refs/heads/slides", previous);
+			}
 		});
 
 		test("commits project files the remote's .gitignore matches", async (t) => {
