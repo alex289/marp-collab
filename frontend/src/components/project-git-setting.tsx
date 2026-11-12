@@ -1,0 +1,459 @@
+import { useState } from "react";
+import useSWR from "swr";
+import { ArrowDown, ArrowUp, GitBranch, Loader2 } from "lucide-react";
+import { toast } from "sonner";
+import { API_URL } from "@/lib/config";
+import { fetcher } from "@/lib/fetcher";
+import { Button } from "./ui/button";
+import { ButtonGroup } from "./ui/button-group";
+import {
+	Dialog,
+	DialogContent,
+	DialogDescription,
+	DialogFooter,
+	DialogHeader,
+	DialogTitle,
+} from "./ui/dialog";
+import { Input } from "./ui/input";
+import { Label } from "./ui/label";
+import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
+
+type ProjectGitConfig = {
+	configured: boolean;
+	remoteUrl: string | null;
+	branch: string;
+	folder: string;
+	hasCredentials: boolean;
+	username: string | null;
+};
+
+type GitSettingsDraft = {
+	remoteUrl: string;
+	branch: string;
+	folder: string;
+	username: string;
+};
+
+type GitAction = "pull" | "push";
+type GitResolution = "project" | "remote";
+
+type GitConflict = {
+	path: string;
+	type: "add-add" | "binary" | "project-deleted" | "remote-deleted";
+};
+
+export function ProjectGitControls({
+	projectId,
+	canWrite,
+	onSynced,
+}: {
+	projectId: string;
+	canWrite: boolean;
+	onSynced: () => void;
+}) {
+	const url = `${API_URL}/projects/${projectId}/git`;
+	const { data } = useSWR<ProjectGitConfig>(canWrite ? url : null, fetcher);
+	const [action, setAction] = useState<GitAction | null>(null);
+	const [conflicts, setConflicts] = useState<GitConflict[]>([]);
+	const [resolutions, setResolutions] = useState<Record<string, GitResolution>>({});
+
+	const runAction = async (
+		nextAction: GitAction,
+		conflictResolutions?: Record<string, GitResolution>,
+	) => {
+		if (action) {
+			return;
+		}
+
+		setAction(nextAction);
+		try {
+			const response = await fetch(`${url}/${nextAction}`, {
+				method: "POST",
+				...(nextAction === "pull"
+					? {
+							headers: { "Content-Type": "application/json" },
+							body: JSON.stringify({ resolutions: conflictResolutions }),
+						}
+					: {}),
+			});
+			const result = (await response.json()) as {
+				error?: string;
+				pulled?: boolean;
+				pushed?: boolean;
+				conflicts?: GitConflict[];
+				overlapping?: string[];
+			};
+			if (response.status === 409 && result.conflicts?.length) {
+				setConflicts(result.conflicts);
+				// Large pulls report conflicts in batches, so keep the choices made for earlier ones.
+				setResolutions({
+					...conflictResolutions,
+					...Object.fromEntries(
+						result.conflicts.map((conflict) => [conflict.path, "project" as const]),
+					),
+				});
+				return;
+			}
+			if (!response.ok) {
+				throw new Error(result.error ?? `Git ${nextAction} failed`);
+			}
+
+			onSynced();
+			setConflicts([]);
+			toast.success(
+				nextAction === "pull"
+					? result.pulled
+						? "Pulled Git changes."
+						: "Already up to date."
+					: result.pushed
+						? "Pushed project changes."
+						: "Already up to date.",
+			);
+			if (result.overlapping?.length) {
+				toast.warning(
+					`Both sides changed the same lines in ${result.overlapping.join(", ")}. Both versions were kept, so please review them.`,
+					{ duration: 15_000 },
+				);
+			}
+		} catch (error) {
+			toast.error(error instanceof Error ? error.message : `Git ${nextAction} failed`);
+		} finally {
+			setAction(null);
+		}
+	};
+
+	if (!data?.configured) {
+		return null;
+	}
+
+	return (
+		<>
+			<ButtonGroup className="mr-2">
+				<Tooltip>
+					<TooltipTrigger
+						render={
+							<Button
+								type="button"
+								variant="outline"
+								size="icon"
+								aria-label="Pull from Git"
+								disabled={Boolean(action)}
+								onClick={() => void runAction("pull")}
+							>
+								{action === "pull" ? <Loader2 className="animate-spin" /> : <ArrowDown />}
+							</Button>
+						}
+					/>
+					<TooltipContent>Pull from Git</TooltipContent>
+				</Tooltip>
+				<Tooltip>
+					<TooltipTrigger
+						render={
+							<Button
+								type="button"
+								variant="outline"
+								size="icon"
+								aria-label="Push to Git"
+								disabled={Boolean(action)}
+								onClick={() => void runAction("push")}
+							>
+								{action === "push" ? <Loader2 className="animate-spin" /> : <ArrowUp />}
+							</Button>
+						}
+					/>
+					<TooltipContent>Push to Git</TooltipContent>
+				</Tooltip>
+			</ButtonGroup>
+			<Dialog
+				open={conflicts.length > 0}
+				onOpenChange={(open) => {
+					if (!open && !action) {
+						setConflicts([]);
+					}
+				}}
+			>
+				<DialogContent className="sm:max-w-lg">
+					<DialogHeader>
+						<DialogTitle>Resolve Git conflicts</DialogTitle>
+						<DialogDescription>
+							Choose which version to keep. Text changes that can be combined are merged
+							automatically.
+						</DialogDescription>
+					</DialogHeader>
+					<div className="max-h-80 space-y-3 overflow-y-auto">
+						{conflicts.map((conflict) => (
+							<div key={conflict.path} className="space-y-2 rounded-lg border p-3">
+								<p className="break-all font-mono font-medium">{conflict.path}</p>
+								<p className="text-muted-foreground">
+									{conflict.type === "remote-deleted"
+										? "Deleted in Git, but changed in this project."
+										: conflict.type === "project-deleted"
+											? "Deleted in this project, but changed in Git."
+											: conflict.type === "add-add"
+												? "Created independently in Git and this project."
+												: "This non-text file changed in Git and this project."}
+								</p>
+								<ButtonGroup className="w-full">
+									<Button
+										type="button"
+										variant={resolutions[conflict.path] === "project" ? "secondary" : "outline"}
+										className="flex-1"
+										disabled={Boolean(action)}
+										onClick={() =>
+											setResolutions((current) => ({
+												...current,
+												[conflict.path]: "project",
+											}))
+										}
+									>
+										{conflict.type === "project-deleted" ? "Keep deleted" : "Keep project"}
+									</Button>
+									<Button
+										type="button"
+										variant={resolutions[conflict.path] === "remote" ? "secondary" : "outline"}
+										className="flex-1"
+										disabled={Boolean(action)}
+										onClick={() =>
+											setResolutions((current) => ({
+												...current,
+												[conflict.path]: "remote",
+											}))
+										}
+									>
+										{conflict.type === "remote-deleted" ? "Delete file" : "Use Git version"}
+									</Button>
+								</ButtonGroup>
+							</div>
+						))}
+					</div>
+					<DialogFooter>
+						<Button
+							type="button"
+							variant="outline"
+							disabled={Boolean(action)}
+							onClick={() => setConflicts([])}
+						>
+							Cancel
+						</Button>
+						<Button
+							type="button"
+							disabled={Boolean(action)}
+							onClick={() => void runAction("pull", resolutions)}
+						>
+							{action === "pull" && <Loader2 className="animate-spin" />}
+							Resolve and pull
+						</Button>
+					</DialogFooter>
+				</DialogContent>
+			</Dialog>
+		</>
+	);
+}
+
+export function ProjectGitSetting({
+	projectId,
+	canWrite,
+	isOwner,
+}: {
+	projectId: string;
+	canWrite: boolean;
+	isOwner: boolean;
+}) {
+	const url = `${API_URL}/projects/${projectId}/git`;
+	const { data, mutate } = useSWR<ProjectGitConfig>(canWrite ? url : null, fetcher);
+	// Null while the user has not edited the form, so it follows the saved settings.
+	const [draft, setDraft] = useState<GitSettingsDraft | null>(null);
+	const [token, setToken] = useState("");
+	const [editing, setEditing] = useState(false);
+	const [saving, setSaving] = useState(false);
+
+	const savedSettings: GitSettingsDraft = {
+		remoteUrl: data?.remoteUrl ?? "",
+		branch: data?.branch ?? "main",
+		folder: data?.folder ?? "",
+		username: data?.username ?? "",
+	};
+	const { remoteUrl, branch, folder, username } = draft ?? savedSettings;
+	const updateDraft = (field: keyof GitSettingsDraft, value: string) => {
+		setDraft((current) => ({ ...(current ?? savedSettings), [field]: value }));
+	};
+	const discardDraft = () => {
+		setDraft(null);
+		setToken("");
+		setEditing(false);
+	};
+
+	const save = async () => {
+		if (!isOwner || !remoteUrl.trim() || !branch.trim() || saving) {
+			return;
+		}
+
+		setSaving(true);
+		try {
+			const response = await fetch(url, {
+				method: "PUT",
+				headers: { "Content-Type": "application/json" },
+				body: JSON.stringify({
+					remoteUrl: remoteUrl.trim(),
+					branch: branch.trim(),
+					folder: folder.trim(),
+					username: username.trim() || undefined,
+					token: token || undefined,
+				}),
+			});
+			const result = (await response.json()) as ProjectGitConfig & { error?: string };
+			if (!response.ok) {
+				throw new Error(result.error ?? "Could not save Git settings");
+			}
+
+			await mutate(result, { revalidate: false });
+			discardDraft();
+			toast.success("Git settings saved.");
+		} catch (error) {
+			toast.error(error instanceof Error ? error.message : "Could not save Git settings");
+		} finally {
+			setSaving(false);
+		}
+	};
+
+	const disconnect = async () => {
+		if (!isOwner || saving) {
+			return;
+		}
+
+		setSaving(true);
+		try {
+			const response = await fetch(url, { method: "DELETE" });
+			const result = (await response.json()) as ProjectGitConfig & { error?: string };
+			if (!response.ok) {
+				throw new Error(result.error ?? "Could not disconnect Git sync");
+			}
+
+			await mutate(result, { revalidate: false });
+			discardDraft();
+			toast.success("Git sync disconnected. The access token was removed.");
+		} catch (error) {
+			toast.error(error instanceof Error ? error.message : "Could not disconnect Git sync");
+		} finally {
+			setSaving(false);
+		}
+	};
+
+	const showSummary = data?.configured && !editing;
+
+	return (
+		<div className="space-y-2">
+			<div className="px-1 text-xs font-medium">Git sync</div>
+			{showSummary ? (
+				<>
+					<p
+						className="truncate px-1 text-xs text-muted-foreground"
+						title={data.remoteUrl ?? undefined}
+					>
+						{data.remoteUrl}
+					</p>
+					<div className="flex min-w-0 items-center justify-between gap-2 px-1">
+						<p className="truncate text-xs text-muted-foreground">
+							{data.branch}
+							{data.folder ? ` / ${data.folder}` : ""}
+						</p>
+						{isOwner && (
+							<Button
+								type="button"
+								variant="link"
+								size="xs"
+								className="shrink-0 px-0"
+								onClick={() => setEditing(true)}
+							>
+								Edit settings
+							</Button>
+						)}
+					</div>
+				</>
+			) : (
+				<>
+					<Label htmlFor="git-remote-url" className="sr-only">
+						Git remote URL
+					</Label>
+					<Input
+						id="git-remote-url"
+						type="url"
+						value={remoteUrl}
+						onChange={(event) => updateDraft("remoteUrl", event.target.value)}
+						placeholder="https://github.com/user/repo.git"
+						disabled={!isOwner || saving}
+						aria-label="Git remote URL"
+					/>
+					<Input
+						value={branch}
+						onChange={(event) => updateDraft("branch", event.target.value)}
+						placeholder="main"
+						disabled={!isOwner || saving}
+						aria-label="Git branch"
+					/>
+					<Input
+						value={folder}
+						onChange={(event) => updateDraft("folder", event.target.value)}
+						placeholder="Repository folder (optional)"
+						disabled={!isOwner || saving}
+						aria-label="Repository folder"
+					/>
+					<Input
+						value={username}
+						onChange={(event) => updateDraft("username", event.target.value)}
+						placeholder="Username (optional)"
+						autoComplete="username"
+						disabled={!isOwner || saving}
+						aria-label="Git username"
+					/>
+					<Input
+						type="password"
+						value={token}
+						onChange={(event) => setToken(event.target.value)}
+						placeholder={data?.hasCredentials ? "Saved access token" : "Access token (optional)"}
+						autoComplete="off"
+						disabled={!isOwner || saving}
+						aria-label="Git access token"
+					/>
+					<Button
+						type="button"
+						variant="outline"
+						className="w-full justify-start"
+						disabled={!isOwner || saving || !remoteUrl.trim() || !branch.trim()}
+						onClick={() => void save()}
+					>
+						{saving ? <Loader2 className="animate-spin" /> : <GitBranch />}
+						{saving ? "Saving…" : "Save Git settings"}
+					</Button>
+					{data?.configured && (
+						<Button
+							type="button"
+							variant="ghost"
+							className="w-full"
+							disabled={saving}
+							onClick={discardDraft}
+						>
+							Cancel
+						</Button>
+					)}
+					{data?.configured && isOwner && (
+						<Button
+							type="button"
+							variant="ghost"
+							className="w-full text-destructive hover:text-destructive"
+							disabled={saving}
+							onClick={() => void disconnect()}
+						>
+							Disconnect Git sync
+						</Button>
+					)}
+					<p className="px-1 text-xs text-muted-foreground">
+						{isOwner
+							? "The access token is encrypted and saved for future syncs."
+							: "Only the project owner can configure Git sync."}
+					</p>
+				</>
+			)}
+		</div>
+	);
+}

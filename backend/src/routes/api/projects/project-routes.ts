@@ -1,3 +1,7 @@
+import {
+	finishProjectGitConfigure,
+	startProjectGitConfigure,
+} from "../../../projects/git-sync-lock.ts";
 import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import z from "zod";
@@ -69,7 +73,11 @@ app.get("/:projectId", (c) => {
 		return c.json({ error: "Project not found" }, 404);
 	}
 
-	return c.json({ project, isOwner: authorization.access.isOwner });
+	return c.json({
+		project,
+		isOwner: authorization.access.isOwner,
+		readOnly: authorization.access.readOnly,
+	});
 });
 
 app.patch("/:projectId", async (c) => {
@@ -109,14 +117,23 @@ app.delete("/:projectId", async (c) => {
 		return c.json({ error: "Project not found or you don't have permission to delete it" }, 404);
 	}
 
-	await deleteProjectDirectory(projectId);
-
-	const deleteResult = deleteProject(projectId, user.id);
-	if (deleteResult.changes === 0) {
-		return c.json({ error: "Project not found or you don't have permission to delete it" }, 404);
+	// Deleting removes the project's Git repository too, so it excludes Git syncs and settings changes.
+	if (!startProjectGitConfigure(projectId)) {
+		return c.json({ error: "This project is syncing with Git" }, 409);
 	}
 
-	return c.json({ success: true });
+	try {
+		await deleteProjectDirectory(projectId);
+
+		const deleteResult = deleteProject(projectId, user.id);
+		if (deleteResult.changes === 0) {
+			return c.json({ error: "Project not found or you don't have permission to delete it" }, 404);
+		}
+
+		return c.json({ success: true });
+	} finally {
+		finishProjectGitConfigure(projectId);
+	}
 });
 
 export default app;

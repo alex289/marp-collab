@@ -9,7 +9,7 @@
 		"dev": "node --watch --env-file=.env src/app.ts",
 		"build": "rolldown --config",
 		"typecheck": "tsc --noEmit",
-		"test": "node --test src/**/*.test.ts"
+		"test": "node --test 'src/**/*.test.ts'"
 	},
 	"dependencies": {
 		"@hocuspocus/server": "^4.8.0",
@@ -19,6 +19,8 @@
 		"better-auth": "^1.7.18",
 		"better-sqlite3": "^13.0.3",
 		"hono": "^4.13.17",
+		"isomorphic-git": "^1.40.5",
+		"node-diff3": "^3.2.1",
 		"pino": "^10.4.0",
 		"pino-pretty": "^13.2.0",
 		"ws": "^8.22.2",

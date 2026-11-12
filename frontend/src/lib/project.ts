@@ -6,6 +6,7 @@ import type { Project } from "./types";
 export type ProjectResponse = {
 	project: Project;
 	isOwner: boolean;
+	readOnly: boolean;
 };
 
 export function getProject(id: string) {

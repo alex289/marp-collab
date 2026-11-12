@@ -36,7 +36,13 @@ function resolveDocumentPath(documentName: string): string | null {
 		return null;
 	}
 
-	if (isAbsolute(fileId) || fileId.split("/").includes("..")) {
+	if (
+		isAbsolute(fileId) ||
+		fileId
+			.replace(/\\/g, "/")
+			.split("/")
+			.some((part) => part.startsWith("."))
+	) {
 		throw new Error(`Invalid presentation file id: ${fileId}`);
 	}
 
@@ -54,15 +60,28 @@ function isMissingFileError(error: unknown): boolean {
 
 const EXCLUDED_FILE_EXTENSIONS = new Set([".yjs"]);
 
-async function ensurePresentationsDir(projectId: string): Promise<void> {
+/** The project's directory, without creating it. */
+export function getProjectDirectoryPath(projectId: string): string {
 	if (!isValidProjectId(projectId)) {
 		throw new Error(`Invalid project id: ${projectId}`);
 	}
-	await mkdir(resolve(presentationsDir, projectId), { recursive: true });
+	return resolve(presentationsDir, projectId);
+}
+
+export async function getProjectDirectory(projectId: string): Promise<string> {
+	const dir = getProjectDirectoryPath(projectId);
+	await mkdir(dir, { recursive: true });
+	return dir;
+}
+
+export async function clearProjectDocumentState(projectId: string): Promise<void> {
+	const projectDir = await getProjectDirectory(projectId);
+	const files = await Array.fromAsync(glob("**/*.yjs", { cwd: projectDir, exclude: [".git/**"] }));
+	await Promise.all(files.map((file) => rm(resolve(projectDir, file))));
 }
 
 export async function getDeckFiles(projectId: string): Promise<DeckFile[]> {
-	await ensurePresentationsDir(projectId);
+	await getProjectDirectory(projectId);
 
 	const projectDir = resolve(presentationsDir, projectId);
 	const entries = await Array.fromAsync(
@@ -95,7 +114,7 @@ type ZipSourceEntry = {
 };
 
 export async function createProjectZipStream(projectId: string): Promise<Readable> {
-	await ensurePresentationsDir(projectId);
+	await getProjectDirectory(projectId);
 
 	const projectDir = resolve(presentationsDir, projectId);
 	const zipEntries: ZipSourceEntry[] = [];
@@ -153,7 +172,14 @@ export async function createProjectDir(projectId: string, dirPath: string): Prom
 		throw new Error(`Invalid project id: ${projectId}`);
 	}
 
-	if (!dirPath || isAbsolute(dirPath) || dirPath.split("/").includes("..")) {
+	if (
+		!dirPath ||
+		isAbsolute(dirPath) ||
+		dirPath
+			.replace(/\\/g, "/")
+			.split("/")
+			.some((part) => part.startsWith("."))
+	) {
 		throw new Error(`Invalid dir path: ${dirPath}`);
 	}
 
@@ -240,7 +266,14 @@ function resolveProjectFilePath(projectId: string, fileId: string): string | nul
 		return null;
 	}
 
-	if (!fileId || isAbsolute(fileId) || fileId.split("/").includes("..")) {
+	if (
+		!fileId ||
+		isAbsolute(fileId) ||
+		fileId
+			.replace(/\\/g, "/")
+			.split("/")
+			.some((part) => part.startsWith("."))
+	) {
 		return null;
 	}
 

@@ -1,3 +1,4 @@
+import { beginProjectWrite } from "../projects/git-sync-lock.ts";
 import { createMiddleware } from "hono/factory";
 import { getProjectAccess, type ProjectAccess } from "../projects/access-policy.ts";
 import type { HonoVariables } from "../types.ts";
@@ -43,13 +44,22 @@ export const requireProjectWriteAccess = createMiddleware<ProjectRouteEnvironmen
 			return c.json({ error: "You do not have write access to this project" }, 403);
 		}
 
-		await next();
+		const release = beginProjectWrite(c.req.param("projectId")!);
+		if (!release) {
+			return c.json({ error: "This project is syncing with Git" }, 409);
+		}
+
+		try {
+			await next();
+		} finally {
+			release();
+		}
 	},
 );
 
 export const requireProjectOwner = createMiddleware<ProjectRouteEnvironment>(async (c, next) => {
 	if (!c.get("projectAccess").isOwner) {
-		return c.json({ error: "Only the project owner can manage collaborators" }, 403);
+		return c.json({ error: "Only the project owner can perform this action" }, 403);
 	}
 
 	await next();

@@ -557,6 +557,31 @@ test.describe("Editor: content editing", () => {
 		});
 	});
 
+	test("editing resumes after a failed Git sync", async ({ page }) => {
+		await page.goto("/");
+		await createPresentation(page, "Git reconnect regression");
+		await page.waitForURL(/\/presentations\/.+/);
+		await expect(page.getByLabel("Connected", { exact: true })).toBeVisible();
+		const projectId = new URL(page.url()).pathname.split("/").pop()!;
+		const response = await page.request.post(`/api/v1/projects/${projectId}/git/push`);
+		expect(response.status()).toBe(409);
+		await expect(page.getByLabel("Connected", { exact: true })).toBeVisible();
+		const editor = page.locator(".cm-content");
+		await expect(editor).toHaveAttribute("contenteditable", "true");
+		await editor.click();
+		await page.keyboard.press("ControlOrMeta+A");
+		await page.keyboard.type("# Saved after failed sync");
+		// A second sync flushes the server document, proving the recreated connection accepts edits.
+		await expect(
+			page
+				.frameLocator('iframe[title="Marp preview"]')
+				.getByRole("heading", { name: "Saved after failed sync" }),
+		).toBeVisible();
+		await page.request.post(`/api/v1/projects/${projectId}/git/push`);
+		await page.reload();
+		await expect(page.locator(".cm-content")).toContainText("Saved after failed sync");
+	});
+
 	test("drop and paste images into the editor using an image folder", async ({ page }) => {
 		await page.goto("/");
 
@@ -912,7 +937,7 @@ test.describe("Editor: settings panel", () => {
 	test("rename project from settings panel saves the new name", async ({ page }) => {
 		const input = page.getByLabel("Project name");
 		await input.fill("Settings Panel Renamed");
-		await page.getByRole("button", { name: "Save" }).click();
+		await page.getByRole("button", { name: "Save", exact: true }).click();
 		await expect(input).toHaveValue("Settings Panel Renamed", { timeout: 5_000 });
 	});
 

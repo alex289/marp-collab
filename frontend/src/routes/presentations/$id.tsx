@@ -14,6 +14,7 @@ import {
 	useSyncExternalStore,
 } from "react";
 import { FileSidebar } from "@/components/file-sidebar";
+import { ProjectGitControls } from "@/components/project-git-setting";
 import {
 	useCollabDocument,
 	usePresenceUser,
@@ -253,14 +254,24 @@ function RouteComponent() {
 	const search = Route.useSearch();
 	const navigate = Route.useNavigate();
 	const presenceUser = usePresenceUser(session?.user ?? null);
-	const { project } = Route.useLoaderData();
+	const { project, readOnly } = Route.useLoaderData();
 	const [selectedFile, setSelectedFile] = useState<DeckFile | null>(null);
+	const [filesChangedRevision, setFilesChangedRevision] = useState(0);
+	const [collabRevision, setCollabRevision] = useState(0);
 
 	const projectPresenceAwareness = useProjectPresence(
 		id,
 		session?.user ?? null,
 		presenceUser,
 		selectedFile?.id ?? null,
+		(payload) => {
+			if (payload === "files-changed") {
+				setFilesChangedRevision((revision) => revision + 1);
+			}
+			if (payload === "git-sync-finished") {
+				setCollabRevision((revision) => revision + 1);
+			}
+		},
 	);
 	const projectFiles = useProjectFilesWorkspace({
 		projectId: id,
@@ -269,7 +280,12 @@ function RouteComponent() {
 		presenceAwareness: projectPresenceAwareness,
 		currentUserId: presenceUser.userId,
 	});
-	const { files, isLoading, presenceByFileId, uploadFiles } = projectFiles;
+	const { files, isLoading, presenceByFileId, reload, uploadFiles } = projectFiles;
+	useEffect(() => {
+		if (filesChangedRevision > 0) {
+			void reload();
+		}
+	}, [filesChangedRevision, reload]);
 	const projectFileIds = useMemo(
 		() => files.filter((file) => file.type !== "folder").map((file) => file.id),
 		[files],
@@ -304,12 +320,22 @@ function RouteComponent() {
 		selectedFile?.type === "markdown" ? (selectedFile.documentName ?? null) : null,
 		session?.user ?? null,
 		presenceUser,
-		(payload) => {
-			if (payload === "files-changed") {
-				void projectFiles.reload();
-			}
-		},
+		collabRevision,
 	);
+	const wasGitSyncingRef = useRef(false);
+	useEffect(() => {
+		if (collab.status === "syncing") {
+			if (!wasGitSyncingRef.current) {
+				wasGitSyncingRef.current = true;
+				toast.info("This project is syncing with Git. Reconnecting once it's done…");
+			}
+			return;
+		}
+		if (wasGitSyncingRef.current && collab.status === "connected") {
+			wasGitSyncingRef.current = false;
+			toast.success("Git sync finished. You're reconnected.");
+		}
+	}, [collab.status]);
 	const [previewFile, setPreviewFile] = useState<DeckFile | null>(null);
 	const [sidebarOpen, setSidebarOpen] = useState(true);
 	const [sidebarWidth, setSidebarWidth] = useState(
@@ -1332,6 +1358,11 @@ function RouteComponent() {
 				}}
 				actions={
 					<>
+						<ProjectGitControls
+							projectId={id}
+							canWrite={!readOnly}
+							onSynced={() => void projectFiles.reload()}
+						/>
 						<PresenceAvatars
 							awareness={projectPresenceAwareness}
 							onParticipantClick={handleParticipantClick}

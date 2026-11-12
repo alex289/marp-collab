@@ -1,9 +1,17 @@
-import { describe, test, before, after } from "node:test";
-import { deepEqual, equal, ok } from "node:assert/strict";
+import { describe, test, before, after, mock } from "node:test";
+import { deepEqual, equal, ok, rejects } from "node:assert/strict";
 import { mkdtemp, readdir, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { Readable } from "node:stream";
+import {
+	finishProjectGitConfigure,
+	finishProjectGitSync,
+	startProjectGitConfigure,
+	startProjectGitSync,
+} from "../../projects/git-sync-lock.ts";
+import { Document } from "@hocuspocus/server";
+import git from "isomorphic-git";
 import { Hono } from "hono";
 import { ZipArchive } from "archiver";
 import type { HonoVariables } from "../../types.ts";
@@ -37,9 +45,12 @@ describe("projects routes", () => {
 	let getProjectById: typeof import("../../db/models/project.ts").getProjectById;
 
 	before(async () => {
+		mock.method(git, "listServerRefs", () => Promise.resolve([]));
 		tempDir = await mkdtemp(join(tmpdir(), "marp-test-projects-route-"));
 		process.env.DATA_PATH = tempDir;
+		process.env.AUTH_SECRET = "test-project-routes-secret";
 
+		(await import("../../projects/git-process.ts")).runGitTasksInProcess();
 		const dbModule = await import("../../db/db.ts");
 		const projectsRouter = (await import("./projects.ts")).default;
 		const projectModel = await import("../../db/models/project.ts");
@@ -103,6 +114,7 @@ describe("projects routes", () => {
 		db?.close();
 		await rm(tempDir, { recursive: true, force: true });
 		delete process.env.DATA_PATH;
+		delete process.env.AUTH_SECRET;
 	});
 
 	test("serves current Markdown to collaborators and denies outsiders", async () => {
@@ -179,11 +191,11 @@ describe("projects routes", () => {
 		const markdown = await files.getDocumentContent(`project/${body.projectId}/presentation.md`);
 		ok(markdown?.includes("theme: whs"));
 
-		const css = await files.getDocumentContent(`project/${body.projectId}/theme/whs.css`);
+		const css = await files.getDocumentContent(`project/${body.projectId}/theme/theme.css`);
 		ok(css?.includes("@theme whs"));
 
 		const deckFiles = await files.getDeckFiles(body.projectId);
-		ok(deckFiles.some((file) => file.id === "theme/logo.svg"));
+		ok(deckFiles.some((file) => file.id === "theme/whs-logo.svg"));
 	});
 
 	test("rejects an unknown template value", async () => {
@@ -274,6 +286,172 @@ describe("projects routes", () => {
 		});
 	});
 
+	test("returns unconfigured Git settings to the project owner", async () => {
+		const response = await app.request("/upload-proj/git", {
+			headers: { "x-test-user-id": "user-1" },
+		});
+
+		equal(response.status, 200);
+		deepEqual(await response.json(), {
+			configured: false,
+			remoteUrl: null,
+			branch: "main",
+			folder: "",
+			hasCredentials: false,
+			username: null,
+		});
+	});
+
+	test("allows a collaborator with write access to use Git sync", async () => {
+		const response = await app.request("/upload-proj/git", {
+			headers: { "x-test-user-id": "route-writer" },
+		});
+
+		equal(response.status, 200);
+		deepEqual(await response.json(), {
+			configured: false,
+			remoteUrl: null,
+			branch: "main",
+			folder: "",
+			hasCredentials: false,
+			username: null,
+		});
+	});
+
+	test("rejects Git sync for a read-only collaborator", async () => {
+		const response = await app.request("/upload-proj/git", {
+			headers: { "x-test-user-id": "route-reader" },
+		});
+
+		equal(response.status, 403);
+		deepEqual(await response.json(), {
+			error: "You do not have write access to this project",
+		});
+	});
+
+	test("requires a credential-free HTTPS Git remote", async () => {
+		const response = await app.request("/upload-proj/git", {
+			method: "PUT",
+			headers: {
+				"content-type": "application/json",
+				"x-test-user-id": "user-1",
+			},
+			body: JSON.stringify({
+				remoteUrl: "http://token@example.com/repo.git",
+				branch: "main",
+			}),
+		});
+
+		equal(response.status, 400);
+	});
+
+	test("rejects a non-owner collaborator configuring Git sync", async () => {
+		const response = await app.request("/upload-proj/git", {
+			method: "PUT",
+			headers: {
+				"content-type": "application/json",
+				"x-test-user-id": "route-writer",
+			},
+			body: JSON.stringify({
+				remoteUrl: "https://example.com/repo.git",
+				branch: "main",
+			}),
+		});
+
+		equal(response.status, 403);
+		deepEqual(await response.json(), {
+			error: "Only the project owner can perform this action",
+		});
+	});
+
+	test("saves Git settings and credentials for later requests", async () => {
+		const response = await app.request("/owner-only-proj/git", {
+			method: "PUT",
+			headers: {
+				"content-type": "application/json",
+				"x-test-user-id": "user-1",
+			},
+			body: JSON.stringify({
+				remoteUrl: "https://example.com/slides.git",
+				branch: "main",
+				username: "git-user",
+				token: "secret-token",
+			}),
+		});
+
+		equal(response.status, 200);
+		deepEqual(await response.json(), {
+			configured: true,
+			remoteUrl: "https://example.com/slides.git",
+			branch: "main",
+			folder: "",
+			hasCredentials: true,
+			username: "git-user",
+		});
+
+		const reload = await app.request("/owner-only-proj/git", {
+			headers: { "x-test-user-id": "user-1" },
+		});
+		deepEqual(await reload.json(), {
+			configured: true,
+			remoteUrl: "https://example.com/slides.git",
+			branch: "main",
+			folder: "",
+			hasCredentials: true,
+			username: "git-user",
+		});
+	});
+
+	test("lets only the owner disconnect Git sync and forget the access token", async () => {
+		const forbidden = await app.request("/upload-proj/git", {
+			method: "DELETE",
+			headers: { "x-test-user-id": "route-writer" },
+		});
+		equal(forbidden.status, 403);
+
+		const response = await app.request("/owner-only-proj/git", {
+			method: "DELETE",
+			headers: { "x-test-user-id": "user-1" },
+		});
+		equal(response.status, 200);
+		const disconnected = {
+			configured: false,
+			remoteUrl: null,
+			branch: "main",
+			folder: "",
+			hasCredentials: false,
+			username: null,
+		};
+		deepEqual(await response.json(), disconnected);
+
+		const reload = await app.request("/owner-only-proj/git", {
+			headers: { "x-test-user-id": "user-1" },
+		});
+		deepEqual(await reload.json(), disconnected);
+	});
+
+	test("rejects push for a read-only collaborator", async () => {
+		const response = await app.request("/upload-proj/git/push", {
+			method: "POST",
+			headers: { "x-test-user-id": "route-reader" },
+		});
+
+		equal(response.status, 403);
+		deepEqual(await response.json(), {
+			error: "You do not have write access to this project",
+		});
+	});
+
+	test("allows a collaborator with write access to push", async () => {
+		const response = await app.request("/upload-proj/git/push", {
+			method: "POST",
+			headers: { "x-test-user-id": "route-writer" },
+		});
+
+		equal(response.status, 409);
+		deepEqual(await response.json(), { error: "Git sync is not configured" });
+	});
+
 	test("distinguishes a collaborator from an outsider when managing collaborators", async () => {
 		const collaboratorResponse = await app.request("/upload-proj/collaborators", {
 			method: "POST",
@@ -285,7 +463,7 @@ describe("projects routes", () => {
 		});
 		equal(collaboratorResponse.status, 403);
 		deepEqual(await collaboratorResponse.json(), {
-			error: "Only the project owner can manage collaborators",
+			error: "Only the project owner can perform this action",
 		});
 
 		const outsiderResponse = await app.request("/upload-proj/collaborators", {
@@ -440,5 +618,153 @@ describe("projects routes", () => {
 
 		const entriesAfter = await readdir(presentationsDir);
 		deepEqual(entriesAfter.sort(), entriesBefore.sort());
+	});
+	test("rejects invalid remote settings without saving them", async (t) => {
+		t.mock.method(git, "listServerRefs", () => Promise.reject(new Error("401")));
+		const response = await app.request("/owner-only-proj/git", {
+			method: "PUT",
+			headers: { "content-type": "application/json", "x-test-user-id": "user-1" },
+			body: JSON.stringify({
+				remoteUrl: "https://example.com/missing.git",
+				branch: "main",
+				token: "invalid",
+			}),
+		});
+		equal(response.status, 400);
+		ok(((await response.json()) as { error: string }).error.includes("Check the URL"));
+	});
+
+	test("rejects project file mutations while Git sync is running", async () => {
+		startProjectGitSync("upload-proj");
+		try {
+			const response = await app.request("/upload-proj/files", {
+				method: "POST",
+				headers: { "content-type": "application/json", "x-test-user-id": "user-1" },
+				body: JSON.stringify({ name: "racing.md" }),
+			});
+			equal(response.status, 409);
+		} finally {
+			finishProjectGitSync("upload-proj");
+		}
+	});
+
+	test("rejects repository folder traversal", async () => {
+		for (const folder of [
+			"../private",
+			"/absolute",
+			".git",
+			"slides/../private",
+			"slides/.git",
+			"slides\\private",
+		]) {
+			const response = await app.request("/owner-only-proj/git", {
+				method: "PUT",
+				headers: { "content-type": "application/json", "x-test-user-id": "user-1" },
+				body: JSON.stringify({ remoteUrl: "https://example.com/repo.git", branch: "main", folder }),
+			});
+			equal(response.status, 400);
+		}
+	});
+	test("saves Git settings without interrupting editors, but not during a sync", async (t) => {
+		const { collabServer } = await import("../../collab/hocuspocus.ts");
+		const document = new Document("project/owner-only-proj/__presence");
+		const messages: string[] = [];
+		t.mock.method(document, "broadcastStateless", (payload: string) => {
+			messages.push(payload);
+		});
+		collabServer.documents.set(document.name, document);
+		const save = () =>
+			app.request("/owner-only-proj/git", {
+				method: "PUT",
+				headers: { "content-type": "application/json", "x-test-user-id": "user-1" },
+				body: JSON.stringify({ remoteUrl: "https://example.com/slides.git", branch: "main" }),
+			});
+		try {
+			equal((await save()).status, 200);
+			deepEqual(messages, []);
+
+			startProjectGitSync("owner-only-proj");
+			try {
+				equal((await save()).status, 409);
+			} finally {
+				finishProjectGitSync("owner-only-proj");
+			}
+		} finally {
+			collabServer.documents.delete(document.name);
+			document.destroy();
+		}
+	});
+
+	test("does not recreate a project deleted while its Git settings were being checked", async (t) => {
+		const { createProject } = await import("../../db/models/project.ts");
+		createProject({ id: "deleted-git-proj", name: "Deleted Git Project", ownerId: "user-1" });
+		const projectDir = await files.getProjectDirectory("deleted-git-proj");
+		const headers = { "content-type": "application/json", "x-test-user-id": "user-1" };
+
+		startProjectGitConfigure("deleted-git-proj");
+		try {
+			const busy = await app.request("/deleted-git-proj", { method: "DELETE", headers });
+			equal(busy.status, 409);
+		} finally {
+			finishProjectGitConfigure("deleted-git-proj");
+		}
+
+		const { promise: checking, resolve: startChecking } = Promise.withResolvers<void>();
+		const { promise: checked, resolve: finishChecking } = Promise.withResolvers<void>();
+		t.mock.method(git, "listServerRefs", async () => {
+			startChecking();
+			await checked;
+			return [];
+		});
+		const save = app.request("/deleted-git-proj/git", {
+			method: "PUT",
+			headers,
+			body: JSON.stringify({
+				remoteUrl: "https://example.com/slides.git",
+				branch: "main",
+				token: "secret-access-token",
+			}),
+		});
+		await checking;
+		equal((await app.request("/deleted-git-proj", { method: "DELETE", headers })).status, 200);
+		finishChecking();
+
+		equal((await save).status, 404);
+		await rejects(stat(projectDir), { code: "ENOENT" });
+	});
+
+	test("rejects Git remotes with a query or fragment", async () => {
+		for (const remoteUrl of [
+			"https://example.com/repo.git?x=1",
+			"https://example.com/repo.git#x",
+		]) {
+			const response = await app.request("/owner-only-proj/git", {
+				method: "PUT",
+				headers: { "content-type": "application/json", "x-test-user-id": "user-1" },
+				body: JSON.stringify({ remoteUrl, branch: "main" }),
+			});
+			equal(response.status, 400);
+		}
+	});
+
+	test("broadcasts sync completion after a failed Git action so every editor can reconnect", async (t) => {
+		const { collabServer } = await import("../../collab/hocuspocus.ts");
+		const document = new Document("project/upload-proj/__presence");
+		const messages: string[] = [];
+		t.mock.method(document, "broadcastStateless", (payload: string) => {
+			messages.push(payload);
+		});
+		collabServer.documents.set(document.name, document);
+		try {
+			const response = await app.request("/upload-proj/git/push", {
+				method: "POST",
+				headers: { "x-test-user-id": "user-1" },
+			});
+			equal(response.status, 409);
+			ok(messages.includes("git-sync-finished"));
+		} finally {
+			collabServer.documents.delete(document.name);
+			document.destroy();
+		}
 	});
 });

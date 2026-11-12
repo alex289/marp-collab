@@ -86,11 +86,65 @@ const moveFileSchema = z.object({
 		.refine((d) => !d.startsWith("/"), "Absolute paths not allowed"),
 });
 
+const gitConfigSchema = z.object({
+	folder: z
+		.string()
+		.trim()
+		.max(1024)
+		.default("")
+		.refine(
+			(value) =>
+				value === "" ||
+				value
+					.split("/")
+					.every((part) => /^[A-Za-z0-9_ -][A-Za-z0-9._ -]*$/.test(part) && part !== ".."),
+			"Use a relative repository folder without hidden or parent directories",
+		),
+	remoteUrl: z
+		.string()
+		.trim()
+		.max(2048)
+		.url()
+		.refine((value) => {
+			const url = new URL(value);
+			return url.protocol === "https:" && !url.username && !url.password;
+		}, "Remote URL must be HTTPS and must not contain credentials")
+		// Git paths are appended to the URL, so a query or fragment would swallow them.
+		.refine(
+			(value) => !value.includes("?") && !value.includes("#"),
+			"Remote URL must not contain a query or fragment",
+		),
+	branch: z
+		.string()
+		.trim()
+		.min(1)
+		.max(255)
+		.regex(/^[A-Za-z0-9][A-Za-z0-9._/-]*$/, "Invalid branch name")
+		.refine(
+			(value) =>
+				value !== "HEAD" &&
+				!value.includes("..") &&
+				!value.includes("@{") &&
+				!value.includes("//") &&
+				!value.endsWith("/") &&
+				!value.endsWith(".") &&
+				!value.endsWith(".lock"),
+		),
+	username: z.string().trim().max(255).optional(),
+	token: z.string().max(2048).optional(),
+});
+
+const gitPullSchema = z.object({
+	resolutions: z.record(z.string().max(4096), z.enum(["project", "remote"])).optional(),
+});
+
 export {
 	addCollaboratorSchema,
 	createFileSchema,
 	createFolderSchema,
 	createProjectSchema,
+	gitConfigSchema,
+	gitPullSchema,
 	importProjectSchema,
 	moveFileSchema,
 	renameEntrySchema,

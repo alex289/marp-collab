@@ -28,7 +28,8 @@ function copyTemplateAssetsPlugin(): Plugin {
 }
 
 export default defineConfig({
-	input: ["src/app.ts"],
+	// Git tasks run in their own process; see src/projects/git-process.ts.
+	input: { app: "src/app.ts", "git-worker": "src/projects/git-worker.ts" },
 	platform: "node",
 	transform: {
 		define: {

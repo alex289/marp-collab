@@ -7,12 +7,20 @@ import {
 } from "../projects/document-identity.ts";
 import { saveDocumentBinary, saveDocumentContent } from "../projects/storage.ts";
 
-export function broadcastFilesChanged(projectId: string): void {
+function broadcastProjectEvent(projectId: string, payload: string): void {
 	for (const [documentName, document] of collabServer.documents) {
 		if (documentBelongsToProject(documentName, projectId)) {
-			document.broadcastStateless("files-changed");
+			document.broadcastStateless(payload);
 		}
 	}
+}
+
+export function broadcastFilesChanged(projectId: string): void {
+	broadcastProjectEvent(projectId, "files-changed");
+}
+
+export function broadcastGitSyncFinished(projectId: string): void {
+	broadcastProjectEvent(projectId, "git-sync-finished");
 }
 
 async function flushDocument(documentName: string): Promise<void> {
@@ -49,6 +57,37 @@ export async function flushProjectFolderDocuments(
 	folderPath: string,
 ): Promise<void> {
 	await Promise.all(folderDocumentNames(projectId, folderPath).map(flushDocument));
+}
+
+function isProjectFileDocument(documentName: string, projectId: string): boolean {
+	const parsed = parseProjectDocumentName(documentName);
+	return parsed?.projectId === projectId && parsed.fileId !== "__presence";
+}
+
+/** Must run while the project's Git sync lock is held, which makes collab loads and stores no-ops. */
+export async function flushAndCloseProjectDocuments(projectId: string): Promise<void> {
+	// Documents that passed authentication before the sync started may still be loading.
+	await Promise.allSettled(
+		[...collabServer.loadingDocuments.entries()]
+			.filter(([documentName]) => isProjectFileDocument(documentName, projectId))
+			.map(([, loading]) => loading),
+	);
+	const documents = [...collabServer.documents.entries()].filter(([documentName]) =>
+		isProjectFileDocument(documentName, projectId),
+	);
+
+	// Close first so no edit can arrive after the final flush.
+	for (const [documentName] of documents) {
+		collabServer.closeConnections(documentName);
+	}
+	await Promise.all(
+		documents.map(async ([documentName, document]) => {
+			await collabServer.debouncer.executeNow(`onStoreDocument-${documentName}`);
+			await document.saveMutex.waitForUnlock();
+			await flushDocument(documentName);
+			await collabServer.unloadDocument(document);
+		}),
+	);
 }
 
 /**
