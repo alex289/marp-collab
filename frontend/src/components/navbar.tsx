@@ -54,6 +54,7 @@ export default function Navbar({ breadcrumb, actions }: NavbarProps) {
 		setBusy(true);
 		try {
 			await signOut();
+			await router.navigate({ href: "/login?autoSignIn=false" });
 			await refetch();
 			await router.invalidate();
 		} finally {
