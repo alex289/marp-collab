@@ -1,5 +1,11 @@
 # marp-collab
 
+## 0.4.0
+
+### Minor Changes
+
+- [#93](https://github.com/alex289/marp-collab/pull/93) [`bb539a4`](https://github.com/alex289/marp-collab/commit/bb539a44a28fb09f623289ceec5a21c7b66837c6) Thanks [@alex289](https://github.com/alex289)! - Automatically start sign-in when only one OIDC provider is configured. Keep manual sign-in after logout or authentication errors, and retain the provider chooser when multiple providers are available.
+
 ## 0.3.0
 
 ### Minor Changes
