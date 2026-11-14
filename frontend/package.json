@@ -12,7 +12,7 @@
 	},
 	"dependencies": {
 		"@base-ui/react": "^1.9.0",
-		"@better-auth/oauth-provider": "^1.7.19",
+		"@better-auth/oauth-provider": "^1.7.20",
 		"@codemirror/autocomplete": "^6.20.4",
 		"@codemirror/commands": "^6.11.1",
 		"@codemirror/lang-css": "^6.3.1",
@@ -29,15 +29,15 @@
 		"@marp-team/marp-core": "^4.4.0",
 		"@marp-team/marpit-svg-polyfill": "^2.1.0",
 		"@tailwindcss/vite": "^4.3.5",
-		"@tanstack/react-hotkeys": "^0.22.3",
+		"@tanstack/react-hotkeys": "^0.23.1",
 		"@tanstack/react-router": "^1.170.46",
 		"@tanstack/react-table": "^9.3.1",
 		"@uiw/react-codemirror": "^4.25.12",
-		"better-auth": "^1.7.19",
+		"better-auth": "^1.7.20",
 		"class-variance-authority": "^0.7.1",
 		"clsx": "^2.1.1",
 		"codemirror": "^6.0.2",
-		"lucide-react": "^1.70.0",
+		"lucide-react": "^1.71.0",
 		"prettier": "^3.9.10",
 		"react": "^19.3.1",
 		"react-dom": "^19.3.1",
@@ -60,7 +60,7 @@
 		"@types/react-dom": "^19.3.0",
 		"@vitejs/plugin-react": "^6.3.0",
 		"typescript": "~7.0.2",
-		"vite": "^8.3.6",
+		"vite": "^8.3.8",
 		"vite-plugin-pwa": "^2.0.0"
 	}
 }
