@@ -234,6 +234,9 @@ importers:
       pino-pretty:
         specifier: ^13.2.0
         version: 13.2.0
+      tailwindcss:
+        specifier: ^4.3.5
+        version: 4.3.5
       ws:
         specifier: ^8.22.2
         version: 8.22.2

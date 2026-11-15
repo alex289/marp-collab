@@ -1,4 +1,5 @@
 import { renderMarp } from "@/lib/marp";
+import { useSlideTailwindReady } from "@/hooks/use-slide-tailwind-ready";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -638,9 +639,12 @@ export function PresentationFrame({
 	showSpeakerNotes = false,
 	className,
 }: PresentationFrameProps) {
+	const slideTailwindReady = useSlideTailwindReady();
 	const rendered = useMemo(() => {
 		// Project themes are registered on the shared Marp instance; this invalidates stale renders.
+		// Decks using Tailwind render once more after its lazily loaded compiler is ready.
 		void themeRevision;
+		void slideTailwindReady;
 		try {
 			return renderMarp(markdown, projectId, selectedFileId, assetRevision, assetToken);
 		} catch (error) {
@@ -650,7 +654,15 @@ export function PresentationFrame({
 				comments: [[]],
 			};
 		}
-	}, [markdown, projectId, selectedFileId, themeRevision, assetRevision, assetToken]);
+	}, [
+		markdown,
+		projectId,
+		selectedFileId,
+		themeRevision,
+		slideTailwindReady,
+		assetRevision,
+		assetToken,
+	]);
 
 	const activeComments = parseSlidePresenterComments(rendered.comments[slideIndex] ?? []);
 	const nextComments = parseSlidePresenterComments(rendered.comments[slideIndex + 1] ?? []);

@@ -1,5 +1,7 @@
 import { Marp } from "@marp-team/marp-core";
 import { API_URL } from "./config";
+import { TAILWIND_DIRECTIVE, type SlideTailwind } from "../../../shared/slide-tailwind.ts";
+import type { TailwindCatalog } from "@/features/editor/completions";
 
 let currentProjectId = "";
 let currentMarkdownDir = "";
@@ -82,6 +84,59 @@ marp.use((md) => {
 	);
 });
 
+let tailwindEnabled = false;
+marp.customDirectives.global[TAILWIND_DIRECTIVE] = (value) => {
+	tailwindEnabled = value === "true";
+	return {};
+};
+
+let slideTailwind: SlideTailwind | undefined;
+let slideTailwindLoading: Promise<void> | undefined;
+const slideTailwindListeners = new Set<() => void>();
+
+async function loadSlideTailwind() {
+	try {
+		const { loadSlideTailwind } = await import("./slide-tailwind");
+		slideTailwind = await loadSlideTailwind();
+	} catch {
+		// Slides keep rendering without Tailwind utilities.
+		return;
+	}
+	for (const listener of slideTailwindListeners) {
+		listener();
+	}
+}
+
+function requestSlideTailwind() {
+	slideTailwindLoading ??= loadSlideTailwind();
+}
+
+/** Notifies once the Tailwind compiler is loaded, so renders made without it can redo. */
+export const subscribeSlideTailwind = (listener: () => void) => {
+	slideTailwindListeners.add(listener);
+	return () => {
+		slideTailwindListeners.delete(listener);
+	};
+};
+
+export const isSlideTailwindReady = () => slideTailwind !== undefined;
+
+let tailwindCatalog: Promise<TailwindCatalog> | undefined;
+
+async function importTailwindCatalog() {
+	try {
+		const { loadTailwindCatalog } = await import("./slide-tailwind");
+		return await loadTailwindCatalog();
+	} catch (error) {
+		// Let the next completion request try again.
+		tailwindCatalog = undefined;
+		throw error;
+	}
+}
+
+/** Tailwind classes and variants for editor completions, loaded once on demand. */
+export const loadTailwindCatalog = () => (tailwindCatalog ??= importTailwindCatalog());
+
 export const renderMarp = (
 	markdown: string,
 	projectId?: string,
@@ -94,7 +149,20 @@ export const renderMarp = (
 	currentAssetToken = assetToken;
 	const lastSlash = selectedFileId?.lastIndexOf("/") ?? -1;
 	currentMarkdownDir = lastSlash > -1 ? selectedFileId!.slice(0, lastSlash + 1) : "";
-	return marp.render(markdown);
+	tailwindEnabled = false;
+	const rendered = marp.render(markdown);
+	if (!tailwindEnabled) {
+		return rendered;
+	}
+	if (!slideTailwind) {
+		requestSlideTailwind();
+		return rendered;
+	}
+	const tailwindCss = slideTailwind(rendered.html);
+	return {
+		...rendered,
+		css: `${rendered.css}\n${projectId ? rewriteCssUrls(tailwindCss, projectId, selectedFileId ?? "", assetToken) : tailwindCss}`,
+	};
 };
 
 const customThemeNames = new Set<string>();

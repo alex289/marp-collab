@@ -12,6 +12,7 @@ import {
 	createEditorCompletionSource,
 	extractThemeClassNames,
 	type EditorCompletionConfig,
+	type TailwindCatalog,
 } from "./completions.ts";
 import { marpMarkdown } from "./language.ts";
 
@@ -218,5 +219,72 @@ test("extracts class names only from CSS selector preludes", () => {
 			@media print { section.print-only { content: "{ .not-a-selector }"; } }
 		`),
 		["hero", "card", "print-only"],
+	);
+});
+
+const tailwindCatalog: TailwindCatalog = {
+	classes: ["-mt-4", "bg-sky-500", "grid", "mt-4"],
+	variants: ["hover", "md"],
+	toCss: (candidate) => (candidate === "grid" ? ".grid { display: grid; }" : null),
+};
+const tailwindConfig: EditorCompletionConfig = {
+	...markdownConfig,
+	loadTailwindCatalog: () => Promise.resolve(tailwindCatalog),
+};
+const tailwindDeck = "---\nmarp: true\ntailwind: true\n---\n\n";
+
+async function completeAsync(
+	doc: string,
+	config: EditorCompletionConfig = tailwindConfig,
+): Promise<CompletionResult | null> {
+	const state = EditorState.create({ doc });
+	return await createEditorCompletionSource(() => config)(
+		new CompletionContext(state, doc.length, false),
+	);
+}
+
+test("completes Tailwind classes and variants after theme classes in decks that enable it", async () => {
+	const doc = `${tailwindDeck}<div class="card g`;
+	const result = await completeAsync(doc);
+	assert.ok(result);
+	assert.equal(result.from, doc.length - 1);
+	assert.deepEqual(
+		result.options.map((option) => option.label),
+		["lead", "invert", "title-page", "card", "bg-sky-500", "grid", "mt-4", "hover:", "md:"],
+	);
+	assert.ok(result.validFor instanceof RegExp && !result.validFor.test("-m"));
+});
+
+test("completes the Tailwind utility after its variant prefix", async () => {
+	const doc = `${tailwindDeck}<div class="md:hover:bg`;
+	const result = await completeAsync(doc);
+	assert.equal(result?.from, doc.length - 2);
+});
+
+test("offers negative Tailwind utilities only after a leading dash", async () => {
+	const result = await completeAsync(`${tailwindDeck}<div class="md:-m`);
+	assert.deepEqual(
+		result?.options.map((option) => option.label),
+		["-mt-4"],
+	);
+});
+
+test("completes Tailwind classes in slide class directives enabled by a comment", async () => {
+	const result = await completeAsync("<!-- tailwind: true -->\n\n<!-- _class: lead gr");
+	assert.ok(result?.options.some((option) => option.label === "grid"));
+	assert.ok(result?.options.some((option) => option.label === "lead"));
+});
+
+test("leaves Tailwind out of decks without the directive or a loadable catalog", async () => {
+	const disabled = complete('<div class="g', tailwindConfig);
+	assert.ok(!disabled?.options.some((option) => option.label === "grid"));
+
+	const failing = await completeAsync(`${tailwindDeck}<div class="g`, {
+		...markdownConfig,
+		loadTailwindCatalog: () => Promise.reject(new Error("offline")),
+	});
+	assert.deepEqual(
+		failing?.options.map((option) => option.label),
+		["lead", "invert", "title-page", "card"],
 	);
 });

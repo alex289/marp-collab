@@ -5,6 +5,7 @@ import type {
 	CompletionSection,
 	CompletionSource,
 } from "@codemirror/autocomplete";
+import type { Text } from "@codemirror/state";
 import type { DeckFile } from "../../lib/types.ts";
 import type { ProjectTheme } from "../../lib/project-themes.ts";
 import { MARP_ALLOWED_HTML_TAGS } from "../../lib/marp-html.ts";
@@ -15,6 +16,14 @@ export type EditorCompletionConfig = {
 	files: DeckFile[];
 	themeNames: string[];
 	projectThemes: ProjectTheme[];
+	/** Loads Tailwind classes for decks with `tailwind: true`; omitted where unavailable. */
+	loadTailwindCatalog?: () => Promise<TailwindCatalog>;
+};
+
+export type TailwindCatalog = {
+	classes: string[];
+	variants: string[];
+	toCss(candidate: string): string | null;
 };
 
 type DirectiveDefinition = {
@@ -29,6 +38,7 @@ const marpSection: CompletionSection = { name: "Marp", rank: 1 };
 const projectSection: CompletionSection = { name: "Project", rank: 1 };
 const selectorSection: CompletionSection = { name: "Marp selectors", rank: 1 };
 const htmlSection: CompletionSection = { name: "Marp HTML", rank: 1 };
+const tailwindSection: CompletionSection = { name: "Tailwind", rank: 2 };
 
 const directives: DirectiveDefinition[] = [
 	{
@@ -60,6 +70,12 @@ const directives: DirectiveDefinition[] = [
 		name: "lang",
 		detail: "document language",
 		info: "Sets the lang attribute on the generated slides.",
+		scope: "global",
+	},
+	{
+		name: "tailwind",
+		detail: "Tailwind CSS classes",
+		info: "Generates Tailwind CSS utilities for the classes used in this deck.",
 		scope: "global",
 	},
 	{
@@ -311,6 +327,8 @@ function valueOptions(name: string, config: EditorCompletionConfig): Completion[
 			return [option("16:9", "widescreen"), option("4:3", "standard")];
 		case "math":
 			return [option("katex", "KaTeX"), option("mathjax", "MathJax")];
+		case "tailwind":
+			return [option("true", "enable Tailwind CSS"), option("false", "disable Tailwind CSS")];
 		case "headingDivider":
 			return ["false", "1", "2", "3", "4", "5", "6", "[1, 2]"].map((value) =>
 				option(value, "heading level"),
@@ -322,8 +340,6 @@ function valueOptions(name: string, config: EditorCompletionConfig): Completion[
 				option("hold", "show without incrementing"),
 				option("skip", "hide without incrementing"),
 			];
-		case "class":
-			return allThemeClassNames(config).map((name) => option(name, "theme class"));
 		case "backgroundPosition":
 			return ["center", "top", "right", "bottom", "left"].map((value) =>
 				option(value, "CSS position"),
@@ -347,7 +363,7 @@ function valueOptions(name: string, config: EditorCompletionConfig): Completion[
 function directiveValueCompletion(
 	context: CompletionContext,
 	config: EditorCompletionConfig,
-): CompletionResult | null {
+): CompletionResult | Promise<CompletionResult> | null {
 	const line = lineBeforeCursor(context);
 	const frontmatter = isInsideFrontmatter(context);
 	const match = frontmatter
@@ -367,14 +383,14 @@ function directiveValueCompletion(
 		return null;
 	}
 
-	let typed = match[2] ?? "";
+	const typed = match[2] ?? "";
+	if (normalizedName === "class") {
+		return classCompletion(context, config, /[^\s,[]*$/.exec(typed)?.[0] ?? "");
+	}
+
 	const options = valueOptions(match[1], config);
 	if (options.length === 0) {
 		return null;
-	}
-
-	if (normalizedName === "class") {
-		typed = /[\w-]*$/.exec(typed)?.[0] ?? typed;
 	}
 
 	return {
@@ -519,23 +535,129 @@ function pathCompletion(
 function htmlClassCompletion(
 	context: CompletionContext,
 	config: EditorCompletionConfig,
-): CompletionResult | null {
+): CompletionResult | Promise<CompletionResult> | null {
 	const match = /<[A-Za-z][^>]*\bclass=["']([^"']*)$/i.exec(lineBeforeCursor(context));
 	if (!match) {
 		return null;
 	}
+	return classCompletion(context, config, /\S*$/.exec(match[1] ?? "")?.[0] ?? "");
+}
 
-	const typed = /[\w-]*$/.exec(match[1] ?? "")?.[0] ?? "";
-	return {
-		from: context.pos - typed.length,
-		options: allThemeClassNames(config).map((name) => ({
-			label: name,
+const tailwindFrontmatterRegex = /^---\r?\n([\s\S]*?)\r?\n---/;
+const tailwindDirectiveLineRegex = /^tailwind\s*:\s*(["']?)true\1\s*$/m;
+const tailwindDirectiveCommentRegex = /<!--\s*tailwind\s*:\s*(["']?)true\1\s*-->/;
+const tailwindDocs = new WeakMap<Text, boolean>();
+
+function isTailwindEnabled(doc: Text): boolean {
+	let enabled = tailwindDocs.get(doc);
+	if (enabled === undefined) {
+		const source = doc.toString();
+		const frontmatter = tailwindFrontmatterRegex.exec(source)?.[1];
+		enabled =
+			(frontmatter !== undefined && tailwindDirectiveLineRegex.test(frontmatter)) ||
+			tailwindDirectiveCommentRegex.test(source);
+		tailwindDocs.set(doc, enabled);
+	}
+	return enabled;
+}
+
+/** Length of the variant prefix (e.g. `md:hover:`) before the utility being typed. */
+function variantPrefixLength(token: string): number {
+	let depth = 0;
+	let end = 0;
+	for (let index = 0; index < token.length; index += 1) {
+		const char = token[index];
+		if (char === "[") {
+			depth += 1;
+		} else if (char === "]") {
+			depth = Math.max(0, depth - 1);
+		} else if (char === ":" && depth === 0) {
+			end = index + 1;
+		}
+	}
+	return end;
+}
+
+type TailwindOptions = { utilities: Completion[]; negative: Completion[] };
+const tailwindOptionCache = new WeakMap<TailwindCatalog, TailwindOptions>();
+
+function tailwindOptions(catalog: TailwindCatalog): TailwindOptions {
+	let options = tailwindOptionCache.get(catalog);
+	if (!options) {
+		const info = (completion: Completion) => {
+			const css = catalog.toCss(completion.label);
+			if (!css) {
+				return null;
+			}
+			const pre = document.createElement("pre");
+			pre.style.margin = "0";
+			pre.textContent = css;
+			return pre;
+		};
+		const classes = catalog.classes.map((label): Completion => ({
+			label,
 			type: "class",
-			detail: "project theme class",
-			section: selectorSection,
-		})),
-		validFor: /^[\w-]*$/,
-	};
+			section: tailwindSection,
+			info,
+		}));
+		options = {
+			utilities: [
+				...classes.filter((option) => !option.label.startsWith("-")),
+				...catalog.variants.map((variant): Completion => ({
+					label: `${variant}:`,
+					type: "keyword",
+					detail: "variant",
+					section: tailwindSection,
+					boost: -1,
+				})),
+			],
+			negative: classes.filter((option) => option.label.startsWith("-")),
+		};
+		tailwindOptionCache.set(catalog, options);
+	}
+	return options;
+}
+
+/**
+ * Completes one class name: project theme classes always, plus Tailwind utilities
+ * and variants when the deck enables Tailwind. Negative utilities (`-mt-4`) are only
+ * offered once a leading `-` is typed, which roughly halves the list.
+ */
+function classCompletion(
+	context: CompletionContext,
+	config: EditorCompletionConfig,
+	token: string,
+): CompletionResult | Promise<CompletionResult> {
+	const fragment = token.slice(variantPrefixLength(token));
+	const negative = fragment.startsWith("-");
+	const result = (tailwind: Completion[]): CompletionResult => ({
+		from: context.pos - fragment.length,
+		options: [
+			...(negative
+				? []
+				: allThemeClassNames(config).map((name): Completion => ({
+						label: name,
+						type: "class",
+						detail: "theme class",
+						section: marpSection,
+					}))),
+			...tailwind,
+		],
+		validFor: negative ? /^-[\w./-]*$/ : /^(?:[\w./][\w./-]*)?$/,
+	});
+
+	const { loadTailwindCatalog } = config;
+	if (!loadTailwindCatalog || !isTailwindEnabled(context.state.doc)) {
+		return result([]);
+	}
+	return (async () => {
+		try {
+			const options = tailwindOptions(await loadTailwindCatalog());
+			return result(negative ? options.negative : options.utilities);
+		} catch {
+			return result([]);
+		}
+	})();
 }
 
 function isInsideMarkdownFence(context: CompletionContext): boolean {
@@ -727,7 +849,7 @@ function cssSelectorCompletion(
 function markdownCompletion(
 	context: CompletionContext,
 	config: EditorCompletionConfig,
-): CompletionResult | null {
+): CompletionResult | Promise<CompletionResult> | null {
 	return (
 		pathCompletion(config, markdownPathContext(context)) ??
 		htmlClassCompletion(context, config) ??

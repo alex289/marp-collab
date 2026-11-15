@@ -28,6 +28,7 @@ import { vsCodeDark } from "@fsegurai/codemirror-theme-vscode-dark";
 import { toast } from "sonner";
 import { useHotkey } from "@tanstack/react-hotkeys";
 import { findMissingAssetReferences } from "@/lib/asset-diagnostics";
+import { loadTailwindCatalog } from "@/lib/marp";
 import { countMarpSlides } from "@/lib/slide-count";
 import { cn } from "@/lib/utils";
 import type { DeckFile } from "@/lib/types";
@@ -329,6 +330,7 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 			files,
 			themeNames,
 			projectThemes,
+			loadTailwindCatalog,
 		};
 	}, [fileKind, fileId, files, themeNames, projectThemes]);
 

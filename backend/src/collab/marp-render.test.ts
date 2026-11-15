@@ -94,6 +94,31 @@ section { background-image: url("../assets/local.png"); }
 		equal(rendered?.html.match(/file not found/g)?.length, 2);
 	});
 
+	test("generates Tailwind utilities only for decks that opt in", async () => {
+		const body = `<div class="grid grid-cols-2 bg-[url(img/bg.png)] bg-[url(https://example.com/x.png)]">x</div>`;
+		const read = (markdown: string) => () => Promise.resolve(markdown);
+
+		const enabled = await renderMarkdownForPdf(
+			"pdf-tailwind",
+			"decks/deck.md",
+			read(`---\nmarp: true\ntailwind: true\n---\n\n<!-- _class: invert -->\n\n${body}`),
+		);
+		ok(enabled);
+		ok(enabled.css.includes("grid-template-columns: repeat(2, minmax(0, 1fr)) !important"));
+		ok(enabled.css.includes("url(asset0.png)"));
+		equal(enabled.assets.get("decks/img/bg.png"), "asset0.png");
+		ok(!enabled.css.includes("example.com"));
+		ok(!enabled.css.includes("--tw-invert"));
+
+		const disabled = await renderMarkdownForPdf(
+			"pdf-tailwind",
+			"decks/deck.md",
+			read(`---\nmarp: true\n---\n\n${body}`),
+		);
+		ok(disabled);
+		ok(!disabled.css.includes("grid-template-columns"));
+	});
+
 	test("returns undefined for a missing markdown document", async () => {
 		equal(await renderMarkdownForPdf("pdf-render", "missing.md"), undefined);
 	});

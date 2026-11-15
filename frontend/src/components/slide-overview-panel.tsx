@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LayoutGrid } from "lucide-react";
 import { SidebarGroup, SidebarGroupContent, SidebarGroupLabel } from "@/components/ui/sidebar";
 import { renderMarp } from "@/lib/marp";
+import { useSlideTailwindReady } from "@/hooks/use-slide-tailwind-ready";
 import { countMarpSlides } from "@/lib/slide-count";
 import { useTheme } from "./theme-provider";
 import marpitSvgPolyfillScript from "@marp-team/marpit-svg-polyfill/lib/polyfill.browser.js?raw";
@@ -315,15 +316,26 @@ export const SlideOverviewPanel = ({
 
 	const slideCount = useMemo(() => countMarpSlides(markdown), [markdown]);
 
+	const slideTailwindReady = useSlideTailwindReady();
 	const rendered = useMemo(() => {
 		// Project themes live on the shared Marp instance; this invalidates stale renders.
+		// Decks using Tailwind render once more after its lazily loaded compiler is ready.
 		void themeRevision;
+		void slideTailwindReady;
 		try {
 			return renderMarp(markdown, projectId, deckFileId, assetRevision, assetToken);
 		} catch {
 			return null;
 		}
-	}, [markdown, projectId, deckFileId, themeRevision, assetRevision, assetToken]);
+	}, [
+		markdown,
+		projectId,
+		deckFileId,
+		themeRevision,
+		slideTailwindReady,
+		assetRevision,
+		assetToken,
+	]);
 
 	const handlePortMessage = useCallback((event: MessageEvent) => {
 		const payload = event.data;

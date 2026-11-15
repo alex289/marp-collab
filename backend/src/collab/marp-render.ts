@@ -1,8 +1,10 @@
 import { expandMarkdownIncludes } from "../../../shared/markdown-include.ts";
+import { TAILWIND_DIRECTIVE } from "../../../shared/slide-tailwind.ts";
 import { Marp } from "@marp-team/marp-core";
 import { posix } from "node:path";
 import { getDeckFiles, getDocumentContent } from "../projects/storage.ts";
 import { toDocumentName } from "../projects/document-identity.ts";
+import { createSlideTailwind } from "./slide-tailwind.ts";
 
 function resolvePosixPath(dir: string, src: string): string {
 	return posix.normalize(posix.join(dir, src));
@@ -131,6 +133,13 @@ export async function renderMarkdownForPdf(
 		return toFlatName(resolvePosixPath(dir, src));
 	}
 
+	function rewriteCssUrls(css: string, dir: string): string {
+		return css.replace(
+			/url\(\s*(['"]?)(?!data:|#)([^'"\s)]+)\1\s*\)/gi,
+			(_match, quote: string, src: string) => `url(${quote}${rewriteAssetRef(dir, src)}${quote})`,
+		);
+	}
+
 	const marp = new Marp({
 		html: {
 			...Marp.html, // Use Marp's own safe default allowlist
@@ -178,12 +187,7 @@ export async function renderMarkdownForPdf(
 			continue;
 		}
 
-		const cssDir = dirOf(file.id);
-		const rewrittenCss = sanitizeThemeImports(css).replace(
-			/url\(\s*(['"]?)(?!data:|#)([^'"\s)]+)\1\s*\)/gi,
-			(_match, quote: string, src: string) =>
-				`url(${quote}${rewriteAssetRef(cssDir, src)}${quote})`,
-		);
+		const rewrittenCss = rewriteCssUrls(sanitizeThemeImports(css), dirOf(file.id));
 
 		try {
 			const { css: prepared } = prepareThemeCss(rewrittenCss, sanitizeThemeName(file.id));
@@ -193,7 +197,20 @@ export async function renderMarkdownForPdf(
 		}
 	}
 
-	const { html, css } = marp.render(markdown);
+	let tailwindEnabled = false;
+	marp.customDirectives.global[TAILWIND_DIRECTIVE] = (value) => {
+		tailwindEnabled = value === "true";
+		return {};
+	};
+
+	const { html, css: themeCss } = marp.render(markdown);
+	let css = themeCss;
+	if (tailwindEnabled) {
+		// Arbitrary values such as bg-[url(...)] go through the same asset rewriting as
+		// theme CSS, so Gotenberg never fetches remote or absolute URLs.
+		const tailwind = await createSlideTailwind();
+		css += `\n${rewriteCssUrls(tailwind(html), markdownDir)}`;
+	}
 	const title = getFrontmatterField(markdown, "title") ?? basenameWithoutExt(markdownFileId);
 	const author = getFrontmatterField(markdown, "author");
 	const description = getFrontmatterField(markdown, "description");
