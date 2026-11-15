@@ -11,6 +11,7 @@ test("uses an explicit presenter comment as metadata", () => {
 		parseSlidePresenterComments(["Remember the demo", " Presenter: Alice ", "Show the chart"]),
 		{
 			presenter: "Alice",
+			demo: null,
 			speakerNotes: ["Remember the demo", "Show the chart"],
 		},
 	);
@@ -19,6 +20,7 @@ test("uses an explicit presenter comment as metadata", () => {
 test("keeps plain comments as speaker notes", () => {
 	assert.deepEqual(parseSlidePresenterComments(["Alice", "Remember the demo"]), {
 		presenter: null,
+		demo: null,
 		speakerNotes: ["Alice", "Remember the demo"],
 	});
 });
@@ -26,7 +28,26 @@ test("keeps plain comments as speaker notes", () => {
 test("returns no presenter for a slide without comments", () => {
 	assert.deepEqual(parseSlidePresenterComments([]), {
 		presenter: null,
+		demo: null,
 		speakerNotes: [],
+	});
+});
+
+test("marks a slide as a live demo with an optional title", () => {
+	assert.deepEqual(parseSlidePresenterComments(["Demo: Login flow", "Open the admin panel"]), {
+		presenter: null,
+		demo: "Login flow",
+		speakerNotes: ["Open the admin panel"],
+	});
+	assert.equal(parseSlidePresenterComments(["demo"]).demo, "");
+	assert.equal(parseSlidePresenterComments(["demo:"]).demo, "");
+});
+
+test("keeps notes that only mention a demo as speaker notes", () => {
+	assert.deepEqual(parseSlidePresenterComments(["demo time", "Remember the demo"]), {
+		presenter: null,
+		demo: null,
+		speakerNotes: ["demo time", "Remember the demo"],
 	});
 });
 

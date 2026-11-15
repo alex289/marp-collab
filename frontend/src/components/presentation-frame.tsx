@@ -3,7 +3,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import marpitSvgPolyfillScript from "@marp-team/marpit-svg-polyfill/lib/polyfill.browser.js?raw";
-import { ArrowRightIcon, Mic2Icon } from "lucide-react";
+import { ArrowRightIcon, LaptopIcon, Mic2Icon } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { DemoControls } from "@/components/demo-controls";
 import {
 	findPresenterImage,
 	getNextPresenterChange,
@@ -26,6 +28,14 @@ type PresentationFrameProps = {
 	onLaserChange?: (state: LaserState) => void;
 	presenterUsers?: readonly PresenterUser[];
 	showSpeakerNotes?: boolean;
+	/** Audience windows cover the slide with a "live demo" screen while active. */
+	demoActive?: boolean;
+	/** Body of the Picture-in-Picture window that hosts the presenter's demo controls. */
+	demoContainer?: HTMLElement | null;
+	onDemoStart?: () => void;
+	onDemoEnd?: (options: { advance: boolean }) => void;
+	/** Reports whether the active slide has speaker notes, e.g. to size the demo controls. */
+	onHasSpeakerNotesChange?: (hasSpeakerNotes: boolean) => void;
 	className?: string;
 };
 
@@ -636,6 +646,11 @@ export function PresentationFrame({
 	onLaserChange,
 	presenterUsers = [],
 	showSpeakerNotes = false,
+	demoActive = false,
+	demoContainer = null,
+	onDemoStart,
+	onDemoEnd,
+	onHasSpeakerNotesChange,
 	className,
 }: PresentationFrameProps) {
 	const rendered = useMemo(() => {
@@ -660,6 +675,9 @@ export function PresentationFrame({
 	);
 	const activePresenterImage = findPresenterImage(activeComments.presenter, presenterUsers);
 	const hasSpeakerNotes = activeComments.speakerNotes.length > 0;
+	useEffect(() => {
+		onHasSpeakerNotesChange?.(hasSpeakerNotes);
+	}, [hasSpeakerNotes, onHasSpeakerNotesChange]);
 	// Marp returns one comment bucket per slide, so this doubles as the slide count.
 	const hasNextSlide = slideIndex + 1 < rendered.comments.length;
 
@@ -683,7 +701,25 @@ export function PresentationFrame({
 	);
 
 	if (!showSpeakerNotes) {
-		return slide;
+		// Always return the fragment so toggling the demo doesn't remount the slide iframe.
+		return (
+			<>
+				{slide}
+				{demoActive && (
+					<div className="absolute inset-0 z-40 flex select-none flex-col items-center justify-center gap-4 bg-black px-8 text-center text-white">
+						<span className="flex items-center gap-2 text-sm font-medium tracking-widest text-white/70 uppercase">
+							<span className="size-2.5 animate-pulse rounded-full bg-red-500" aria-hidden />
+							Live demo
+						</span>
+						{activeComments.demo && (
+							<p className="max-w-4xl text-4xl font-semibold tracking-tight">
+								{activeComments.demo}
+							</p>
+						)}
+					</div>
+				)}
+			</>
+		);
 	}
 
 	return (
@@ -732,6 +768,40 @@ export function PresentationFrame({
 							</CardContent>
 						</Card>
 					)}
+					{(activeComments.demo !== null || demoActive) && (
+						<Card
+							aria-label="Live demo"
+							className="shrink-0 gap-0 border-red-500/30 bg-red-500/5 py-0 shadow-2xl"
+						>
+							<CardContent className="flex items-center gap-3 px-4 py-3">
+								<LaptopIcon className="size-5 shrink-0 text-red-500" aria-hidden />
+								<div className="min-w-0 flex-1">
+									<p className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+										{demoActive ? "Demo running" : "Live demo"}
+									</p>
+									<p className="truncate text-sm font-semibold">
+										{activeComments.demo || "Demo slide"}
+									</p>
+								</div>
+								{demoActive
+									? onDemoEnd && (
+											<Button
+												type="button"
+												size="sm"
+												variant="secondary"
+												onClick={() => onDemoEnd({ advance: false })}
+											>
+												End (D)
+											</Button>
+										)
+									: onDemoStart && (
+											<Button type="button" size="sm" onClick={onDemoStart}>
+												Start (D)
+											</Button>
+										)}
+							</CardContent>
+						</Card>
+					)}
 					<Card className="hidden shrink-0 flex-col overflow-hidden py-0 shadow-2xl md:flex gap-0">
 						<CardHeader className="shrink-0 border-b border-border px-4 py-3">
 							<CardTitle>Next slide</CardTitle>
@@ -775,6 +845,16 @@ export function PresentationFrame({
 					</Card>
 				</div>
 			</div>
+			{demoContainer && onDemoEnd && (
+				<DemoControls
+					container={demoContainer}
+					title={activeComments.demo}
+					speakerNotes={activeComments.speakerNotes}
+					slideLabel={`Slide ${slideIndex + 1} of ${rendered.comments.length}`}
+					hasNextSlide={hasNextSlide}
+					onEnd={onDemoEnd}
+				/>
+			)}
 		</div>
 	);
 }
