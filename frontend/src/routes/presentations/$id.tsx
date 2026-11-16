@@ -1035,7 +1035,7 @@ function RouteComponent() {
 		}
 		if (!opened) {
 			if (!supportsDemoWindow()) {
-				toast.info("Floating demo controls need Chrome or Edge. Press D to end the demo.");
+				toast.info("Floating demo controls need Chrome or Edge. Press L to end the demo.");
 			}
 			return;
 		}
@@ -1317,7 +1317,7 @@ function RouteComponent() {
 				callback: () => setIsBlanked((current) => !current),
 			},
 			{
-				hotkey: "D",
+				hotkey: "L",
 				callback: toggleDemo,
 				options: { enabled: !isViewer },
 			},
@@ -1452,7 +1452,7 @@ function RouteComponent() {
 								}
 							/>
 							<TooltipContent>
-								{isDemo ? "End live demo (D)" : "Start live demo with floating controls (D)"}
+								{isDemo ? "End live demo (L)" : "Start live demo with floating controls (L)"}
 							</TooltipContent>
 						</Tooltip>
 						<Button
@@ -1491,7 +1491,7 @@ function RouteComponent() {
 					{isDemo ? (
 						<div className="pointer-events-none absolute inset-x-0 top-3 z-10 flex justify-center">
 							<span className="rounded-full bg-red-600/90 px-3 py-1 text-xs font-medium text-white shadow-lg">
-								Live demo running — audience sees the demo screen, press D to return
+								Live demo running — audience sees the demo screen, press L to return
 							</span>
 						</div>
 					) : (
