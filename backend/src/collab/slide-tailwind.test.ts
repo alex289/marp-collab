@@ -4,6 +4,8 @@ import { readFileSync } from "node:fs";
 import { __unstable__loadDesignSystem } from "tailwindcss";
 import {
 	extractClassCandidates,
+	MAX_CLASS_CANDIDATE_LENGTH,
+	MAX_CLASS_CANDIDATES,
 	TAILWIND_INPUT_CSS,
 	tailwindCompileOptions,
 } from "../../../shared/slide-tailwind.ts";
@@ -23,10 +25,19 @@ test("collects unique, decoded class names from rendered HTML", () => {
 	]);
 });
 
-test("keeps the Marp invert class on slides away from Tailwind's color filter", () => {
-	const html = `<section class="invert"><img class="invert" src="a.png"></section>`;
-	deepEqual(extractClassCandidates(html), ["invert"]);
-	deepEqual(extractClassCandidates(`<section class="invert"></section>`), []);
+test("never passes the Marp invert theme class to Tailwind", () => {
+	// An <img class="invert"> would otherwise generate a rule that also matches
+	// <section class="invert"> and color-inverts the whole slide.
+	const html = `<section class="invert"><img class="invert invert-100" src="a.png"></section>`;
+	deepEqual(extractClassCandidates(html), ["invert-100"]);
+});
+
+test("caps the number and length of class candidates", () => {
+	const many = Array.from({ length: MAX_CLASS_CANDIDATES + 10 }, (_, index) => `p-${index}`);
+	const long = `p-[${"1".repeat(MAX_CLASS_CANDIDATE_LENGTH)}px]`;
+	const candidates = extractClassCandidates(`<p class="${long} ${many.join(" ")}">x</p>`);
+	equal(candidates.length, MAX_CLASS_CANDIDATES);
+	ok(!candidates.includes(long));
 });
 
 test("drops candidates that could close the surrounding style element", async () => {

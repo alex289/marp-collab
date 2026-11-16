@@ -67,7 +67,10 @@ describe("Gotenberg PDF request", () => {
 			uploadedFiles.map((file) => file.name),
 			["index.html", "asset0.png"],
 		);
-		ok((await uploadedFiles[0]!.text()).includes("<main>Quarterly Review</main>"));
+		const indexHtml = await uploadedFiles[0]!.text();
+		ok(indexHtml.includes("<main>Quarterly Review</main>"));
+		// The policy precedes the deck's CSS so it covers every resource the CSS loads.
+		ok(indexHtml.indexOf('http-equiv="Content-Security-Policy"') < indexHtml.indexOf("<style>"));
 		deepEqual(Array.from(new Uint8Array(await uploadedFiles[1]!.arrayBuffer())), [1, 2, 3]);
 		equal(form.get("printBackground"), "true");
 		equal(form.get("preferCssPageSize"), "true");
@@ -86,5 +89,17 @@ describe("Gotenberg PDF request", () => {
 				keywords: "one, two",
 			},
 		]);
+	});
+
+	test("allows exactly Marp's own inline script in the PDF policy", async () => {
+		const { Marp } = await import("@marp-team/marp-core");
+		const { createHash } = await import("node:crypto");
+		const { PDF_CONTENT_SECURITY_POLICY } = await import("./gotenberg.ts");
+		const script = /<script>([\s\S]*?)<\/script>/.exec(new Marp().render("# Deck").html)?.[1];
+		ok(script);
+		const hash = createHash("sha256").update(script).digest("base64");
+		ok(PDF_CONTENT_SECURITY_POLICY.includes(`script-src 'sha256-${hash}';`));
+		ok(PDF_CONTENT_SECURITY_POLICY.startsWith("default-src 'none'"));
+		ok(PDF_CONTENT_SECURITY_POLICY.includes("img-src file: data:;"));
 	});
 });

@@ -99,7 +99,8 @@ async function loadSlideTailwind() {
 		const { loadSlideTailwind } = await import("./slide-tailwind");
 		slideTailwind = await loadSlideTailwind();
 	} catch {
-		// Slides keep rendering without Tailwind utilities.
+		// Slides render without Tailwind utilities; the next render tries again.
+		slideTailwindLoading = undefined;
 		return;
 	}
 	for (const listener of slideTailwindListeners) {
@@ -161,7 +162,7 @@ export const renderMarp = (
 	const tailwindCss = slideTailwind(rendered.html);
 	return {
 		...rendered,
-		css: `${rendered.css}\n${projectId ? rewriteCssUrls(tailwindCss, projectId, selectedFileId ?? "", assetToken) : tailwindCss}`,
+		css: `${rendered.css}\n${projectId ? rewriteCssUrls(tailwindCss, projectId, selectedFileId ?? "", assetToken, assetVersion) : tailwindCss}`,
 	};
 };
 
@@ -195,12 +196,14 @@ export function rewriteCssUrls(
 	projectId: string,
 	fileId: string,
 	assetToken = "",
+	assetVersion = 0,
 ): string {
 	const lastSlash = fileId.lastIndexOf("/");
 	const cssDir = lastSlash > -1 ? fileId.slice(0, lastSlash + 1) : "";
-	const query = assetToken ? `?token=${encodeURIComponent(assetToken)}` : "";
+	const query = assetQuery(assetVersion, assetToken);
+	// `(` is excluded from the target so runs of `url(url(…` scan in linear time.
 	return css.replace(
-		/url\(\s*(['"]?)(?!https?:\/\/|data:|\/\/|#)([^'"\s)]+)\1\s*\)/gi,
+		/url\(\s*(['"]?)(?!https?:\/\/|data:|\/\/|#)([^'"\s()]+)\1\s*\)/gi,
 		(_match, quote: string, src: string) => {
 			const resolved = resolveAssetPath(cssDir, src);
 			return `url(${quote}${API_URL}/projects/${projectId}/files/${resolved}${query}${quote})`;

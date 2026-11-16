@@ -4,6 +4,7 @@ import { __unstable__loadDesignSystem, compile } from "tailwindcss";
 import themeCss from "tailwindcss/theme.css?raw";
 import {
 	compileSlideTailwind,
+	isTailwindCandidate,
 	TAILWIND_INPUT_CSS,
 	tailwindCompileOptions,
 } from "../../../shared/slide-tailwind.ts";
@@ -22,7 +23,10 @@ export async function loadTailwindCatalog(): Promise<TailwindCatalog> {
 		tailwindCompileOptions(themeCss),
 	);
 	return {
-		classes: designSystem.getClassList().map(([name]) => name),
+		classes: designSystem
+			.getClassList()
+			.map(([name]) => name)
+			.filter(isTailwindCandidate),
 		variants: designSystem
 			.getVariants()
 			.flatMap(({ name, values, hasDash }) =>

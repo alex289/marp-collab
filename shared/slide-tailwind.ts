@@ -47,27 +47,41 @@ export function tailwindCompileOptions(themeCss: string): TailwindCompileOptions
 export type SlideTailwind = (html: string) => string;
 
 const classAttributeRegex = /\sclass="([^"]*)"/g;
-const tagNameRegex = /^<([\w-]+)/;
 const entities: Record<string, string> = { "&quot;": '"', "&#39;": "'", "&gt;": ">", "&amp;": "&" };
+
+// Bounds the compile work a single deck can cause, far above what real decks use.
+export const MAX_CLASS_CANDIDATES = 5000;
+export const MAX_CLASS_CANDIDATE_LENGTH = 500;
 
 function decodeAttribute(value: string): string {
 	return value.replace(/&(?:quot|#39|gt|amp);/g, (entity) => entities[entity]!);
+}
+
+/** Whether a class name is passed to Tailwind (and offered as a completion). */
+export function isTailwindCandidate(name: string): boolean {
+	return (
+		name.length > 0 &&
+		name.length <= MAX_CLASS_CANDIDATE_LENGTH &&
+		// Generated CSS ends up in a <style> element, which `<` could close.
+		!name.includes("<") &&
+		// `invert` is the Marp theme class for a dark slide. Tailwind's `invert` rule
+		// would match those slides too, wherever else the class is used; `invert-100`
+		// is the Tailwind spelling of the color filter.
+		name !== "invert"
+	);
 }
 
 /** Collects the class names used in rendered Marp HTML as Tailwind candidates. */
 export function extractClassCandidates(html: string): string[] {
 	const candidates = new Set<string>();
 	for (const match of html.matchAll(classAttributeRegex)) {
-		const tagStart = html.lastIndexOf("<", match.index);
-		const tagName = tagNameRegex.exec(html.slice(tagStart))?.[1];
 		for (const name of decodeAttribute(match[1]!).split(/\s+/)) {
-			// `invert` on a slide is the Marp theme class for a dark color scheme, not
-			// Tailwind's color filter. Candidates containing `<` are dropped so generated
-			// CSS can never close the <style> element it ends up in.
-			if (!name || name.includes("<") || (tagName === "section" && name === "invert")) {
-				continue;
+			if (isTailwindCandidate(name)) {
+				candidates.add(name);
+				if (candidates.size >= MAX_CLASS_CANDIDATES) {
+					return [...candidates];
+				}
 			}
-			candidates.add(name);
 		}
 	}
 	return [...candidates];

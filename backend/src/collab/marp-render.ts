@@ -1,6 +1,7 @@
 import { expandMarkdownIncludes } from "../../../shared/markdown-include.ts";
 import { TAILWIND_DIRECTIVE } from "../../../shared/slide-tailwind.ts";
 import { Marp } from "@marp-team/marp-core";
+import { createHash } from "node:crypto";
 import { posix } from "node:path";
 import { getDeckFiles, getDocumentContent } from "../projects/storage.ts";
 import { toDocumentName } from "../projects/document-identity.ts";
@@ -19,12 +20,22 @@ function dirOf(fileId: string): string {
 const INERT_ASSET_DATA_URI =
 	"data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==";
 
+// Marp appends one constant browser script (heading fitting and polyfills) to every
+// render. The PDF's Content-Security-Policy allows exactly that script by its hash.
+const marpScript = /<script>([\s\S]*?)<\/script>/.exec(
+	new Marp({ inlineSVG: true, printable: true }).render("").html,
+)?.[1];
+export const MARP_SCRIPT_CSP_SOURCE = marpScript
+	? `'sha256-${createHash("sha256").update(marpScript).digest("base64")}'`
+	: "'none'";
+
 const themeMarkerRegex = /\/\*[\s\S]*?@theme\s+([\w-]+)/;
 
 // Marpit's `@import "name";` is meant for inheriting from another registered theme by
 // name (e.g. `@import "default";`), but Marpit does not validate the import target
 // This prevents loading arbitrary CSS files from the filesystem or network
-const importRuleRegex = /@import\s+(?:url\(\s*)?(['"]?)([^'");]+)\1\s*\)?\s*;/gi;
+// The target excludes `@` so each match attempt stops at the next rule (no backtracking blowup).
+const importRuleRegex = /@import\s+(?:url\(\s*)?(['"]?)([^'");@]+)\1\s*\)?\s*;/gi;
 
 function sanitizeThemeImports(css: string): string {
 	return css.replace(importRuleRegex, (match, _quote: string, target: string) => {
@@ -134,8 +145,9 @@ export async function renderMarkdownForPdf(
 	}
 
 	function rewriteCssUrls(css: string, dir: string): string {
+		// `(` is excluded from the target so runs of `url(url(…` scan in linear time.
 		return css.replace(
-			/url\(\s*(['"]?)(?!data:|#)([^'"\s)]+)\1\s*\)/gi,
+			/url\(\s*(['"]?)(?!data:|#)([^'"\s()]+)\1\s*\)/gi,
 			(_match, quote: string, src: string) => `url(${quote}${rewriteAssetRef(dir, src)}${quote})`,
 		);
 	}
@@ -206,8 +218,8 @@ export async function renderMarkdownForPdf(
 	const { html, css: themeCss } = marp.render(markdown);
 	let css = themeCss;
 	if (tailwindEnabled) {
-		// Arbitrary values such as bg-[url(...)] go through the same asset rewriting as
-		// theme CSS, so Gotenberg never fetches remote or absolute URLs.
+		// Arbitrary values such as bg-[url(...)] resolve project assets like theme CSS.
+		// Remote URLs hidden in other syntax are blocked by the PDF's CSP (gotenberg.ts).
 		const tailwind = await createSlideTailwind();
 		css += `\n${rewriteCssUrls(tailwind(html), markdownDir)}`;
 	}
