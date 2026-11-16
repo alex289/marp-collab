@@ -1,4 +1,4 @@
-import { cp } from "node:fs/promises";
+import { cp, mkdir } from "node:fs/promises";
 import { join } from "node:path";
 import { defineConfig, type Plugin } from "rolldown";
 
@@ -27,6 +27,22 @@ function copyTemplateAssetsPlugin(): Plugin {
 	};
 }
 
+// Slide Tailwind support compiles against this stylesheet at runtime; see
+// src/collab/slide-tailwind.ts.
+function copyTailwindThemePlugin(): Plugin {
+	return {
+		name: "copy-tailwind-theme",
+		writeBundle: async () => {
+			const targetDir = join(import.meta.dirname, "../dist/assets/tailwind");
+			await mkdir(targetDir, { recursive: true });
+			await cp(
+				join(import.meta.dirname, "./node_modules/tailwindcss/theme.css"),
+				join(targetDir, "theme.css"),
+			);
+		},
+	};
+}
+
 export default defineConfig({
 	// Git tasks run in their own process; see src/projects/git-process.ts.
 	input: { app: "src/app.ts", "git-worker": "src/projects/git-worker.ts" },
@@ -37,7 +53,7 @@ export default defineConfig({
 			__dirname: "import.meta.dirname",
 		},
 	},
-	plugins: [copyNativeAddonsPlugin(), copyTemplateAssetsPlugin()],
+	plugins: [copyNativeAddonsPlugin(), copyTemplateAssetsPlugin(), copyTailwindThemePlugin()],
 	output: {
 		dir: "../dist/bin",
 		format: "esm",

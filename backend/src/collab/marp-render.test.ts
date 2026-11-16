@@ -94,6 +94,49 @@ section { background-image: url("../assets/local.png"); }
 		equal(rendered?.html.match(/file not found/g)?.length, 2);
 	});
 
+	test("generates Tailwind utilities only for decks that opt in", async () => {
+		const body = `<div class="grid grid-cols-2 bg-[url(img/bg.png)] bg-[url(https://example.com/x.png)]">x</div>`;
+		const read = (markdown: string) => () => Promise.resolve(markdown);
+
+		const enabled = await renderMarkdownForPdf(
+			"pdf-tailwind",
+			"decks/deck.md",
+			read(`---\nmarp: true\ntailwind: true\n---\n\n<!-- _class: invert -->\n\n${body}`),
+		);
+		ok(enabled);
+		ok(enabled.css.includes("grid-template-columns: repeat(2, minmax(0, 1fr)) !important"));
+		equal(enabled.assets.get("decks/img/bg.png"), "asset0.png");
+		// The remote URL must reach Gotenberg only as the inert placeholder image.
+		const tailwindCss = enabled.css.slice(enabled.css.indexOf("/*! tailwindcss"));
+		deepEqual(
+			[...tailwindCss.matchAll(/background-image: url\(([^)]*)\)/g)]
+				.map((match) => match[1])
+				.sort(),
+			["asset0.png", "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw=="],
+		);
+		ok(!enabled.css.includes("--tw-invert"));
+
+		const disabled = await renderMarkdownForPdf(
+			"pdf-tailwind",
+			"decks/deck.md",
+			read(`---\nmarp: true\n---\n\n${body}`),
+		);
+		ok(disabled);
+		ok(!disabled.css.includes("grid-template-columns"));
+	});
+
+	test("rewrites CSS URLs in linear time", async () => {
+		// Unclosed `url(` and `@import` runs used to backtrack quadratically (seconds at this size).
+		const css = `/* @theme slow */\nsection { --x: "${"url(".repeat(20_000)}${"@import ".repeat(20_000)}"; }`;
+		await storage.saveDocumentContent("project/pdf-slow-css/slow.css", css);
+		const started = performance.now();
+		const rendered = await renderMarkdownForPdf("pdf-slow-css", "deck.md", (name) =>
+			Promise.resolve(name.endsWith("/deck.md") ? "---\ntheme: slow\n---\n# Slow" : css),
+		);
+		ok(rendered?.html.includes("Slow"));
+		ok(performance.now() - started < 1000);
+	});
+
 	test("returns undefined for a missing markdown document", async () => {
 		equal(await renderMarkdownForPdf("pdf-render", "missing.md"), undefined);
 	});

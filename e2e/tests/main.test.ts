@@ -738,6 +738,37 @@ test.describe("Editor: content editing", () => {
 
 		await expect.poll(() => getPreviewSectionBackground(page)).toBe("rgb(10, 20, 30)");
 	});
+
+	test("styles slides with Tailwind classes and completes them in the editor", async ({ page }) => {
+		await page.goto("/");
+
+		await createPresentation(page, "Tailwind Test");
+		await page.waitForURL(/\/presentations\/.+/);
+
+		const editor = page.locator(".cm-content");
+		await expect(editor).toBeVisible({ timeout: 10_000 });
+		await editor.click();
+		await page.keyboard.press("ControlOrMeta+A");
+		// insertText skips CodeMirror's bracket and tag auto-closing.
+		await page.keyboard.insertText(
+			'---\nmarp: true\ntailwind: true\n---\n\n<div class="bg-sky-500 p-4">Tailwind box</div>\n\n',
+		);
+
+		const box = page.frameLocator('iframe[title="Marp preview"]').getByText("Tailwind box");
+		await expect(box).toHaveCSS("background-color", "oklch(0.685 0.169 237.323)", {
+			timeout: 10_000,
+		});
+		await expect(box).toHaveCSS("padding-top", "16px");
+
+		await page.keyboard.type('<p class="md:bg-rose-500');
+		const completions = page.locator(".cm-tooltip-autocomplete");
+		await expect(completions.getByRole("option", { name: "bg-rose-500" })).toBeVisible({
+			timeout: 10_000,
+		});
+		await expect(page.locator(".cm-completionInfo")).toContainText("background-color");
+		await page.keyboard.press("Enter");
+		await expect(editor).toContainText('<p class="md:bg-rose-500');
+	});
 });
 
 test.describe("Presentation mode", () => {

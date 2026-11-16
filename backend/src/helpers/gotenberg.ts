@@ -1,5 +1,5 @@
 import { readProjectFile } from "../projects/storage.ts";
-import type { RenderedPdfInput } from "../collab/marp-render.ts";
+import { MARP_SCRIPT_CSP_SOURCE, type RenderedPdfInput } from "../collab/marp-render.ts";
 import { getMimeType } from "./file-allowlist.ts";
 
 const GOTENBERG_URL = process.env.GOTENBERG_URL ?? "http://gotenberg:3000";
@@ -22,11 +22,27 @@ function buildStages(rendered: RenderedPdfInput): string {
 	return JSON.stringify([metadata]);
 }
 
+/**
+ * Deck HTML and CSS are user-authored, and CSS can reference URLs in ways no rewrite
+ * catches reliably (image-set(), escapes, inline <style>). The policy keeps Chromium
+ * on the uploaded files, with two fixed exceptions: the font CDNs used by Marp's
+ * built-in themes (Gaia's Lato) and KaTeX math.
+ */
+export const PDF_CONTENT_SECURITY_POLICY = [
+	"default-src 'none'",
+	`script-src ${MARP_SCRIPT_CSP_SOURCE}`,
+	"style-src 'unsafe-inline' https://fonts.bunny.net",
+	"font-src file: data: https://fonts.bunny.net https://cdn.jsdelivr.net",
+	"img-src file: data:",
+	"media-src file: data:",
+].join("; ");
+
 function buildIndexHtml(rendered: RenderedPdfInput): string {
 	return `<!doctype html>
 <html>
 <head>
 <meta charset="UTF-8" />
+<meta http-equiv="Content-Security-Policy" content="${PDF_CONTENT_SECURITY_POLICY}" />
 <style>${rendered.css}</style>
 </head>
 <body>${rendered.html}</body>

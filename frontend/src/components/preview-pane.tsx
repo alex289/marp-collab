@@ -3,6 +3,7 @@ import { Check, Copy, MinusIcon, PlusIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { renderMarp } from "@/lib/marp";
+import { useSlideTailwindReady } from "@/hooks/use-slide-tailwind-ready";
 import { useTheme } from "./theme-provider";
 import marpitSvgPolyfillScript from "@marp-team/marpit-svg-polyfill/lib/polyfill.browser.js?raw";
 import { toast } from "sonner";
@@ -223,9 +224,12 @@ export const PreviewPane = ({
 		}
 	};
 
+	const slideTailwindReady = useSlideTailwindReady();
 	const rendered = useMemo(() => {
 		// Project themes are registered on the shared Marp instance; this invalidates stale renders.
+		// Decks using Tailwind render once more after its lazily loaded compiler is ready.
 		void themeRevision;
+		void slideTailwindReady;
 		try {
 			return renderMarp(markdown, projectId, selectedFileId, assetRevision, assetToken);
 		} catch (error) {
@@ -234,7 +238,15 @@ export const PreviewPane = ({
 				css: "",
 			};
 		}
-	}, [markdown, projectId, selectedFileId, themeRevision, assetRevision, assetToken]);
+	}, [
+		markdown,
+		projectId,
+		selectedFileId,
+		themeRevision,
+		slideTailwindReady,
+		assetRevision,
+		assetToken,
+	]);
 
 	const handlePortMessage = useCallback((event: MessageEvent) => {
 		const payload = event.data;
