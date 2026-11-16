@@ -1,5 +1,7 @@
 export type SlidePresenterComments = {
 	presenter: string | null;
+	/** `null` when the slide has no demo marker, otherwise the (possibly empty) demo title. */
+	demo: string | null;
 	speakerNotes: string[];
 };
 
@@ -9,11 +11,15 @@ export type PresenterUser = {
 };
 
 /**
- * A `presenter: Name` HTML comment identifies the slide's presenter.
+ * A `presenter: Name` HTML comment identifies the slide's presenter and a
+ * `demo` or `demo: Title` comment marks the slide as a live demo. The demo
+ * title is shown to the audience, so only the marker's first line is used;
+ * further lines stay private speaker notes.
  * All other comments remain available as speaker notes.
  */
 export function parseSlidePresenterComments(comments: readonly string[]): SlidePresenterComments {
 	let presenter: string | null = null;
+	let demo: string | null = null;
 	const speakerNotes: string[] = [];
 
 	for (const rawComment of comments) {
@@ -31,11 +37,22 @@ export function parseSlidePresenterComments(comments: readonly string[]): SlideP
 			continue;
 		}
 
+		const demoMatch = /^demo(?:[ \t]*:([^\n]*))?(?:\n([\s\S]*))?$/i.exec(comment);
+		if (demoMatch && demo === null) {
+			demo = demoMatch[1]?.trim() ?? "";
+			const notes = demoMatch[2]?.trim();
+			if (notes) {
+				speakerNotes.push(notes);
+			}
+			continue;
+		}
+
 		speakerNotes.push(comment);
 	}
 
 	return {
 		presenter,
+		demo,
 		speakerNotes,
 	};
 }
