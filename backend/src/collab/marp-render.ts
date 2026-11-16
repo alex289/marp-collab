@@ -20,11 +20,26 @@ function dirOf(fileId: string): string {
 const INERT_ASSET_DATA_URI =
 	"data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==";
 
-// Marp appends one constant browser script (heading fitting and polyfills) to every
-// render. The PDF's Content-Security-Policy allows exactly that script by its hash.
-const marpScript = /<script>([\s\S]*?)<\/script>/.exec(
-	new Marp({ inlineSVG: true, printable: true }).render("").html,
-)?.[1];
+/**
+ * Marp inserts one constant browser script (heading fitting and polyfills) into every
+ * render. The PDF's Content-Security-Policy allows exactly that script by its hash.
+ * Comparing renders with and without the script gives its length, so the element is
+ * isolated without parsing HTML.
+ */
+function marpScriptContent(): string | undefined {
+	const options = { inlineSVG: true, printable: true } as const;
+	const withScript = new Marp(options).render("").html;
+	const withoutScript = new Marp({ ...options, script: false }).render("").html;
+	const start = withScript.indexOf("<script>");
+	const element = withScript.slice(start, start + withScript.length - withoutScript.length);
+	if (start === -1 || !element.endsWith("</script>")) {
+		return undefined;
+	}
+	return element.slice("<script>".length, -"</script>".length);
+}
+
+const marpScript = marpScriptContent();
+// Without a hash the script is blocked: PDFs still render, only heading fitting is lost.
 export const MARP_SCRIPT_CSP_SOURCE = marpScript
 	? `'sha256-${createHash("sha256").update(marpScript).digest("base64")}'`
 	: "'none'";

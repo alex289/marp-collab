@@ -95,8 +95,10 @@ describe("Gotenberg PDF request", () => {
 		const { Marp } = await import("@marp-team/marp-core");
 		const { createHash } = await import("node:crypto");
 		const { PDF_CONTENT_SECURITY_POLICY } = await import("./gotenberg.ts");
-		const script = /<script>([\s\S]*?)<\/script>/.exec(new Marp().render("# Deck").html)?.[1];
-		ok(script);
+		const html = new Marp().render("# Deck").html;
+		const start = html.indexOf("<script>") + "<script>".length;
+		const script = html.slice(start, html.indexOf("</script>", start));
+		ok(script.length > 1000);
 		const hash = createHash("sha256").update(script).digest("base64");
 		ok(PDF_CONTENT_SECURITY_POLICY.includes(`script-src 'sha256-${hash}';`));
 		ok(PDF_CONTENT_SECURITY_POLICY.startsWith("default-src 'none'"));
