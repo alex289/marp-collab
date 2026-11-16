@@ -30,12 +30,15 @@ export function DemoControls({
 	const [now, setNow] = useState(() => Date.now());
 
 	useEffect(() => {
-		const interval = window.setInterval(() => setNow(Date.now()), 1000);
+		// Tick on the Picture-in-Picture window: it stays visible during the
+		// demo, while the hidden opener's timers get throttled.
+		const timerWindow = container.ownerDocument.defaultView ?? window;
+		const interval = timerWindow.setInterval(() => setNow(Date.now()), 1000);
 
 		return () => {
-			window.clearInterval(interval);
+			timerWindow.clearInterval(interval);
 		};
-	}, []);
+	}, [container]);
 
 	return createPortal(
 		<div className="flex h-svh flex-col gap-3 bg-background p-4 text-foreground">

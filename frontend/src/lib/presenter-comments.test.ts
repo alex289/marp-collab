@@ -43,6 +43,32 @@ test("marks a slide as a live demo with an optional title", () => {
 	assert.equal(parseSlidePresenterComments(["demo:"]).demo, "");
 });
 
+test("shows only the first line of a demo marker to the audience", () => {
+	assert.deepEqual(
+		parseSlidePresenterComments([
+			"demo: Login flow\nLog in as admin / secret\n\nThen open settings",
+		]),
+		{
+			presenter: null,
+			demo: "Login flow",
+			speakerNotes: ["Log in as admin / secret\n\nThen open settings"],
+		},
+	);
+	assert.deepEqual(parseSlidePresenterComments(["demo\nPrivate steps"]), {
+		presenter: null,
+		demo: "",
+		speakerNotes: ["Private steps"],
+	});
+});
+
+test("keeps further demo markers on the same slide as speaker notes", () => {
+	assert.deepEqual(parseSlidePresenterComments(["demo: First", "demo: Second"]), {
+		presenter: null,
+		demo: "First",
+		speakerNotes: ["demo: Second"],
+	});
+});
+
 test("keeps notes that only mention a demo as speaker notes", () => {
 	assert.deepEqual(parseSlidePresenterComments(["demo time", "Remember the demo"]), {
 		presenter: null,

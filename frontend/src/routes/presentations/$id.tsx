@@ -164,6 +164,14 @@ function getIsFullscreen() {
 	return document.fullscreenElement !== null;
 }
 
+async function exitFullscreenQuietly() {
+	try {
+		await document.exitFullscreen();
+	} catch {
+		// Fullscreen already ended in the meantime, e.g. via Esc.
+	}
+}
+
 function normalizeSearchSlide(slide: unknown) {
 	if (slide === undefined || slide === null || slide === "") {
 		return null;
@@ -377,6 +385,15 @@ function RouteComponent() {
 	// tooling walks props, and a Window exposes cross-origin frames.
 	const [demoContainer, setDemoContainer] = useState<HTMLElement | null>(null);
 	const demoWindowRef = useRef<Window | null>(null);
+	// Bumped whenever the demo window closes, so a pending open request that
+	// resolves after the demo ended doesn't leave an orphaned window behind.
+	const demoWindowRequestRef = useRef(0);
+	const closeDemoWindow = useCallback(() => {
+		demoWindowRequestRef.current += 1;
+		const current = demoWindowRef.current;
+		demoWindowRef.current = null;
+		current?.close();
+	}, []);
 	const slideHasSpeakerNotesRef = useRef(false);
 	const handleHasSpeakerNotesChange = useCallback((hasSpeakerNotes: boolean) => {
 		slideHasSpeakerNotesRef.current = hasSpeakerNotes;
@@ -940,21 +957,29 @@ function RouteComponent() {
 		if (isPresentation) {
 			setIsBlanked(false);
 			setIsDemo(false);
-			setDemoContainer(null);
 		}
 	}
+
+	// The floating controls live exactly as long as the demo, however it ends:
+	// locally, from another presenter window through awareness, or by leaving
+	// presentation mode.
+	if (!isDemo && demoContainer) {
+		setDemoContainer(null);
+	}
+
+	useEffect(() => {
+		if (!isDemo) {
+			closeDemoWindow();
+		}
+	}, [isDemo, closeDemoWindow]);
 
 	useEffect(() => {
 		if (!isPresentation) {
 			return;
 		}
 
-		return () => {
-			const current = demoWindowRef.current;
-			demoWindowRef.current = null;
-			current?.close();
-		};
-	}, [isPresentation]);
+		return closeDemoWindow;
+	}, [isPresentation, closeDemoWindow]);
 
 	useEffect(() => {
 		if (!isPresentation) {
@@ -1000,16 +1025,14 @@ function RouteComponent() {
 	}
 	const [fullscreenPromptVisible, setFullscreenPromptVisible] = useState(autoFullscreen);
 
-	const closeDemoWindow = useCallback(() => {
-		const current = demoWindowRef.current;
-		demoWindowRef.current = null;
-		setDemoContainer(null);
-		current?.close();
-	}, []);
-
 	const startDemo = useCallback(async () => {
 		setIsDemo(true);
+		const request = ++demoWindowRequestRef.current;
 		const opened = await openDemoWindow({ compact: !slideHasSpeakerNotesRef.current });
+		if (opened && request !== demoWindowRequestRef.current) {
+			opened.close();
+			return;
+		}
 		if (!opened) {
 			if (!supportsDemoWindow()) {
 				toast.info("Floating demo controls need Chrome or Edge. Press D to end the demo.");
@@ -1027,7 +1050,6 @@ function RouteComponent() {
 					return;
 				}
 				demoWindowRef.current = null;
-				setDemoContainer(null);
 				setIsDemo(false);
 			},
 			{ once: true },
@@ -1036,14 +1058,13 @@ function RouteComponent() {
 
 	const endDemo = useCallback(
 		({ advance }: { advance: boolean }) => {
-			closeDemoWindow();
 			setIsDemo(false);
 			if (advance) {
 				setSlideIndex((current) => Math.min(current + 1, maxSlideIndex));
 			}
 			window.focus();
 		},
-		[closeDemoWindow, maxSlideIndex],
+		[maxSlideIndex],
 	);
 
 	const toggleDemo = useCallback(() => {
@@ -1074,7 +1095,7 @@ function RouteComponent() {
 
 	useEffect(() => {
 		if (isViewer && isDemo && document.fullscreenElement) {
-			void document.exitFullscreen();
+			void exitFullscreenQuietly();
 		}
 	}, [isViewer, isDemo]);
 
@@ -1084,7 +1105,8 @@ function RouteComponent() {
 	}, []);
 
 	const toggleViewerFullscreen = useCallback(() => {
-		if (!isViewer) {
+		// Fullscreen would cover the demo app; the prompt returns after the demo.
+		if (!isViewer || isDemo) {
 			return;
 		}
 
@@ -1099,7 +1121,7 @@ function RouteComponent() {
 		}
 
 		void (viewerContainerRef.current ?? document.documentElement).requestFullscreen();
-	}, [isViewer, fullscreenPromptVisible, enterFullscreen]);
+	}, [isViewer, isDemo, fullscreenPromptVisible, enterFullscreen]);
 
 	useEffect(() => {
 		if (!isPresentation || selectedFile?.type !== "markdown" || !collab.awareness) {
@@ -1360,7 +1382,7 @@ function RouteComponent() {
 							<p className="text-sm text-white/70">Presentation paused</p>
 						</div>
 					)}
-					{fullscreenPromptVisible && (
+					{fullscreenPromptVisible && !isDemo && (
 						<div
 							className="absolute inset-0 z-50 flex cursor-pointer flex-col items-center justify-center gap-3 bg-black/70"
 							onClick={enterFullscreen}
