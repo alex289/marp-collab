@@ -803,12 +803,12 @@ export function PresentationFrame({
 												variant="secondary"
 												onClick={() => onDemoEnd({ advance: false })}
 											>
-												End (D)
+												End (L)
 											</Button>
 										)
 									: onDemoStart && (
 											<Button type="button" size="sm" onClick={onDemoStart}>
-												Start (D)
+												Start (L)
 											</Button>
 										)}
 							</CardContent>
