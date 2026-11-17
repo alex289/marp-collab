@@ -100,6 +100,11 @@ async function hasGitDirectory(dir: string): Promise<boolean> {
 	}
 }
 
+/** A cheap check for whether the project has a repository, without reading its settings. */
+export function isProjectGitConfigured(projectId: string): Promise<boolean> {
+	return hasGitDirectory(repositoryDirectory(projectId));
+}
+
 async function getConfiguredProject(projectId: string) {
 	const dir = repositoryDirectory(projectId);
 	if (!(await hasGitDirectory(dir))) {
@@ -249,10 +254,13 @@ export async function pullProjectFromGit({
 	projectId,
 	author,
 	resolutions,
+	message,
 }: {
 	projectId: string;
 	author: GitAuthor;
 	resolutions?: Record<string, ProjectGitResolution>;
+	/** Used when the project has changes to commit before merging. */
+	message?: string;
 }): Promise<{ commit: string; pulled: boolean; overlapping: string[] }> {
 	const { dir, remoteUrl, branch, credentials, folder } = await getConfiguredProject(projectId);
 	const projectDirectory = await getProjectDirectory(projectId);
@@ -264,6 +272,7 @@ export async function pullProjectFromGit({
 		projectDirectory,
 		folder,
 		author,
+		message,
 	});
 	// Until the pulled files are in the project, the repository is ahead of it, and committing the
 	// project would push a revert. So whatever stops the pull, even a server restart, the next sync
@@ -321,10 +330,13 @@ export async function pullProjectFromGit({
 export async function pushProjectToGit({
 	projectId,
 	author,
+	message,
 }: {
 	projectId: string;
 	author: GitAuthor;
-}): Promise<{ commit: string; pushed: boolean }> {
+	/** Used when the project has changes to commit. */
+	message?: string;
+}): Promise<{ commit: string; committed: boolean; pushed: boolean }> {
 	const { dir, remoteUrl, branch, credentials, folder } = await getConfiguredProject(projectId);
 	await finishRollback(dir, branch);
 	return runGitTask({
@@ -336,6 +348,7 @@ export async function pushProjectToGit({
 		remoteUrl,
 		credentials,
 		author,
+		message,
 	});
 }
 

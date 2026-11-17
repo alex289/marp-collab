@@ -1,5 +1,6 @@
 import z from "zod";
 import { PROJECT_TEMPLATE_IDS } from "../../../projects/templates/index.ts";
+import { projectGitResolutionsSchema } from "../../../projects/git-actions.ts";
 
 const projectNameSchema = z.string().trim().min(1).max(255);
 
@@ -135,7 +136,7 @@ const gitConfigSchema = z.object({
 });
 
 const gitPullSchema = z.object({
-	resolutions: z.record(z.string().max(4096), z.enum(["project", "remote"])).optional(),
+	resolutions: projectGitResolutionsSchema.optional(),
 });
 
 export {

@@ -30,6 +30,11 @@ const preparedStatements = {
         from user
         where email = ?
     `),
+	getUserById: db.prepare(`
+        select id, name, email, emailVerified, image, createdAt, updatedAt
+        from user
+        where id = ?
+    `),
 };
 
 export function getUserByEmail(email: string): User | undefined {
@@ -38,4 +43,9 @@ export function getUserByEmail(email: string): User | undefined {
 		return undefined;
 	}
 	return rowToUser(row);
+}
+
+export function getUserById(id: string): User | undefined {
+	const row = preparedStatements.getUserById.get(id) as UserRow | undefined;
+	return row ? rowToUser(row) : undefined;
 }

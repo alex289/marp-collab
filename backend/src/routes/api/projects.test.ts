@@ -681,7 +681,7 @@ describe("projects routes", () => {
 			});
 		try {
 			equal((await save()).status, 200);
-			deepEqual(messages, []);
+			equal(messages.length, 0);
 
 			startProjectGitSync("owner-only-proj");
 			try {
@@ -755,14 +755,28 @@ describe("projects routes", () => {
 			messages.push(payload);
 		});
 		collabServer.documents.set(document.name, document);
-		try {
-			const response = await app.request("/upload-proj/git/push", {
+		const gitSync = await import("../../projects/git-sync.ts");
+		const push = () =>
+			app.request("/upload-proj/git/push", {
 				method: "POST",
 				headers: { "x-test-user-id": "user-1" },
 			});
-			equal(response.status, 409);
+		try {
+			// Without a repository the push fails before editors are disconnected.
+			equal((await push()).status, 409);
+			equal(messages.length, 0);
+
+			await gitSync.configureProjectGit({
+				projectId: "upload-proj",
+				remoteUrl: "https://example.com/slides.git",
+				branch: "main",
+				credentials: {},
+			});
+			t.mock.method(git, "listServerRefs", () => Promise.reject(new Error("offline")));
+			ok((await push()).status >= 400);
 			ok(messages.includes("git-sync-finished"));
 		} finally {
+			await gitSync.disconnectProjectGit("upload-proj");
 			collabServer.documents.delete(document.name);
 			document.destroy();
 		}

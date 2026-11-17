@@ -1,13 +1,15 @@
 import { after, before, test } from "node:test";
-import { deepEqual, equal, match, ok } from "node:assert/strict";
+import { deepEqual, equal, match, ok, rejects } from "node:assert/strict";
 import { createHash, createHmac } from "node:crypto";
 import { rmSync } from "node:fs";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { Hono } from "hono";
 import { serve, type ServerType } from "@hono/node-server";
 import * as Y from "yjs";
+import git from "isomorphic-git";
 
 let tempDir: string;
 let origin: string;
@@ -269,7 +271,7 @@ test("lists only permitted projects and enforces OAuth write scopes", async () =
 	deepEqual(listed.structuredContent.projects, [
 		{ id: "training", name: "Training", readOnly: false },
 	]);
-	for (const name of ["create_presentation", "edit_presentation"]) {
+	for (const name of ["create_presentation", "edit_presentation", "pull_from_git", "push_to_git"]) {
 		const denied = await rpc(
 			"tools/call",
 			{
@@ -549,4 +551,151 @@ test("rechecks collaborator permissions and excludes writes during Git synchroni
 	} finally {
 		lock.finishProjectGitSync("training");
 	}
+});
+
+test("pulls from and pushes to the project's Git repository with a commit message", async (t) => {
+	// An unconfigured project fails before syncing would disconnect its editors.
+	const documentName = "project/training/chapters/deck.md";
+	const editor = await collab.openDirectConnection(documentName, { userId: "owner" });
+	try {
+		const notConfigured = await call("push_to_git", { projectId: "training" });
+		equal(notConfigured.isError, true);
+		match(notConfigured.content[0].text, /not configured/);
+		ok(collab.documents.has(documentName));
+	} finally {
+		await editor.disconnect();
+	}
+
+	const remote = join(tempDir, "git-remote");
+	await mkdir(remote);
+	const run = (dir: string, ...args: string[]) =>
+		execFileSync("git", ["-C", dir, ...args], { encoding: "utf8" }).trim();
+	run(remote, "init", "-b", "main");
+	run(remote, "config", "receive.denyCurrentBranch", "ignore");
+	await writeFile(join(remote, "remote.md"), "# Remote");
+	run(remote, "add", ".");
+	run(remote, "-c", "user.name=T", "-c", "user.email=t@example.com", "commit", "-m", "Initial");
+	const { runGitTasksInProcess } = await import("../projects/git-process.ts");
+	runGitTasksInProcess();
+	t.after(() => runGitTasksInProcess(false));
+	t.mock.method(git, "listServerRefs", () =>
+		Promise.resolve([{ ref: "refs/heads/main", oid: run(remote, "rev-parse", "main") }]),
+	);
+	t.mock.method(git, "fetch", ({ dir }: { dir: string }) => {
+		run(dir, "fetch", remote, "+main:refs/remotes/origin/main");
+		return Promise.resolve();
+	});
+	t.mock.method(git, "push", ({ dir }: { dir: string }) => {
+		run(dir, "push", remote, "main");
+		return Promise.resolve();
+	});
+	await (
+		await import("../projects/git-sync.ts")
+	).configureProjectGit({
+		projectId: "training",
+		remoteUrl: "https://example.com/slides.git",
+		branch: "main",
+		credentials: {},
+	});
+
+	const pulled = await call("pull_from_git", { projectId: "training" });
+	ok(!pulled.isError, pulled.content[0].text);
+	equal(pulled.structuredContent.pulled, true);
+	equal(await storage.getDocumentContent("project/training/remote.md"), "# Remote");
+	ok(
+		!(
+			await call("create_presentation", {
+				projectId: "training",
+				fileId: "git.md",
+				content: "# Git",
+			})
+		).isError,
+	);
+	const pushed = await call("push_to_git", { projectId: "training", message: "Add Git deck" });
+	ok(!pushed.isError, pushed.content[0].text);
+	equal(pushed.structuredContent.pushed, true);
+	equal(
+		run(remote, "log", "-1", "--format=%s|%an <%ae>"),
+		"Add Git deck|owner <owner@example.com>",
+	);
+	equal(run(remote, "show", "main:git.md"), "# Git");
+
+	const again = await call("push_to_git", { projectId: "training", message: "Nothing new" });
+	ok(!again.isError, again.content[0].text);
+	equal(again.structuredContent.committed, false);
+	match(again.structuredContent.note, /message was not used/);
+
+	// A pull commits pending edits with the assistant's message instead of the default.
+	ok(
+		!(
+			await call("create_presentation", {
+				projectId: "training",
+				fileId: "pulled.md",
+				content: "# Pulled",
+			})
+		).isError,
+	);
+	ok(!(await call("pull_from_git", { projectId: "training", message: "Add pulled deck" })).isError);
+	ok(!(await call("push_to_git", { projectId: "training" })).isError);
+	equal(run(remote, "log", "-1", "--format=%s"), "Add pulled deck");
+
+	for (const message of [
+		"Fix typo\n\nCo-authored-by: Someone <a@example.com>",
+		"Hide\u202etext",
+		"Fix\u200ftypo",
+		"Zero\u200bwidth",
+		"   ",
+	]) {
+		equal((await call("push_to_git", { projectId: "training", message })).isError, true);
+	}
+	const resolutions = Object.fromEntries(
+		Array.from({ length: 201 }, (_, index) => [`deck-${index}.md`, "remote"]),
+	);
+	equal((await call("pull_from_git", { projectId: "training", resolutions })).isError, true);
+
+	const { syncProjectWithGit } = await import("../projects/git-actions.ts");
+	const lock = await import("../projects/git-sync-lock.ts");
+	const gitSync = await import("../projects/git-sync.ts");
+	/** Starts a sync that waits for an earlier write, and changes the project while it waits. */
+	async function syncAfterChange(userId: string, change: () => void | Promise<void>) {
+		const release = lock.beginProjectWrite("training")!;
+		let settled = false;
+		const sync = (async () => {
+			try {
+				return await syncProjectWithGit("training", userId, { type: "push", message: "Changed" });
+			} finally {
+				settled = true;
+			}
+		})();
+		while (!lock.isProjectGitSyncing("training") && !settled) {
+			await new Promise((resolve) => setImmediate(resolve));
+		}
+		ok(!settled, "the sync stopped before taking the lock");
+		await change();
+		release();
+		return sync;
+	}
+	// Changes while the sync waits stop it before it closes open documents or pushes.
+	const head = run(remote, "rev-parse", "main");
+	const openEditor = await collab.openDirectConnection(documentName, { userId: "owner" });
+	const closeConnections = t.mock.method(collab, "closeConnections");
+	try {
+		db.prepare(
+			"insert into project_collaborator (projectId,userId,readOnly,createdAt) values ('training','outsider',0,?)",
+		).run(new Date().toISOString());
+		await rejects(
+			syncAfterChange("outsider", () => {
+				db.prepare("delete from project_collaborator where userId = 'outsider'").run();
+			}),
+			/write access/,
+		);
+		await rejects(
+			syncAfterChange("owner", () => gitSync.disconnectProjectGit("training")),
+			/not configured/,
+		);
+		equal(closeConnections.mock.callCount(), 0);
+	} finally {
+		await openEditor.disconnect();
+	}
+	equal(run(remote, "rev-parse", "main"), head);
 });

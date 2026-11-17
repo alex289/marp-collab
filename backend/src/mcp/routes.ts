@@ -13,7 +13,9 @@ export const mcpRouter = new Hono();
 
 const writeToolCallSchema = z.object({
 	method: z.literal("tools/call"),
-	params: z.object({ name: z.enum(["create_presentation", "edit_presentation"]) }),
+	params: z.object({
+		name: z.enum(["create_presentation", "edit_presentation", "pull_from_git", "push_to_git"]),
+	}),
 });
 
 const handleMcp = requireMcpAuth(
