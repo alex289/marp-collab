@@ -58,6 +58,7 @@ type ProjectFiles = Repository & {
 	projectDirectory: string;
 	folder: string;
 	author: GitAuthor;
+	message?: string;
 };
 
 export type GitTask =
@@ -226,6 +227,7 @@ async function commitProjectFiles({
 	projectDirectory,
 	folder,
 	author,
+	message = "Sync project files",
 }: ProjectFiles): Promise<string> {
 	const ref = branchRef(branch);
 	await configureBranch(dir, branch);
@@ -236,7 +238,7 @@ async function commitProjectFiles({
 		() => false,
 	);
 	if (changed || !hasHead) {
-		await git.commit({ fs, dir, ref, message: "Sync project files", author });
+		await git.commit({ fs, dir, ref, message, author });
 	}
 
 	return git.resolveRef({ fs, dir, ref });

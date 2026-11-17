@@ -321,9 +321,12 @@ export async function pullProjectFromGit({
 export async function pushProjectToGit({
 	projectId,
 	author,
+	message,
 }: {
 	projectId: string;
 	author: GitAuthor;
+	/** Used when the project has changes to commit. */
+	message?: string;
 }): Promise<{ commit: string; pushed: boolean }> {
 	const { dir, remoteUrl, branch, credentials, folder } = await getConfiguredProject(projectId);
 	await finishRollback(dir, branch);
@@ -336,6 +339,7 @@ export async function pushProjectToGit({
 		remoteUrl,
 		credentials,
 		author,
+		message,
 	});
 }
 

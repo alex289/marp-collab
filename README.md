@@ -12,94 +12,15 @@ Realtime collaboration editor for marp presentations<br><br>
 
 MarpCollab is a realtime collaboration editor for [Marp](https://marp.app/) presentations. It allows multiple users to edit the same presentation simultaneously, with changes reflected in real-time.
 
-## Include Markdown files
+## Features
 
-Reuse slides from another `.md` or `.markdown` file in the same project with a standalone comment:
-
-```markdown
-<!-- @include: chapters/intro.md -->
-```
-
-Paths are relative to the file containing the comment, including for nested includes. Leading YAML frontmatter in included files is stripped. Preview, slide overview, presentation navigation and PDF export use the expanded content; the editor keeps the original comments. Clicking an included slide jumps to its include comment in the main file.
-
-Included content refreshes every three seconds and PDF export reads active edits. Missing files, cycles and invalid paths produce inline errors. Expansion allows up to 10 nested levels, 100 includes and 1,000,000 total source characters. Comments in fenced or indented code examples are left unchanged.
-
-Image paths in included content currently resolve relative to the main deck. Slide reordering is disabled for decks with includes; edit the source files to reorder those slides.
-
-## Tailwind CSS
-
-Enable [Tailwind CSS](https://tailwindcss.com/) utilities for a deck with the `tailwind` directive:
-
-```markdown
----
-marp: true
-tailwind: true
----
-
-<!-- _class: bg-none bg-slate-900 text-white -->
-
-<div class="grid grid-cols-2 gap-8">
-<div class="rounded-xl bg-sky-100 p-6">Left</div>
-<div class="rounded-xl bg-rose-100 p-6">Right</div>
-</div>
-```
-
-Utilities are generated for the classes used in the deck and apply in the preview, presentation mode and PDF export. They are marked `!important` so they win over theme styles, and Tailwind's Preflight reset is left out so themes keep their typography. Some themes paint a gradient as `background-image`; add `bg-none` before a background color to replace it. `invert` stays the Marp theme class for dark slides; use `invert-100` for Tailwind's color filter. Responsive variants such as `md:` follow the window width rather than the slide size. Relative paths in arbitrary values like `bg-[url(images/bg.png)]` resolve like theme CSS.
-
-The editor completes Tailwind classes and variants in `class` attributes and `class` directives of decks that enable the directive, with a preview of the generated CSS. Negative utilities such as `-mt-4` appear after typing a leading `-`.
-
-## Live demos during a presentation
-
-Start a live demo from the presenter view with the **Live demo** button or <kbd>L</kbd>. The presentation keeps running in the background: slide, timer and audience windows stay where they are. Audience windows show a "Live demo" screen and leave fullscreen so the demo app can use the screen. Browsers only allow fullscreen after a click, so the audience window asks for one click when the demo ends.
-
-In Chrome and Edge, a small always-on-top window shows the demo timer, the slide's speaker notes, and buttons to return to the presentation or continue with the next slide. Closing that window ends the demo too. Other browsers keep the demo state; press <kbd>L</kbd> again in the presenter view to return.
-
-Mark slides that lead into a demo so the presenter view points them out and the audience sees the title:
-
-```markdown
-<!-- demo: Show the login flow -->
-<!-- Log in as the test user, then open the admin panel -->
-```
-
-`<!-- demo -->` without a title works as well. Other comments on the slide remain speaker notes.
-
-## AI presentation editing with MCP
-
-Connect an MCP-compatible AI client to `${URL}/mcp` using Streamable HTTP. For local
-development the URL is `http://localhost:5173/mcp`. Sign in with your usual provider
-and approve the requested permissions. Public deployments require HTTPS and the
-`URL` setting must match the address used by the client. No model API key is needed
-in MarpCollab: the connected AI client generates the Markdown.
-
-The server supports current MCP requests and stateless 2025 Streamable HTTP clients.
-Clients can identify themselves with Client ID Metadata Documents (CIMD). For older
-clients that require Dynamic Client Registration (DCR), explicitly set
-`MCP_ALLOW_DYNAMIC_CLIENT_REGISTRATION=true` and restart. This opens client
-registration to unauthenticated clients; accessing presentations still requires
-user login and consent. Registration is disabled by default.
-
-Available tools are `list_projects`, `list_files`, `read_presentation`,
-`create_presentation`, and `edit_presentation`. Create a project in the app first,
-then ask your assistant, for example: “Create a ten-slide introduction to Kubernetes
-in my Training project.” The server also exposes a Marp authoring guide.
-
-The OAuth scopes are `presentations:read`, `presentations:write`, and optional
-`offline_access` for refresh tokens. Request both presentation scopes to create or
-edit decks; read-only tokens expose only the reading tools. Access covers owned and
-shared projects and is checked against current project permissions on every call.
-The server exposes no project deletion or collaborator-management tools.
-
-Edits synchronize with open editors and require the revision returned by
-`read_presentation`. Stale revisions are rejected so the assistant can reread and
-reapply its changes. New files never overwrite existing files. OAuth and signing
-key tables are added automatically by the database migration on startup.
-
-Reverse proxies must forward `/mcp`, `/.well-known/*`, and `/api/v1/auth/*` to the
-backend. The development Vite proxy already forwards these paths. MCP requests use
-OAuth access tokens; existing browser API routes continue to require session cookies.
-
-Implementation follows the [Better Auth MCP integration](https://better-auth.com/docs/plugins/mcp)
-and the [official MCP TypeScript SDK](https://ts.sdk.modelcontextprotocol.io/v2/).
+- **Realtime collaboration** – edit decks together with live preview
+- **Presenter view** – speaker notes, timer, synced audience windows and [live demos](docs/live-demos.md)
+- **Markdown includes** – reuse slides from other files with `<!-- @include: intro.md -->` ([docs](docs/markdown-includes.md))
+- **Tailwind CSS** – style slides with utility classes via `tailwind: true` ([docs](docs/tailwind.md))
+- **Git sync** – pull from and push to a Git repository
+- **PDF export**
+- **AI editing via MCP** – let AI assistants create, edit and version decks at `${URL}/mcp` ([docs](docs/mcp.md))
 
 ## Getting Started
 

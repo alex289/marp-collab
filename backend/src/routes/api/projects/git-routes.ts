@@ -1,11 +1,5 @@
 import { Hono, type Context } from "hono";
 import z from "zod";
-import {
-	broadcastFilesChanged,
-	broadcastGitSyncFinished,
-	flushAndCloseProjectDocuments,
-} from "../../../collab/project-events.ts";
-import { getProjectById } from "../../../db/models/project.ts";
 import { ProjectGitNetworkError } from "../../../projects/git-http.ts";
 import { logger } from "../../../helpers/logger.ts";
 import {
@@ -13,13 +7,14 @@ import {
 	type ProjectRouteVariables,
 } from "../../../middleware/project-access-middleware.ts";
 import {
-	beginGitOperation,
-	finishProjectGitConfigure,
-	finishProjectGitSync,
-	startProjectGitConfigure,
-	startProjectGitSync,
-	waitForProjectWrites,
-} from "../../../projects/git-sync-lock.ts";
+	ProjectDeletedError,
+	ProjectGitBusyError,
+	ProjectGitServerBusyError,
+	syncProjectWithGit,
+	withGitOperation,
+	withProjectConfigureLock,
+	type ProjectGitAction,
+} from "../../../projects/git-actions.ts";
 import { ProjectGitConflictError } from "../../../projects/git-merge.ts";
 import {
 	disconnectProjectGit,
@@ -30,8 +25,6 @@ import {
 	ProjectGitRejectedError,
 	ProjectGitRemoteError,
 	ProjectGitTransportError,
-	pullProjectFromGit,
-	pushProjectToGit,
 	saveProjectGitConfig,
 	verifyProjectGitRemote,
 } from "../../../projects/git-sync.ts";
@@ -45,52 +38,18 @@ function writeOnly(c: Context<GitRoutesEnv>) {
 	return c.json({ error: "You do not have write access to this project" }, 403);
 }
 
-function alreadySyncing(c: Context<GitRoutesEnv>) {
-	return c.json({ error: "This project is already syncing" }, 409);
-}
-
-function serverBusy(c: Context<GitRoutesEnv>) {
-	return c.json({ error: "Too many Git syncs are running. Try again shortly." }, 429);
-}
-
-class ProjectDeletedError extends Error {}
-
-/** Deleting a project holds its Git lock, so a deletion has finished if the project is gone now. */
-function assertProjectExists(projectId: string): void {
-	if (!getProjectById(projectId)) {
-		throw new ProjectDeletedError("Project not found");
+/** Answers for errors every Git operation can report; returns undefined for others. */
+function lockErrorResponse(c: Context<GitRoutesEnv>, error: unknown) {
+	if (error instanceof ProjectDeletedError) {
+		return c.json({ error: error.message }, 404);
 	}
-}
-
-/** Holds the project's sync lock, which makes editors wait and reconnect once it is released. */
-async function withProjectSyncLock<T>(projectId: string, run: () => Promise<T>): Promise<T | null> {
-	if (!startProjectGitSync(projectId)) {
-		return null;
+	if (error instanceof ProjectGitBusyError) {
+		return c.json({ error: error.message }, 409);
 	}
-	try {
-		assertProjectExists(projectId);
-		return await run();
-	} finally {
-		finishProjectGitSync(projectId);
-		broadcastFilesChanged(projectId);
-		broadcastGitSyncFinished(projectId);
+	if (error instanceof ProjectGitServerBusyError) {
+		return c.json({ error: error.message }, 429);
 	}
-}
-
-/** Holds the project's Git repository for a settings change; editors keep working meanwhile. */
-async function withProjectConfigureLock<T>(
-	projectId: string,
-	run: () => Promise<T>,
-): Promise<T | null> {
-	if (!startProjectGitConfigure(projectId)) {
-		return null;
-	}
-	try {
-		assertProjectExists(projectId);
-		return await run();
-	} finally {
-		finishProjectGitConfigure(projectId);
-	}
+	return undefined;
 }
 
 app.get("/:projectId/git", async (c) => {
@@ -118,19 +77,17 @@ app.put("/:projectId/git", requireProjectOwner, async (c) => {
 			token: parsed.data.token,
 		},
 	};
-	const release = beginGitOperation();
-	if (!release) {
-		return serverBusy(c);
-	}
-
 	try {
-		// Check the remote before locking, so a slow network does not hold the repository.
-		await verifyProjectGitRemote(settings);
-		const config = await withProjectConfigureLock(projectId, () => saveProjectGitConfig(settings));
-		return config ? c.json(config) : alreadySyncing(c);
+		const config = await withGitOperation(async () => {
+			// Check the remote before locking, so a slow network does not hold the repository.
+			await verifyProjectGitRemote(settings);
+			return withProjectConfigureLock(projectId, () => saveProjectGitConfig(settings));
+		});
+		return c.json(config);
 	} catch (error) {
-		if (error instanceof ProjectDeletedError) {
-			return c.json({ error: error.message }, 404);
+		const response = lockErrorResponse(c, error);
+		if (response) {
+			return response;
 		}
 		if (
 			error instanceof ProjectGitRemoteError ||
@@ -148,8 +105,6 @@ app.put("/:projectId/git", requireProjectOwner, async (c) => {
 			"Saving Git settings failed",
 		);
 		return c.json({ error: "Could not save Git settings" }, 500);
-	} finally {
-		release();
 	}
 });
 
@@ -160,57 +115,45 @@ app.delete("/:projectId/git", requireProjectOwner, async (c) => {
 			await disconnectProjectGit(projectId);
 			return getProjectGitConfig(projectId);
 		});
-		return config ? c.json(config) : alreadySyncing(c);
+		return c.json(config);
 	} catch (error) {
-		if (error instanceof ProjectDeletedError) {
-			return c.json({ error: error.message }, 404);
+		const response = lockErrorResponse(c, error);
+		if (response) {
+			return response;
 		}
 		throw error;
 	}
 });
 
-async function runGitAction(
-	c: Context<GitRoutesEnv>,
-	action: "pull" | "push",
-	resolutions?: Record<string, "project" | "remote">,
-) {
+async function runGitAction(c: Context<GitRoutesEnv>, action: ProjectGitAction) {
 	if (c.get("projectAccess").readOnly) {
 		return writeOnly(c);
 	}
 
 	const projectId = c.req.param("projectId")!;
-	const release = beginGitOperation();
-	if (!release) {
-		return serverBusy(c);
-	}
-
+	const user = c.get("user")!;
 	try {
-		const result = await withProjectSyncLock(projectId, async () => {
-			await waitForProjectWrites(projectId);
-			await flushAndCloseProjectDocuments(projectId);
-			const user = c.get("user")!;
-			const options = {
+		return c.json(
+			await syncProjectWithGit(
 				projectId,
-				author: { name: user.name || user.email, email: user.email },
-			};
-			return action === "pull"
-				? pullProjectFromGit({ ...options, resolutions })
-				: pushProjectToGit(options);
-		});
-		return result ? c.json(result) : alreadySyncing(c);
+				{ name: user.name || user.email, email: user.email },
+				action,
+			),
+		);
 	} catch (error) {
+		const response = lockErrorResponse(c, error);
+		if (response) {
+			return response;
+		}
 		logger.warn(
 			{
 				projectId,
-				action,
+				action: action.type,
 				error: error instanceof Error ? { name: error.name, message: error.message } : error,
 			},
-			`Git ${action} failed`,
+			`Git ${action.type} failed`,
 		);
 
-		if (error instanceof ProjectDeletedError) {
-			return c.json({ error: error.message }, 404);
-		}
 		if (
 			error instanceof ProjectGitNetworkError ||
 			error instanceof ProjectGitContentError ||
@@ -231,9 +174,7 @@ async function runGitAction(
 			return c.json({ error: error.message }, 502);
 		}
 
-		return c.json({ error: `Git ${action} failed` }, 500);
-	} finally {
-		release();
+		return c.json({ error: `Git ${action.type} failed` }, 500);
 	}
 }
 
@@ -242,8 +183,8 @@ app.post("/:projectId/git/pull", async (c) => {
 	if (!parsed.success) {
 		return c.json({ error: z.prettifyError(parsed.error) }, 400);
 	}
-	return runGitAction(c, "pull", parsed.data.resolutions);
+	return runGitAction(c, { type: "pull", resolutions: parsed.data.resolutions });
 });
-app.post("/:projectId/git/push", (c) => runGitAction(c, "push"));
+app.post("/:projectId/git/push", (c) => runGitAction(c, { type: "push" }));
 
 export default app;
