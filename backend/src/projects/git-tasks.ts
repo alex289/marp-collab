@@ -77,7 +77,8 @@ type GitTaskResults = {
 	commit: string;
 	pull: { commit: string; pulled: boolean; overlapping: string[] };
 	reset: undefined;
-	push: { commit: string; pushed: boolean };
+	/** `committed` is false when the project had no changes since the last commit. */
+	push: { commit: string; committed: boolean; pushed: boolean };
 };
 
 export type GitTaskResult<T extends GitTask> = GitTaskResults[T["type"]];
@@ -220,7 +221,7 @@ async function configureBranch(dir: string, branch: string): Promise<void> {
 	await git.setConfig({ fs, dir, path: `branch.${branch}.merge`, value: branchRef(branch) });
 }
 
-/** Copies the project's files into the repository and commits them. Returns the branch's commit. */
+/** Copies the project's files into the repository and commits them if they changed. */
 async function commitProjectFiles({
 	repository: dir,
 	branch,
@@ -228,7 +229,7 @@ async function commitProjectFiles({
 	folder,
 	author,
 	message = "Sync project files",
-}: ProjectFiles): Promise<string> {
+}: ProjectFiles): Promise<{ commit: string; committed: boolean }> {
 	const ref = branchRef(branch);
 	await configureBranch(dir, branch);
 	await syncSupportedFiles(projectDirectory, join(dir, folder));
@@ -237,11 +238,12 @@ async function commitProjectFiles({
 		() => true,
 		() => false,
 	);
-	if (changed || !hasHead) {
+	const committed = changed || !hasHead;
+	if (committed) {
 		await git.commit({ fs, dir, ref, message, author });
 	}
 
-	return git.resolveRef({ fs, dir, ref });
+	return { commit: await git.resolveRef({ fs, dir, ref }), committed };
 }
 
 async function getRemoteBranch({ remoteUrl, branch, credentials }: Remote) {
@@ -352,7 +354,7 @@ async function pullRemote({
 async function pushProject(
 	task: Extract<GitTask, { type: "push" }>,
 ): Promise<GitTaskResults["push"]> {
-	const commit = await commitProjectFiles(task);
+	const { commit, committed } = await commitProjectFiles(task);
 	const remoteBranch = await getRemoteBranch(task);
 	const pushed = remoteBranch?.oid !== commit;
 	if (pushed) {
@@ -367,7 +369,7 @@ async function pushProject(
 		});
 	}
 
-	return { commit, pushed };
+	return { commit, committed, pushed };
 }
 
 export function handleGitTask(task: GitTask): Promise<GitTaskResults[keyof GitTaskResults]> {
@@ -375,7 +377,7 @@ export function handleGitTask(task: GitTask): Promise<GitTaskResults[keyof GitTa
 		case "verify":
 			return verifyRemote(task.remoteUrl, task.credentials);
 		case "commit":
-			return commitProjectFiles(task);
+			return commitProjectFiles(task).then(({ commit }) => commit);
 		case "pull":
 			return pullRemote(task);
 		case "reset":

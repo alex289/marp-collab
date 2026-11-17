@@ -265,6 +265,7 @@ describe("project Git sync", () => {
 			const commits = run(remote, "rev-list", "--count", "slides");
 			deepEqual(await gitSync.pushProjectToGit({ projectId, author }), {
 				commit: run(remote, "rev-parse", "slides"),
+				committed: false,
 				pushed: false,
 			});
 			equal(run(remote, "rev-list", "--count", "slides"), commits);

@@ -620,7 +620,32 @@ test("pulls from and pushes to the project's Git repository with a commit messag
 	);
 	equal(run(remote, "show", "main:git.md"), "# Git");
 
-	for (const message of ["Fix typo\n\nCo-authored-by: Someone <a@example.com>", "Hide\u202etext"]) {
+	const again = await call("push_to_git", { projectId: "training", message: "Nothing new" });
+	ok(!again.isError, again.content[0].text);
+	equal(again.structuredContent.committed, false);
+	match(again.structuredContent.note, /message was not used/);
+
+	// A pull commits pending edits with the assistant's message instead of the default.
+	ok(
+		!(
+			await call("create_presentation", {
+				projectId: "training",
+				fileId: "pulled.md",
+				content: "# Pulled",
+			})
+		).isError,
+	);
+	ok(!(await call("pull_from_git", { projectId: "training", message: "Add pulled deck" })).isError);
+	ok(!(await call("push_to_git", { projectId: "training" })).isError);
+	equal(run(remote, "log", "-1", "--format=%s"), "Add pulled deck");
+
+	for (const message of [
+		"Fix typo\n\nCo-authored-by: Someone <a@example.com>",
+		"Hide\u202etext",
+		"Fix\u200ftypo",
+		"Zero\u200bwidth",
+		"   ",
+	]) {
 		equal((await call("push_to_git", { projectId: "training", message })).isError, true);
 	}
 	const resolutions = Object.fromEntries(
@@ -628,20 +653,49 @@ test("pulls from and pushes to the project's Git repository with a commit messag
 	);
 	equal((await call("pull_from_git", { projectId: "training", resolutions })).isError, true);
 
-	// Access revoked while the sync waits for earlier writes stops it before it pushes.
 	const { syncProjectWithGit } = await import("../projects/git-actions.ts");
 	const lock = await import("../projects/git-sync-lock.ts");
-	db.prepare(
-		"insert into project_collaborator (projectId,userId,readOnly,createdAt) values ('training','outsider',0,?)",
-	).run(new Date().toISOString());
-	const head = run(remote, "rev-parse", "main");
-	const release = lock.beginProjectWrite("training")!;
-	const sync = syncProjectWithGit("training", "outsider", { type: "push", message: "Revoked" });
-	while (!lock.isProjectGitSyncing("training")) {
-		await new Promise((resolve) => setImmediate(resolve));
+	const gitSync = await import("../projects/git-sync.ts");
+	/** Starts a sync that waits for an earlier write, and changes the project while it waits. */
+	async function syncAfterChange(userId: string, change: () => void | Promise<void>) {
+		const release = lock.beginProjectWrite("training")!;
+		let settled = false;
+		const sync = (async () => {
+			try {
+				return await syncProjectWithGit("training", userId, { type: "push", message: "Changed" });
+			} finally {
+				settled = true;
+			}
+		})();
+		while (!lock.isProjectGitSyncing("training") && !settled) {
+			await new Promise((resolve) => setImmediate(resolve));
+		}
+		ok(!settled, "the sync stopped before taking the lock");
+		await change();
+		release();
+		return sync;
 	}
-	db.prepare("delete from project_collaborator where userId = 'outsider'").run();
-	release();
-	await rejects(sync, /write access/);
+	// Changes while the sync waits stop it before it closes open documents or pushes.
+	const head = run(remote, "rev-parse", "main");
+	const openEditor = await collab.openDirectConnection(documentName, { userId: "owner" });
+	const closeConnections = t.mock.method(collab, "closeConnections");
+	try {
+		db.prepare(
+			"insert into project_collaborator (projectId,userId,readOnly,createdAt) values ('training','outsider',0,?)",
+		).run(new Date().toISOString());
+		await rejects(
+			syncAfterChange("outsider", () => {
+				db.prepare("delete from project_collaborator where userId = 'outsider'").run();
+			}),
+			/write access/,
+		);
+		await rejects(
+			syncAfterChange("owner", () => gitSync.disconnectProjectGit("training")),
+			/not configured/,
+		);
+		equal(closeConnections.mock.callCount(), 0);
+	} finally {
+		await openEditor.disconnect();
+	}
 	equal(run(remote, "rev-parse", "main"), head);
 });

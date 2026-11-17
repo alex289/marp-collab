@@ -22,7 +22,7 @@ import {
 	waitForProjectWrites,
 } from "./git-sync-lock.ts";
 import {
-	getProjectGitConfig,
+	isProjectGitConfigured,
 	ProjectGitContentError,
 	ProjectGitNotConfiguredError,
 	ProjectGitProcessError,
@@ -50,7 +50,7 @@ export const projectGitResolutionsSchema = z
 	});
 
 export type ProjectGitAction =
-	| { type: "pull"; resolutions?: Record<string, ProjectGitResolution> }
+	| { type: "pull"; resolutions?: Record<string, ProjectGitResolution>; message?: string }
 	| { type: "push"; message?: string };
 
 export type ProjectGitFailure =
@@ -162,6 +162,12 @@ async function withProjectSyncLock<T>(projectId: string, run: () => Promise<T>):
 	}
 }
 
+async function assertGitConfigured(projectId: string): Promise<void> {
+	if (!(await isProjectGitConfigured(projectId))) {
+		throw new ProjectGitNotConfiguredError("Git sync is not configured");
+	}
+}
+
 /** Pulls or pushes a project as the given user after saving and closing open documents. */
 export async function syncProjectWithGit(
 	projectId: string,
@@ -173,19 +179,24 @@ export async function syncProjectWithGit(
 	if (!user) {
 		throw new ProjectGitAccessError("You do not have write access to this project");
 	}
-	// Syncing disconnects every editor, so do not start one that cannot succeed.
-	if (!(await getProjectGitConfig(projectId)).configured) {
-		throw new ProjectGitNotConfiguredError("Git sync is not configured");
-	}
+	// Syncing makes every editor reconnect, so do not start one that cannot succeed.
+	await assertGitConfigured(projectId);
 	const author = { name: user.name || user.email, email: user.email };
 	return withGitOperation(() =>
 		withProjectSyncLock(projectId, async () => {
 			await waitForProjectWrites(projectId);
-			await flushAndCloseProjectDocuments(projectId);
-			// Access may have been revoked while earlier writes finished.
+			// Access or settings may have changed while earlier writes finished; check again before
+			// closing everyone's documents.
 			assertWriteAccess(projectId, userId);
+			await assertGitConfigured(projectId);
+			await flushAndCloseProjectDocuments(projectId);
 			return action.type === "pull"
-				? pullProjectFromGit({ projectId, author, resolutions: action.resolutions })
+				? pullProjectFromGit({
+						projectId,
+						author,
+						resolutions: action.resolutions,
+						message: action.message,
+					})
 				: pushProjectToGit({ projectId, author, message: action.message });
 		}),
 	);

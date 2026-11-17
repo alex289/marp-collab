@@ -29,7 +29,8 @@ pull remote changes and push commits with its own one-line commit message, for
 example after each finished chapter. Each sync briefly reconnects everyone editing
 the project. Pulls report conflicting paths so the assistant can ask which
 version to keep and pull again with a resolution per path. Pushes are rejected while
-the remote has newer changes. The Git tools need the `presentations:write` scope and
+the remote has newer changes; the assistant then pulls with its commit message, so the
+pending edits are committed under that message, and pushes again. The Git tools need the `presentations:write` scope and
 write access to the project; connecting or changing the repository stays in the app.
 
 Edits synchronize with open editors and require the revision returned by
