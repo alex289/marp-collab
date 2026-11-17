@@ -64,8 +64,8 @@ type GitTaskOptions = Partial<typeof GIT_TASK_LIMITS> & { worker?: string };
 let inProcess = false;
 
 /** Lets tests run tasks in the test's process, so they can stub isomorphic-git's network calls. */
-export function runGitTasksInProcess(): void {
-	inProcess = true;
+export function runGitTasksInProcess(enabled = true): void {
+	inProcess = enabled;
 }
 
 /** Resident memory from Linux's /proc, or null where that is unavailable. */

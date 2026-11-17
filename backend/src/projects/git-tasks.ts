@@ -27,7 +27,7 @@ export const GIT_TREE_LIMITS = { entries: 50_000, bytes: MAX_GIT_PACK_UNPACKED_B
 const MAX_GIT_NAME_BYTES = 255;
 const MAX_GIT_PATH_BYTES = 4096;
 const MAX_ERROR_MESSAGE_LENGTH = 1000;
-const MAX_REPORTED_CONFLICTS = 200;
+export const MAX_REPORTED_CONFLICTS = 200;
 
 export type GitAuthor = {
 	name: string;

@@ -25,8 +25,9 @@ shared projects and is checked against current project permissions on every call
 The server exposes no project deletion or collaborator-management tools.
 
 When the project owner has connected a Git repository in the app, the assistant can
-pull remote changes and push commits with its own commit message, for example after
-each finished chapter. Pulls report conflicting paths so the assistant can ask which
+pull remote changes and push commits with its own one-line commit message, for
+example after each finished chapter. Each sync briefly reconnects everyone editing
+the project. Pulls report conflicting paths so the assistant can ask which
 version to keep and pull again with a resolution per path. Pushes are rejected while
 the remote has newer changes. The Git tools need the `presentations:write` scope and
 write access to the project; connecting or changing the repository stays in the app.

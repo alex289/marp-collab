@@ -1,30 +1,21 @@
 import { Hono, type Context } from "hono";
 import z from "zod";
-import { ProjectGitNetworkError } from "../../../projects/git-http.ts";
 import { logger } from "../../../helpers/logger.ts";
 import {
 	requireProjectOwner,
 	type ProjectRouteVariables,
 } from "../../../middleware/project-access-middleware.ts";
 import {
-	ProjectDeletedError,
-	ProjectGitBusyError,
-	ProjectGitServerBusyError,
+	classifyGitError,
 	syncProjectWithGit,
 	withGitOperation,
 	withProjectConfigureLock,
 	type ProjectGitAction,
+	type ProjectGitFailure,
 } from "../../../projects/git-actions.ts";
-import { ProjectGitConflictError } from "../../../projects/git-merge.ts";
 import {
 	disconnectProjectGit,
 	getProjectGitConfig,
-	ProjectGitContentError,
-	ProjectGitNotConfiguredError,
-	ProjectGitProcessError,
-	ProjectGitRejectedError,
-	ProjectGitRemoteError,
-	ProjectGitTransportError,
 	saveProjectGitConfig,
 	verifyProjectGitRemote,
 } from "../../../projects/git-sync.ts";
@@ -34,22 +25,31 @@ type GitRoutesEnv = { Variables: ProjectRouteVariables };
 
 const app = new Hono<GitRoutesEnv>();
 
+const failureStatus = {
+	deleted: 404,
+	forbidden: 403,
+	busy: 409,
+	"server-busy": 429,
+	invalid: 400,
+	"not-configured": 409,
+	conflict: 409,
+	rejected: 409,
+	transport: 502,
+} as const satisfies Record<ProjectGitFailure["kind"], number>;
+
 function writeOnly(c: Context<GitRoutesEnv>) {
 	return c.json({ error: "You do not have write access to this project" }, 403);
 }
 
-/** Answers for errors every Git operation can report; returns undefined for others. */
-function lockErrorResponse(c: Context<GitRoutesEnv>, error: unknown) {
-	if (error instanceof ProjectDeletedError) {
-		return c.json({ error: error.message }, 404);
-	}
-	if (error instanceof ProjectGitBusyError) {
-		return c.json({ error: error.message }, 409);
-	}
-	if (error instanceof ProjectGitServerBusyError) {
-		return c.json({ error: error.message }, 429);
-	}
-	return undefined;
+function failureResponse(c: Context<GitRoutesEnv>, failure: ProjectGitFailure) {
+	const status = failureStatus[failure.kind];
+	return failure.kind === "conflict"
+		? c.json({ error: failure.message, conflicts: failure.conflicts }, status)
+		: c.json({ error: failure.message }, status);
+}
+
+function logError(error: unknown) {
+	return error instanceof Error ? { name: error.name, message: error.message } : error;
 }
 
 app.get("/:projectId/git", async (c) => {
@@ -85,25 +85,11 @@ app.put("/:projectId/git", requireProjectOwner, async (c) => {
 		});
 		return c.json(config);
 	} catch (error) {
-		const response = lockErrorResponse(c, error);
-		if (response) {
-			return response;
+		const failure = classifyGitError(error);
+		if (failure) {
+			return failureResponse(c, failure);
 		}
-		if (
-			error instanceof ProjectGitRemoteError ||
-			error instanceof ProjectGitContentError ||
-			error instanceof ProjectGitNetworkError ||
-			(error instanceof ProjectGitProcessError && error.exceededLimit)
-		) {
-			return c.json({ error: error.message }, 400);
-		}
-		logger.warn(
-			{
-				projectId,
-				error: error instanceof Error ? { name: error.name, message: error.message } : error,
-			},
-			"Saving Git settings failed",
-		);
+		logger.warn({ projectId, error: logError(error) }, "Saving Git settings failed");
 		return c.json({ error: "Could not save Git settings" }, 500);
 	}
 });
@@ -117,9 +103,9 @@ app.delete("/:projectId/git", requireProjectOwner, async (c) => {
 		});
 		return c.json(config);
 	} catch (error) {
-		const response = lockErrorResponse(c, error);
-		if (response) {
-			return response;
+		const failure = classifyGitError(error);
+		if (failure) {
+			return failureResponse(c, failure);
 		}
 		throw error;
 	}
@@ -131,50 +117,19 @@ async function runGitAction(c: Context<GitRoutesEnv>, action: ProjectGitAction) 
 	}
 
 	const projectId = c.req.param("projectId")!;
-	const user = c.get("user")!;
 	try {
-		return c.json(
-			await syncProjectWithGit(
-				projectId,
-				{ name: user.name || user.email, email: user.email },
-				action,
-			),
-		);
+		return c.json(await syncProjectWithGit(projectId, c.get("user")!.id, action));
 	} catch (error) {
-		const response = lockErrorResponse(c, error);
-		if (response) {
-			return response;
+		const failure = classifyGitError(error);
+		if (failure?.kind !== "busy" && failure?.kind !== "server-busy") {
+			logger.warn(
+				{ projectId, action: action.type, error: logError(error) },
+				`Git ${action.type} failed`,
+			);
 		}
-		logger.warn(
-			{
-				projectId,
-				action: action.type,
-				error: error instanceof Error ? { name: error.name, message: error.message } : error,
-			},
-			`Git ${action.type} failed`,
-		);
-
-		if (
-			error instanceof ProjectGitNetworkError ||
-			error instanceof ProjectGitContentError ||
-			(error instanceof ProjectGitProcessError && error.exceededLimit)
-		) {
-			return c.json({ error: error.message }, 400);
-		}
-		if (error instanceof ProjectGitNotConfiguredError) {
-			return c.json({ error: error.message }, 409);
-		}
-		if (error instanceof ProjectGitConflictError) {
-			return c.json({ error: error.message, conflicts: error.conflicts }, 409);
-		}
-		if (error instanceof ProjectGitRejectedError) {
-			return c.json({ error: error.message }, 409);
-		}
-		if (error instanceof ProjectGitTransportError) {
-			return c.json({ error: error.message }, 502);
-		}
-
-		return c.json({ error: `Git ${action.type} failed` }, 500);
+		return failure
+			? failureResponse(c, failure)
+			: c.json({ error: `Git ${action.type} failed` }, 500);
 	}
 }
 
