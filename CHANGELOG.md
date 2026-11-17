@@ -1,5 +1,21 @@
 # marp-collab
 
+## 0.4.0
+
+### Minor Changes
+
+- [#100](https://github.com/alex289/marp-collab/pull/100) [`3d464ef`](https://github.com/alex289/marp-collab/commit/3d464ef7611055457dbebda893b4d8383a540ee5) Thanks [@alex289](https://github.com/alex289)! - Let AI assistants pull from and push to a project's connected Git repository over MCP, with their own one-line commit messages and conflict resolution per path.
+
+- [#96](https://github.com/alex289/marp-collab/pull/96) [`d996ace`](https://github.com/alex289/marp-collab/commit/d996ace1533a110cab67ae150c8dd6da73866077) Thanks [@alex289](https://github.com/alex289)! - Add a live demo mode to presentations. Press D or use the Live demo button to pause the deck for a demo: audience windows show a demo screen and leave fullscreen, and Chrome and Edge show floating controls with the demo timer, speaker notes and a way back to the presentation. Slides marked with `<!-- demo: Title -->` are highlighted in the presenter view.
+
+- [#93](https://github.com/alex289/marp-collab/pull/93) [`bb539a4`](https://github.com/alex289/marp-collab/commit/bb539a44a28fb09f623289ceec5a21c7b66837c6) Thanks [@alex289](https://github.com/alex289)! - Automatically start sign-in when only one OIDC provider is configured. Keep manual sign-in after logout or authentication errors, and retain the provider chooser when multiple providers are available.
+
+- [#97](https://github.com/alex289/marp-collab/pull/97) [`0fc884b`](https://github.com/alex289/marp-collab/commit/0fc884be06ececeae9aaa64214bc009f21fddc00) Thanks [@alex289](https://github.com/alex289)! - Support Tailwind CSS utilities in presentations. Decks opt in with the `tailwind: true` directive; utilities for the classes they use apply in the preview, presentation mode and PDF export, and the editor completes Tailwind classes and variants.
+
+### Patch Changes
+
+- [#97](https://github.com/alex289/marp-collab/pull/97) [`acf174d`](https://github.com/alex289/marp-collab/commit/acf174d37361e31419d5d84c728057209f25d7a1) Thanks [@alex289](https://github.com/alex289)! - Harden the PDF export: a Content-Security-Policy keeps the PDF renderer from fetching remote URLs referenced by deck or theme CSS (for example through `image-set()` or inline `<style>`), and CSS URL rewriting no longer slows down quadratically on malformed input.
+
 ## 0.3.0
 
 ### Minor Changes
