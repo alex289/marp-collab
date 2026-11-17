@@ -681,7 +681,7 @@ describe("projects routes", () => {
 			});
 		try {
 			equal((await save()).status, 200);
-			deepEqual(messages, []);
+			equal(messages.length, 0);
 
 			startProjectGitSync("owner-only-proj");
 			try {
@@ -764,7 +764,7 @@ describe("projects routes", () => {
 		try {
 			// Without a repository the push fails before editors are disconnected.
 			equal((await push()).status, 409);
-			deepEqual(messages, []);
+			equal(messages.length, 0);
 
 			await gitSync.configureProjectGit({
 				projectId: "upload-proj",
