@@ -55,9 +55,18 @@ function rewriteImageSrc(src: string): string {
 type SlideSourceToken = {
 	type: string;
 	map: [number, number] | null;
+	meta?: { marpitDirectives?: Record<string, unknown> } | null;
 };
 
-type SlideRender = ReturnType<Marp["render"]> & { slideSource: SlideSource; slideSettings: string };
+/** What a slide edit must leave unchanged for the slides it doesn't move. */
+export type SlideChecks = {
+	/** Deck-wide directives and Tailwind. */
+	slideSettings: string;
+	/** Each slide's resolved directives, including those it inherits. */
+	slideDirectives: string[];
+};
+
+type SlideRender = ReturnType<Marp["render"]> & SlideChecks & { slideSource: SlideSource };
 type SlideArrayRender = Omit<SlideRender, "html"> & { html: string[] };
 
 class SourceMappedMarp extends Marp {
@@ -75,6 +84,15 @@ class SourceMappedMarp extends Marp {
 					.map((key) => [key, globals[key]]),
 				tailwindEnabled,
 			]),
+			slideDirectives: slides.map((slide) => {
+				const directives =
+					slide.find((token) => token.type === "marpit_slide_open")?.meta?.marpitDirectives ?? {};
+				return JSON.stringify(
+					Object.keys(directives)
+						.sort()
+						.map((key) => [key, directives[key]]),
+				);
+			}),
 			slideSource: {
 				startLines: slides.map(
 					(slide) => slide.find((token) => token.type === "marpit_slide_open")?.map?.[0] ?? 0,
@@ -203,8 +221,8 @@ export const renderMarp = (
 /** Slide boundaries and deck-wide settings, without the Tailwind pass of a full render. */
 export const analyzeSlides = (markdown: string) => {
 	tailwindEnabled = false;
-	const { slideSource, slideSettings } = marp.render(markdown);
-	return { slideSource, slideSettings };
+	const { slideSource, slideSettings, slideDirectives } = marp.render(markdown);
+	return { slideSource, slideSettings, slideDirectives };
 };
 
 const customThemeNames = new Set<string>();

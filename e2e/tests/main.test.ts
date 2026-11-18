@@ -661,13 +661,18 @@ test.describe("Editor: content editing", () => {
 
 		await jumpTo(2).press("Shift+F10");
 		const addAfter = slideMenu.getByRole("menuitem", { name: "Add slide after" });
-		await expect(addAfter).toBeVisible();
+		// The menu takes focus a moment after it appears.
+		await expect(slideMenu).toBeFocused();
 		await page.keyboard.press("ArrowDown");
 		await expect(addAfter).toBeFocused();
 		await page.keyboard.press("Escape");
 		await expect(slideMenu).toBeHidden();
 		await expect(frame).toBeFocused();
 		await expect(jumpTo(2)).toBeFocused();
+		await jumpTo(2).press("Shift+F10");
+		await expect(slideMenu).toBeFocused();
+		await page.keyboard.press("Escape");
+		await expect(slideMenu).toBeHidden();
 
 		await page.getByRole("button", { name: "Select slides" }).click();
 		for (const index of [2, 3]) {
@@ -795,13 +800,16 @@ test.describe("Editor: content editing", () => {
 		const deleteSlide = page.getByRole("menuitem", { name: "Delete slide", exact: true });
 		await settingsSlide.press("Shift+F10");
 		await expect(deleteSlide).toBeVisible();
-		// Typing in another slide keeps the menu open; adding a slide closes it.
+		// Typing in another slide keeps the menu open; a slide moving into its
+		// place closes it.
 		await peerEditor.fill(source + "\n\n# Closing");
 		await expect(overview.getByRole("heading", { name: "Closing" })).toBeVisible();
 		await expect(deleteSlide).toBeVisible();
-		await peerEditor.fill(source + "\n\n# Closing\n\n---\n\n# Appendix");
-		await expect(overview.getByRole("heading", { name: "Appendix" })).toBeVisible();
+		await peerEditor.fill("# Opening\n\n---\n\n# Inserted\n\n---\n\n" + source.slice(16));
+		await expect(overview.getByRole("heading", { name: "Inserted" })).toBeVisible();
 		await expect(deleteSlide).toBeHidden();
+		await peerEditor.fill(source + "\n\n# Closing");
+		await expect(overview.getByRole("heading", { name: "Inserted" })).toHaveCount(0);
 
 		await settingsSlide.press("Shift+F10");
 		await deleteSlide.click();
@@ -817,11 +825,30 @@ test.describe("Editor: content editing", () => {
 		await overview.getByRole("button", { name: "Select slide 2", exact: true }).click();
 		await expect(page.getByRole("status").filter({ hasText: "1 selected" })).toBeVisible();
 		await peerEditor.fill(source + "\n\n# Closing remarks\n\n---\n\n# Appendix");
-		await expect(overview.getByRole("heading", { name: "Closing remarks" })).toBeVisible();
+		await expect(overview.getByRole("heading", { name: "Appendix" })).toBeVisible();
 		await expect(page.getByRole("status").filter({ hasText: "1 selected" })).toBeVisible();
-		await peerEditor.fill(source + "\n\n# Closing remarks");
-		await expect(overview.getByRole("heading", { name: "Appendix" })).toHaveCount(0);
+		await peerEditor.fill("# Opening\n\n---\n\n# Closing remarks\n\n---\n\n" + source.slice(16));
+		await expect(overview.getByRole("heading", { level: 1 })).toHaveText([
+			"Opening",
+			"Closing remarks",
+			"Deck defaults",
+		]);
 		await expect(page.getByRole("button", { name: "Select slides" })).toBeVisible();
+		await page.getByRole("button", { name: "Select slides" }).click();
+		await expect(
+			overview.getByRole("button", { name: "Select slide 2", exact: true }),
+		).toHaveAttribute("aria-pressed", "false");
+		await page.getByRole("button", { name: "Done selecting" }).click();
+
+		// Deleting the slide that turns on pagination would restyle the slides after it.
+		await peerEditor.fill("# One\n\n---\n\n<!-- paginate: true -->\n\n# Two\n\n---\n\n# Three");
+		await expect(overview.getByRole("heading", { name: "Three" })).toBeVisible();
+		await settingsSlide.press("Shift+F10");
+		await deleteSlide.click();
+		await expect(
+			page.getByText(/restyle other slides through directives they inherit/),
+		).toBeVisible();
+		await expect(editor).toContainText("<!-- paginate: true -->");
 		await peer.close();
 	});
 

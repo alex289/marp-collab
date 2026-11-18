@@ -2,12 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { Marp } from "@marp-team/marp-core";
 import * as Y from "yjs";
-import { parseSlidePresenterComments } from "./presenter-comments.ts";
 import {
 	computeMinimalSplice,
 	editSlideDeck,
 	getEditableSlideDeck,
-	getInheritedDirectiveConflict,
+	getSectionMarkerSlides,
 	getSlideNavigationLines,
 	getSlideSections,
 	joinDeckBlocks,
@@ -178,10 +177,8 @@ test("keeps section labels in source and moves the whole section", () => {
 	assert.match(moved.markdown, /# Two[\s\S]+# Three[\s\S]+# One/);
 	assert.match(moved.markdown, /\n<!-- section: Findings -->\n\n# Two/);
 	const rendered = new Marp().render(moved.markdown);
-	assert.deepEqual(
-		rendered.comments.map((comments) => parseSlidePresenterComments(comments).speakerNotes),
-		[[], [], []],
-	);
+	// The presenter view drops these; see getSectionMarkerSlides.
+	assert.deepEqual(rendered.comments, [["section: Findings"], [], ['section: Intro "quoted"']]);
 	assert.doesNotMatch(rendered.html, /Findings|quoted/);
 });
 
@@ -247,21 +244,31 @@ test("replaces an empty section marker and keeps every name inside its comment",
 	]);
 });
 
-test("flags edits that move or delete a slide with an inherited directive", () => {
-	const parsed = splitDeckIntoBlocks(
-		"# One\n\n---\n\n<!--\npaginate: true\n-->\n\n# Two\n\n---\n\n<!-- _class: lead -->\n\n# Three",
-	);
-	assert.equal(getInheritedDirectiveConflict(parsed, { type: "delete", indices: [1] }), true);
-	assert.equal(
-		getInheritedDirectiveConflict(parsed, { type: "move", indices: [1], slot: 3 }),
-		true,
-	);
-	assert.equal(getInheritedDirectiveConflict(parsed, { type: "delete", indices: [2] }), false);
-	assert.equal(
-		getInheritedDirectiveConflict(parsed, { type: "move", indices: [0], slot: 2 }),
-		false,
-	);
-	assert.equal(getInheritedDirectiveConflict(parsed, { type: "duplicate", index: 1 }), false);
+test("finds the slides led by a section comment, as the overview reads them", () => {
+	const source = [
+		"<!-- section: A -->",
+		"# One",
+		"---",
+		"# Two\n\n<!-- section: not a label -->",
+		"---",
+		"<!-- section: -->",
+		"# Three",
+	].join("\n\n");
+	const rendered = new Marp().render(source);
+	const startLines = [0, 4, 10];
+	assert.deepEqual(rendered.comments.length, 3);
+	assert.deepEqual([...getSectionMarkerSlides(source, { startLines, frontMatterEnd: 0 })], [0, 2]);
+});
+
+test("moves keep an empty marker on an unnamed slide", () => {
+	const source = "<!-- section: -->\n\n# One\n\n---\n\n# Two";
+	const moved = editSlideDeck(splitDeckIntoBlocks(source), {
+		type: "move",
+		indices: [0],
+		slot: 2,
+	});
+	assert.equal(moved?.markdown, "# Two\n\n---\n\n<!-- section: -->\n\n# One\n\n");
+	assert.deepEqual(moved?.origins, [1, null]);
 });
 
 test("retains a section after deleting its opening slide and keeps deck directives after deleting all slides", () => {

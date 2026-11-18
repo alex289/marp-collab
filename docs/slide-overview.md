@@ -8,6 +8,6 @@ Use **Start section here** in a thumbnail's actions to name a group that runs fr
 
 Read-only viewers can still use thumbnail navigation. Decks with Markdown includes or implicit heading-based slide breaks use source editing for slide changes.
 
-Put deck-wide directives in the YAML front matter to keep them independent of slide edits. The overview stops edits that would change a deck-wide setting, and moves or deletions of a slide that sets a directive later slides inherit, such as `paginate` or `class` without an underscore.
+Put deck-wide directives in the YAML front matter to keep them independent of slide edits. The overview stops edits that would change a deck-wide setting, or change how slides that stay in place look through directives they inherit, such as `paginate` or `class` without an underscore.
 
 A moved slide joins the section of the slide it passes. Moving the last slide of a section down takes it past the first slide of the next section.

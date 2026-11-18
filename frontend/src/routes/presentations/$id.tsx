@@ -42,10 +42,21 @@ import { OutlinePanel } from "@/components/outline-panel";
 import { SlideOverviewPanel } from "@/components/slide-overview-panel";
 import { parseMarkdownOutline } from "@/lib/outline";
 import { countMarpSlides, getLineForSlideIndex, getSlideIndexForLine } from "@/lib/slide-count";
-import { getEditableSlideDeck, getSlideNavigationLines, type SlideEdit } from "@/lib/slide-blocks";
+import {
+	getEditableSlideDeck,
+	getSlideNavigationLines,
+	type DeckBlocks,
+	type SlideEdit,
+} from "@/lib/slide-blocks";
 import { isEditableDeckFile, isMarkdownDeckFile } from "@/lib/file-types";
 import { PaneResizeHandle } from "@/components/pane-resize-handle";
-import { analyzeSlides, listThemeNames, rewriteCssUrls, setProjectThemes } from "@/lib/marp";
+import {
+	analyzeSlides,
+	listThemeNames,
+	rewriteCssUrls,
+	setProjectThemes,
+	type SlideChecks,
+} from "@/lib/marp";
 import { useAssetToken } from "@/lib/asset-token";
 import { inlineProjectThemeFonts } from "@/lib/project-theme-fonts";
 import { fetcher } from "@/lib/fetcher";
@@ -944,11 +955,11 @@ function RouteComponent() {
 		source: string,
 		fileId: string | null,
 		edit: SlideEdit,
-		settings: string,
-	): boolean {
+		before: SlideChecks,
+	): DeckBlocks | null {
 		const yText = syncedYText;
 		if (!canEditSlides || !yText?.doc || fileId !== selectedFile?.id) {
-			return false;
+			return null;
 		}
 
 		// The overview and editor can lag behind a remote transaction. Never
@@ -956,28 +967,42 @@ function RouteComponent() {
 		// oxlint-disable-next-line no-base-to-string
 		if (source !== yText.toString()) {
 			toast("The deck changed. Try the slide action again.");
-			return false;
+			return null;
 		}
 		if (source === edit.markdown) {
-			return false;
+			return null;
 		}
 
 		let line: number;
+		let next: DeckBlocks | null;
 		try {
-			const { slideSource, slideSettings } = analyzeSlides(edit.markdown);
-			if (slideSettings !== settings) {
+			const { slideSource, slideSettings, slideDirectives } = analyzeSlides(edit.markdown);
+			if (slideSettings !== before.slideSettings) {
 				toast.error("Move deck-wide directives to the front matter before making this slide edit.");
-				return false;
+				return null;
 			}
-			const next = getEditableSlideDeck(edit.markdown, slideSource);
+			// Slides that stay put must look the same, which catches moving or
+			// deleting a slide whose directives later slides inherit.
+			if (
+				edit.origins.some(
+					(origin, index) =>
+						origin !== null && slideDirectives[index] !== before.slideDirectives[origin],
+				)
+			) {
+				toast.error(
+					"This edit would restyle other slides through directives they inherit, like paginate or class. Edit the Markdown directly.",
+				);
+				return null;
+			}
+			next = getEditableSlideDeck(edit.markdown, slideSource);
 			if (next?.blocks.length !== edit.slideCount) {
 				toast.error("This edit would change the deck’s slide breaks. Edit the Markdown directly.");
-				return false;
+				return null;
 			}
 			line = getSlideNavigationLines(edit.markdown, slideSource)[edit.index];
 		} catch {
 			toast.error("This edit could not be rendered. Edit the Markdown directly.");
-			return false;
+			return null;
 		}
 
 		collab.undoManager?.stopCapturing();
@@ -996,7 +1021,7 @@ function RouteComponent() {
 
 		setMarkdown(edit.markdown);
 		editorPaneRef.current?.jumpToLine(line, false);
-		return true;
+		return next;
 	}
 
 	// Unblank whenever presentation mode is entered. The timer restarts by remounting.

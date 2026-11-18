@@ -1,15 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LayoutGrid } from "lucide-react";
-import { toast } from "sonner";
 import { SidebarGroup, SidebarGroupContent, SidebarGroupLabel } from "@/components/ui/sidebar";
-import { renderMarp } from "@/lib/marp";
+import { renderMarp, type SlideChecks } from "@/lib/marp";
 import { useSlideTailwindReady } from "@/hooks/use-slide-tailwind-ready";
 import {
 	editSlideDeck,
 	getEditableSlideDeck,
-	getInheritedDirectiveConflict,
 	getSlideNavigationLines,
 	getSlideSections,
+	type DeckBlocks,
 	type SlideAction,
 	type SlideEdit,
 } from "@/lib/slide-blocks";
@@ -31,7 +30,13 @@ type SlideOverviewPanelProps = {
 	canEdit: boolean;
 	editHint: string;
 	onSelectLine: (line: number) => void;
-	onEdit: (source: string, fileId: string | null, edit: SlideEdit, settings: string) => boolean;
+	/** Applies the edit and returns the edited deck, or null when it was refused. */
+	onEdit: (
+		source: string,
+		fileId: string | null,
+		edit: SlideEdit,
+		before: SlideChecks,
+	) => DeckBlocks | null;
 };
 
 // Marpit scopes its theme CSS with child combinators (`div.marpit > svg > ...`),
@@ -414,11 +419,11 @@ export const SlideOverviewPanel = ({
 	const revision = useRef(0);
 	const [iframeLoad, setIframeLoad] = useState(0);
 	const [selection, setSelection] = useState<{
-		shape: string;
+		key: string;
 		indices: number[];
 		anchor: number | null;
 	} | null>(null);
-	const [thumbnailMenu, setThumbnailMenu] = useState<(ThumbnailMenu & { shape: string }) | null>(
+	const [thumbnailMenu, setThumbnailMenu] = useState<(ThumbnailMenu & { key: string }) | null>(
 		null,
 	);
 
@@ -460,46 +465,44 @@ export const SlideOverviewPanel = ({
 		}
 	}
 	const editable = canEdit && deck !== null;
-	// Selections, menus and forms outlive edits that keep the slides in place,
-	// such as a collaborator typing, and reset once slides are added or removed.
-	const shapeOf = (count: number) => `${deckFileId}\n${count}`;
-	const deckShape = shapeOf(slideCount);
-	const currentSelection = editable && selection?.shape === deckShape ? selection : null;
+	// Selections, menus and forms hold on to the content of their slides, so
+	// they outlive a collaborator typing elsewhere but never retarget a
+	// different slide after one is moved, added or removed.
+	const slideKey = (indices: number[], blocks = deck?.blocks) =>
+		JSON.stringify([deckFileId, indices.map((index) => blocks?.[index] ?? null)]);
+	const currentSelection =
+		editable && selection && selection.key === slideKey(selection.indices) ? selection : null;
 	if (selection && !currentSelection) {
 		setSelection(null);
 	}
 	const selected = currentSelection?.indices ?? null;
 	const currentThumbnailMenu =
-		editable && thumbnailMenu?.shape === deckShape ? thumbnailMenu : null;
+		editable && thumbnailMenu && thumbnailMenu.key === slideKey([thumbnailMenu.index])
+			? thumbnailMenu
+			: null;
 	if (thumbnailMenu && !currentThumbnailMenu) {
 		setThumbnailMenu(null);
 	}
 
 	function changeSelection(indices: number[] | null, anchor: number | null = null) {
-		setSelection(indices && { shape: deckShape, indices, anchor });
+		setSelection(indices && { key: slideKey(indices), indices, anchor });
 	}
 
 	function applyAction(action: SlideAction) {
 		if (!editable || !deck || !rendered) {
 			return;
 		}
-		if (getInheritedDirectiveConflict(deck, action)) {
-			toast.error(
-				"A slide in this edit sets a directive that later slides inherit, like paginate or class. Edit the Markdown directly.",
-			);
-			return;
-		}
 		const edit = editSlideDeck(deck, action);
-		if (!edit || !onEdit(markdown, deckFileId, edit, rendered.slideSettings)) {
+		const next = edit && onEdit(markdown, deckFileId, edit, rendered);
+		if (!edit || !next) {
 			return;
 		}
+		// The menu has done its job; a later open starts from scratch.
+		setThumbnailMenu(null);
 
 		if (selected && action.type === "move") {
-			setSelection({
-				shape: shapeOf(edit.slideCount),
-				indices: action.indices.map((_, offset) => edit.index + offset),
-				anchor: edit.index,
-			});
+			const indices = action.indices.map((_, offset) => edit.index + offset);
+			setSelection({ key: slideKey(indices, next.blocks), indices, anchor: edit.index });
 		} else {
 			setSelection(null);
 		}
@@ -571,7 +574,7 @@ export const SlideOverviewPanel = ({
 				}
 				const rect = frame.getBoundingClientRect();
 				setThumbnailMenu({
-					shape: deckShape,
+					key: slideKey([index]),
 					index,
 					x: rect.left + x,
 					y: rect.top + y,
@@ -592,7 +595,7 @@ export const SlideOverviewPanel = ({
 				return;
 			}
 			setSelection((previous) => {
-				if (previous?.shape !== deckShape) {
+				if (!previous || previous.key !== slideKey(previous.indices)) {
 					return previous;
 				}
 				const next = new Set(previous.indices);
@@ -623,7 +626,8 @@ export const SlideOverviewPanel = ({
 				} else if (!next.delete(index)) {
 					next.add(index);
 				}
-				return { ...previous, indices: [...next].sort((a, b) => a - b), anchor };
+				const indices = [...next].sort((a, b) => a - b);
+				return { key: slideKey(indices), indices, anchor };
 			});
 		};
 	});
@@ -806,7 +810,7 @@ export const SlideOverviewPanel = ({
 				{isMarkdown && editable && rendered && (
 					<SlideOverviewActions
 						key={deckFileId}
-						deckShape={deckShape}
+						slideKey={(index) => slideKey([index])}
 						slideCount={slideCount}
 						activeIndex={Math.max(0, activeIndex)}
 						sections={sections}

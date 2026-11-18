@@ -31,8 +31,8 @@ export type ThumbnailMenu = {
 };
 
 type SlideOverviewActionsProps = {
-	/** Changes when slides are added or removed, which invalidates an open form. */
-	deckShape: string;
+	/** Identifies a slide by its content, so an open form never retargets another slide. */
+	slideKey: (index: number) => string;
 	slideCount: number;
 	activeIndex: number;
 	sections: SlideSection[];
@@ -82,7 +82,7 @@ function ToolbarButton({
 const allSlides = (count: number) => Array.from({ length: count }, (_, index) => index);
 
 export function SlideOverviewActions({
-	deckShape,
+	slideKey,
 	slideCount,
 	activeIndex,
 	sections,
@@ -96,12 +96,12 @@ export function SlideOverviewActions({
 }: SlideOverviewActionsProps) {
 	const restoreThumbnailFocus = useRef(false);
 	const [sectionForm, setSectionForm] = useState<{
-		deckShape: string;
+		key: string;
 		index: number;
 		name: string;
 		rename: boolean;
 	} | null>(null);
-	const form = sectionForm?.deckShape === deckShape ? sectionForm : null;
+	const form = sectionForm && sectionForm.key === slideKey(sectionForm.index) ? sectionForm : null;
 	if (sectionForm && !form) {
 		setSectionForm(null);
 	}
@@ -173,7 +173,9 @@ export function SlideOverviewActions({
 					</ContextMenuItem>
 					{!selection && !firstSlideInSection && (
 						<ContextMenuItem
-							onClick={() => setSectionForm({ deckShape, index, name: "", rename: false })}
+							onClick={() =>
+								setSectionForm({ key: slideKey(index), index, name: "", rename: false })
+							}
 						>
 							<Layers /> Start section here
 						</ContextMenuItem>
@@ -187,7 +189,7 @@ export function SlideOverviewActions({
 							<ContextMenuItem
 								onClick={() =>
 									setSectionForm({
-										deckShape,
+										key: slideKey(section.start),
 										index: section.start,
 										name: section.name ?? "",
 										rename: true,

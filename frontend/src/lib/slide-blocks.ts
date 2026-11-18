@@ -23,6 +23,8 @@ export type SlideEdit = {
 	markdown: string;
 	index: number;
 	slideCount: number;
+	/** For each new slide, the slide it was before the edit, or null when it moved or is new. */
+	origins: Array<number | null>;
 	splices: TextSplice[];
 };
 
@@ -261,34 +263,15 @@ export function getSlideSections({ blocks }: DeckBlocks): SlideSection[] {
 	return sections;
 }
 
-const htmlComment = /<!--([\s\S]*?)-->/g;
-
 /**
- * Local directives without an underscore carry over to every later slide, so
- * moving or deleting the slide that sets one restyles the rest of the deck.
+ * The slides led by a section comment. The presenter view leaves that comment
+ * out of the notes; decks the overview can't split keep it as a note.
  */
-function setsInheritedDirective(block: string) {
-	return Array.from(block.matchAll(htmlComment), (match) => match[1]).some((comment) =>
-		comment.split(eolPattern).some((line) => stickyDirective.test(line.trim())),
+export function getSectionMarkerSlides(markdown: string, source: SlideSource): Set<number> {
+	const deck = getEditableSlideDeck(markdown, source);
+	return new Set(
+		deck?.blocks.flatMap((block, index) => (readSectionMarker(block) ? [index] : [])) ?? [],
 	);
-}
-
-/** The slides whose inherited directives an action would move or remove. */
-export function getInheritedDirectiveConflict(deck: DeckBlocks, action: SlideAction) {
-	let affected: number[] = [];
-	if (action.type === "delete" || action.type === "move") {
-		affected = action.indices;
-	} else if (action.type === "move-section-up" || action.type === "move-section-down") {
-		const sections = getSlideSections(deck);
-		const position = sections.findIndex(({ start }) => start === action.index);
-		const neighbor = sections[position + (action.type === "move-section-up" ? -1 : 1)];
-		for (const section of [sections[position], neighbor]) {
-			for (let index = section?.start ?? 0; index < (section?.end ?? 0); index += 1) {
-				affected.push(index);
-			}
-		}
-	}
-	return affected.some((index) => setsInheritedDirective(deck.blocks[index] ?? ""));
 }
 
 /** A slot is before the slide at that index, or after the deck at slideCount. */
@@ -327,6 +310,7 @@ export function editSlideDeck(deck: DeckBlocks, action: SlideAction): SlideEdit 
 			),
 			index,
 			slideCount: bodies.length,
+			origins: stationary,
 		};
 	}
 
@@ -334,7 +318,7 @@ export function editSlideDeck(deck: DeckBlocks, action: SlideAction): SlideEdit 
 		const selected = new Set(action.indices);
 		const rows = sections.flatMap((section) =>
 			blocks.slice(section.start, section.end).map((block, offset) => ({
-				body: offset === 0 ? withoutMarker(block) : block,
+				body: offset === 0 && section.name ? withoutMarker(block) : block,
 				index: section.start + offset,
 				section,
 			})),
