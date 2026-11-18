@@ -972,6 +972,54 @@ test.describe("Editor: content editing", () => {
 		await expect.poll(() => getPreviewSectionBackground(page)).toBe("rgb(10, 20, 30)");
 	});
 
+	test("embeds project theme fonts behind a cookie-protected proxy", async ({ page }) => {
+		await page.goto("/");
+		await createPresentation(page, "Protected Theme Font Test");
+		await page.waitForURL(/\/presentations\/.+/);
+		await waitForSidebar(page);
+
+		const font = readFileSync(
+			new URL("../../backend/assets/templates/whs/inter.woff2", import.meta.url),
+		);
+		await page.route(/\/files\/theme-font\.woff2(?:\?|$)/, async (route) => {
+			const headers = await route.request().allHeaders();
+			if (!headers.cookie || headers.origin === "null") {
+				await route.fulfill({ status: 302, headers: { location: "/proxy-login" } });
+				return;
+			}
+			await route.fulfill({ contentType: "font/woff2", body: font });
+		});
+
+		const projectId = new URL(page.url()).pathname.split("/").at(-1);
+		const upload = await page.request.post(`/api/v1/projects/${projectId}/files/upload`, {
+			multipart: {
+				file: {
+					name: "protected-font.css",
+					mimeType: "text/css",
+					buffer: Buffer.from(
+						'/* @theme protected-font */ @font-face { font-family: TestFont; src: url("theme-font.woff2"); } section { font-family: TestFont, sans-serif; }',
+					),
+				},
+			},
+		});
+		expect(upload.ok()).toBeTruthy();
+
+		const editor = page.locator(".cm-content");
+		await editor.click();
+		await page.keyboard.press("ControlOrMeta+A");
+		await page.keyboard.insertText("---\nmarp: true\ntheme: protected-font\n---\n# Protected Font");
+
+		const preview = page.frameLocator('iframe[title="Marp preview"]');
+		await expect
+			.poll(() =>
+				preview.getByRole("heading", { name: "Protected Font" }).evaluate(async (heading) => {
+					const fonts = await heading.ownerDocument.fonts.load("16px TestFont");
+					return fonts.some((font) => font.status === "loaded");
+				}),
+			)
+			.toBe(true);
+	});
+
 	test("styles slides with Tailwind classes and completes them in the editor", async ({ page }) => {
 		await page.goto("/");
 

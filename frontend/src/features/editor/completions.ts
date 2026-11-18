@@ -35,6 +35,7 @@ type DirectiveDefinition = {
 };
 
 const marpSection: CompletionSection = { name: "Marp", rank: 1 };
+const marpCollabSection: CompletionSection = { name: "MarpCollab", rank: 0 };
 const projectSection: CompletionSection = { name: "Project", rank: 1 };
 const selectorSection: CompletionSection = { name: "Marp selectors", rank: 1 };
 const htmlSection: CompletionSection = { name: "Marp HTML", rank: 1 };
@@ -266,19 +267,47 @@ function isInsideFrontmatter(context: CompletionContext): boolean {
 	return true;
 }
 
+/** HTML comments with a meaning in MarpCollab beyond Marp's own directives. */
+const marpCollabComments: Completion[] = [
+	{
+		label: "@include",
+		apply: "@include: ",
+		type: "keyword",
+		detail: "insert slides from another file",
+		info: "Inserts the slides of another Markdown file in this project, relative to this file.",
+		section: marpCollabSection,
+	},
+	{
+		label: "presenter",
+		apply: "presenter: ",
+		type: "keyword",
+		detail: "who presents this slide",
+		info: "Shows the presenter's name and avatar in the presenter view.",
+		section: marpCollabSection,
+	},
+	{
+		label: "demo",
+		apply: "demo: ",
+		type: "keyword",
+		detail: "live demo slide",
+		info: "Marks this slide as a live demo. The title on the first line is shown to the audience; press L in the presenter view to start it.",
+		section: marpCollabSection,
+	},
+];
+
 function directiveKeyCompletion(context: CompletionContext): CompletionResult | null {
 	const line = lineBeforeCursor(context);
 	const frontmatter = isInsideFrontmatter(context);
 	const match = frontmatter
 		? /^\s*(_?[A-Za-z][\w-]*|_)?$/.exec(line)
-		: /^\s*<!--\s*(_?[A-Za-z][\w-]*|_)?$/.exec(line);
+		: /^\s*<!--\s*(@[\w-]*|_?[A-Za-z][\w-]*|_)?$/.exec(line);
 	const typed = match?.[1] ?? "";
 
-	if (!match || (!typed && !context.explicit)) {
+	if (!match || (!typed && !context.explicit) || (frontmatter && typed.startsWith("@"))) {
 		return null;
 	}
 
-	const options: Completion[] = [];
+	const options: Completion[] = frontmatter ? [] : [...marpCollabComments];
 	for (const directive of directives) {
 		if (!frontmatter && (directive.frontmatterOnly || directive.scope === "global")) {
 			continue;
@@ -306,7 +335,7 @@ function directiveKeyCompletion(context: CompletionContext): CompletionResult | 
 	return {
 		from: context.pos - typed.length,
 		options,
-		validFor: /^_?[\w-]*$/,
+		validFor: /^[@_]?[\w-]*$/,
 	};
 }
 
@@ -403,7 +432,7 @@ function directiveValueCompletion(
 type PathContext = {
 	from: number;
 	fragment: string;
-	fileKind: "any" | "asset" | "css" | "image";
+	fileKind: "any" | "asset" | "css" | "image" | "markdown";
 	includeThemeNames?: boolean;
 	wrapInUrl?: boolean;
 };
@@ -428,6 +457,12 @@ function markdownPathContext(context: CompletionContext): PathContext | null {
 			fragment,
 			fileKind: htmlAsset[1]?.toLowerCase() === "img" ? "image" : "asset",
 		};
+	}
+
+	const include = /^\s*<!--\s*@include\s*:\s*([^\s>]*)$/.exec(line);
+	if (include) {
+		const fragment = include[1] ?? "";
+		return { from: context.pos - fragment.length, fragment, fileKind: "markdown" };
 	}
 
 	const background = /_?backgroundImage\s*:\s*(url\(\s*)?["']?([^"')\s<>]*)$/i.exec(line);
@@ -497,7 +532,8 @@ function pathCompletion(
 			file.id === config.currentFileId ||
 			(pathContext.fileKind === "asset" && file.type !== "asset") ||
 			(pathContext.fileKind === "image" && !isImageFile(file)) ||
-			(pathContext.fileKind === "css" && fileExtension(file.id) !== "css")
+			(pathContext.fileKind === "css" && fileExtension(file.id) !== "css") ||
+			(pathContext.fileKind === "markdown" && !["md", "markdown"].includes(fileExtension(file.id)))
 		) {
 			continue;
 		}

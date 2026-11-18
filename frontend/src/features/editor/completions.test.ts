@@ -75,6 +75,37 @@ test("limits HTML comment directive suggestions to local and spot directives", (
 	assert.equal(complete("<!-- theme: wh"), null);
 });
 
+test("offers MarpCollab comments next to slide directives", () => {
+	const result = complete("<!-- ", markdownConfig, true);
+	assert.ok(result);
+	for (const [label, apply] of [
+		["@include", "@include: "],
+		["presenter", "presenter: "],
+		["demo", "demo: "],
+	]) {
+		assert.equal(result.options.find((option) => option.label === label)?.apply, apply);
+	}
+	assert.equal(complete("<!-- @inc")?.from, 5);
+	assert.ok(!complete("---\n", markdownConfig, true)?.options.some((o) => o.label === "demo"));
+});
+
+test("completes Markdown files in include comments", () => {
+	const config = {
+		...markdownConfig,
+		files: [
+			...files,
+			{ id: "decks/chapters/intro.md", label: "intro.md", type: "markdown" as const },
+		],
+	};
+	const result = complete("<!-- @include: ch", config);
+	assert.ok(result);
+	assert.equal(result.from, 15);
+	assert.deepEqual(
+		result.options.map((option) => option.apply),
+		["chapters/intro.md"],
+	);
+});
+
 test("completes dynamic theme names as directive values", () => {
 	const result = complete("---\ntheme: wh");
 	assert.ok(result);
@@ -120,6 +151,17 @@ test("replaces CodeMirror's broad Markdown HTML completion source", () => {
 	const sources = state.languageDataAt<CompletionSource>("autocomplete", state.doc.length);
 
 	assert.deepEqual(sources, [source]);
+});
+
+test("keeps CodeMirror's HTML completions out of HTML comments", () => {
+	const source = createEditorCompletionSource(() => markdownConfig);
+	const doc = "# Slide\n\n<!-- ";
+	const state = EditorState.create({
+		doc,
+		extensions: [marpMarkdown(), EditorState.languageData.of(() => [{ autocomplete: source }])],
+	});
+
+	assert.deepEqual(state.languageDataAt<CompletionSource>("autocomplete", doc.length), [source]);
 });
 
 test("completes image paths relative to the current Markdown file", () => {
