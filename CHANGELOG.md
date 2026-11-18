@@ -1,5 +1,17 @@
 # marp-collab
 
+## 0.5.0
+
+### Minor Changes
+
+- [#105](https://github.com/alex289/marp-collab/pull/105) [`6b6054d`](https://github.com/alex289/marp-collab/commit/6b6054dae471526c8330ca5d9ed49a79792adaab) Thanks [@alex289](https://github.com/alex289)! - Make hidden features easier to find. A new "Connect AI" dialog, linked from the presentation list and the editor settings, explains how to connect Claude Code, Codex or other MCP clients. Press `?` or use the help button in the navbar or presenter view to see all keyboard shortcuts and deck syntax tips. In HTML comments the editor now suggests `@include`, `presenter` and `demo`, completes Markdown files after `@include:`, and no longer buries Marp directives under a list of HTML tags.
+
+- [#102](https://github.com/alex289/marp-collab/pull/102) [`1f74239`](https://github.com/alex289/marp-collab/commit/1f7423964bc79f16a7ac66ab9122af01ad0cb304) Thanks [@alex289](https://github.com/alex289)! - Add, duplicate, and delete slides from thumbnails, select slides to reorder or delete them together, and organize decks into movable named sections.
+
+### Patch Changes
+
+- [#103](https://github.com/alex289/marp-collab/pull/103) [`88907d1`](https://github.com/alex289/marp-collab/commit/88907d104b0ec74424ffc2a3a19aaeec959acb21) Thanks [@dasultras](https://github.com/dasultras)! - Load project theme fonts in the editor session so they render in sandboxed slides behind authentication proxies.
+
 ## 0.4.0
 
 ### Minor Changes
