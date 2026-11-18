@@ -659,22 +659,20 @@ function RouteComponent() {
 			return;
 		}
 
+		let generation = 0;
 		const applyTheme = async () => {
+			const applied = ++generation;
 			// oxlint-disable-next-line no-base-to-string
 			const css = rewriteCssUrls(syncedYText.toString(), id, selectedFile.id, assetToken);
-			const theme = { id: selectedFile.id, css };
-			projectThemeStore.update((current) => upsertProjectTheme(current, theme));
-			const appliedTheme = projectThemeStore
-				.getSnapshot()
-				.themes.find((entry) => entry.id === theme.id);
+			// Register once with fonts embedded: a theme with plain font URLs would
+			// briefly render with fallback fonts behind an access proxy.
 			const embeddedCss = await inlineProjectThemeFonts(css, id, themeFontRequests);
-			if (appliedTheme && embeddedCss !== css) {
-				projectThemeStore.update((current) =>
-					current.includes(appliedTheme)
-						? upsertProjectTheme(current, { id: theme.id, css: embeddedCss })
-						: current,
-				);
+			if (applied !== generation) {
+				return;
 			}
+			projectThemeStore.update((current) =>
+				upsertProjectTheme(current, { id: selectedFile.id, css: embeddedCss }),
+			);
 		};
 
 		let timer: ReturnType<typeof setTimeout> | undefined;
