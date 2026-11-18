@@ -1,4 +1,6 @@
+import { AiBadgeIcon, ConnectAiAssistantDialog } from "@/components/dialog/connect-ai-assistant";
 import { CreatePresentationDialog } from "@/components/dialog/create-presentation";
+import { Button } from "@/components/ui/button";
 import { LoadingScreen } from "@/components/loading-screen";
 import Navbar from "@/components/navbar";
 import { ProjectDataTable } from "@/components/project-data-table";
@@ -19,7 +21,7 @@ import { filterAndSortProjects, type ProjectSortOption } from "@/lib/project-lis
 import type { Project, SharedProject } from "@/lib/types";
 import { Link, createFileRoute } from "@tanstack/react-router";
 import type { OnChangeFn, SortingState } from "@tanstack/react-table";
-import { LayoutGridIcon, TablePropertiesIcon } from "lucide-react";
+import { ArrowRightIcon, LayoutGridIcon, TablePropertiesIcon, XIcon } from "lucide-react";
 import { useState } from "react";
 import useSWR from "swr";
 import { DeleteProjectDialog } from "@/components/dialog/delete-project";
@@ -30,6 +32,16 @@ export const Route = createFileRoute("/")({
 });
 
 type ProjectView = "grid" | "table";
+
+const AI_CALLOUT_DISMISSED_STORAGE_KEY = "marp-collab:ai-callout-dismissed";
+
+function readAiCalloutDismissed() {
+	try {
+		return localStorage.getItem(AI_CALLOUT_DISMISSED_STORAGE_KEY) === "true";
+	} catch {
+		return false;
+	}
+}
 
 const tableSortingByOption: Record<ProjectSortOption, SortingState> = {
 	alphabetical: [{ id: "name", desc: false }],
@@ -54,6 +66,7 @@ function RootComponent() {
 	const [sortOption, setSortOption] = useState<ProjectSortOption>("created");
 	const [tableSorting, setTableSorting] = useState<SortingState>(tableSortingByOption.created);
 	const [view, setView] = useState<ProjectView>("grid");
+	const [aiCalloutDismissed, setAiCalloutDismissed] = useState(readAiCalloutDismissed);
 	const { data, isLoading } = useSWR<{
 		projects: Project[];
 		sharedProjects: SharedProject[];
@@ -82,6 +95,14 @@ function RootComponent() {
 		setSortOption(value);
 		setTableSorting(tableSortingByOption[value]);
 	};
+	const dismissAiCallout = () => {
+		setAiCalloutDismissed(true);
+		try {
+			localStorage.setItem(AI_CALLOUT_DISMISSED_STORAGE_KEY, "true");
+		} catch {
+			// The callout simply reappears on the next visit.
+		}
+	};
 	const handleTableSortingChange: OnChangeFn<SortingState> = (updater) => {
 		const nextSorting = typeof updater === "function" ? updater(tableSorting) : updater;
 		const nextSortOption = sortOptionByColumn[nextSorting[0]?.id];
@@ -102,8 +123,12 @@ function RootComponent() {
 			<div className="mx-auto flex w-full max-w-6xl flex-col gap-6 p-6">
 				<div className="flex items-center justify-between">
 					<h1 className="text-2xl font-bold">Presentations</h1>
-					<CreatePresentationDialog />
+					<div className="flex items-center gap-2">
+						{aiCalloutDismissed ? <ConnectAiAssistantDialog /> : null}
+						<CreatePresentationDialog />
+					</div>
 				</div>
+				{aiCalloutDismissed ? null : <AiAssistantCallout onDismiss={dismissAiCallout} />}
 				{hasPresentations ? (
 					<div className="flex flex-col gap-2 sm:flex-row sm:items-center">
 						<Input
@@ -246,6 +271,45 @@ function RootComponent() {
 					Marp Collab v{__MARP_COLLAB_VERSION__}
 				</a>
 			</footer>
+		</div>
+	);
+}
+
+function AiAssistantCallout({ onDismiss }: { onDismiss: () => void }) {
+	return (
+		<div className="relative overflow-hidden rounded-xl bg-linear-to-r from-violet-500/40 via-fuchsia-500/40 to-sky-500/40 p-px">
+			<div className="relative flex flex-col gap-3 rounded-[calc(var(--radius-xl)-1px)] bg-background/95 p-4 pr-10 sm:flex-row sm:items-center">
+				<div
+					aria-hidden
+					className="pointer-events-none absolute -top-16 -left-10 size-40 rounded-full bg-violet-500/15 blur-3xl"
+				/>
+				<AiBadgeIcon className="relative" />
+				<div className="relative flex min-w-0 flex-1 flex-col gap-0.5">
+					<p className="text-sm font-medium">Build decks with your AI assistant</p>
+					<p className="text-xs text-muted-foreground">
+						Connect Claude Code, Codex or any MCP client to MarpCollab. It can write new
+						presentations, edit slides live next to you and sync them with Git.
+					</p>
+				</div>
+				<ConnectAiAssistantDialog
+					trigger={
+						<Button className="relative self-start sm:self-center">
+							Set up in a minute
+							<ArrowRightIcon data-icon="inline-end" />
+						</Button>
+					}
+				/>
+				<Button
+					type="button"
+					variant="ghost"
+					size="icon-sm"
+					aria-label="Dismiss"
+					className="absolute top-2 right-2"
+					onClick={onDismiss}
+				>
+					<XIcon />
+				</Button>
+			</div>
 		</div>
 	);
 }

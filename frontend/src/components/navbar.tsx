@@ -13,6 +13,7 @@ import {
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { HelpDialog } from "./dialog/help-dialog";
 import { ModeToggle } from "./mode-toggle";
 import { useTheme } from "./theme-provider";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
@@ -136,6 +137,7 @@ export default function Navbar({ breadcrumb, actions }: NavbarProps) {
 			<div className="flex items-center gap-1 justify-self-end">
 				{actions}
 				<div className="hidden items-center gap-1 sm:flex">
+					<HelpDialog />
 					<ModeToggle />
 
 					<Tooltip>

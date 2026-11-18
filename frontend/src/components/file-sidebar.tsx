@@ -1,6 +1,15 @@
 // oxlint-disable no-warning-comments
 import { useState } from "react";
-import { Files, LayoutGrid, ListTree, RotateCcw, Search, Settings, Trash2 } from "lucide-react";
+import {
+	Files,
+	LayoutGrid,
+	ListTree,
+	RotateCcw,
+	Search,
+	Settings,
+	Sparkles,
+	Trash2,
+} from "lucide-react";
 import { useHotkeys } from "@tanstack/react-hotkeys";
 import useSWR from "swr";
 import type { Project } from "@/lib/types";
@@ -27,6 +36,7 @@ import {
 } from "@/components/ui/select";
 import { ProjectNameSetting } from "@/components/project-name-setting";
 import { ProjectGitSetting } from "@/components/project-git-setting";
+import { ConnectAiAssistantDialog } from "@/components/dialog/connect-ai-assistant";
 import { Label } from "./ui/label";
 import { Button } from "./ui/button";
 import { ProjectFilesPanel } from "@/features/project-files/project-files-panel";
@@ -307,6 +317,22 @@ export const FileSidebar = ({
 						{themeSelectDisabled
 							? "Select a writable Markdown deck file to change its theme."
 							: "Theme changes update the active deck frontmatter."}
+					</p>
+				</div>
+
+				<div className="space-y-1.5">
+					<Label className="px-1 text-xs font-medium">AI assistant</Label>
+					<ConnectAiAssistantDialog
+						projectName={projectSettings?.project.name}
+						trigger={
+							<Button type="button" variant="outline" className="w-full justify-start">
+								<Sparkles />
+								Connect AI assistant
+							</Button>
+						}
+					/>
+					<p className="px-1 text-xs text-muted-foreground">
+						Let Claude Code, Codex or another MCP client edit this presentation with you.
 					</p>
 				</div>
 
