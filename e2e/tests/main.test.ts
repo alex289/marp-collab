@@ -563,7 +563,8 @@ test.describe("Editor: content editing", () => {
 
 		const overview = page.frameLocator('iframe[title="Slide overview"]');
 		const titles = overview.getByRole("heading", { level: 1 });
-		const openSlideActions = () => page.getByRole("button", { name: "Slide actions" }).click();
+		const openSlideActions = () =>
+			overview.locator('.thumb-label[aria-current="true"]').press("Shift+F10");
 		await expect(titles).toHaveText(["Opening", "Research", "Results", "Next steps"]);
 		await overview.getByRole("button", { name: "Jump to slide 2" }).press("Enter");
 		await expect(overview.getByRole("button", { name: "Jump to slide 2" })).toHaveAttribute(
@@ -599,6 +600,7 @@ test.describe("Editor: content editing", () => {
 		await page.getByRole("menuitem", { name: "Delete slide", exact: true }).click();
 		await expect(titles).toHaveText(["Opening", "Research", "New slide", "Results", "Next steps"]);
 
+		await expect(page.getByRole("menu")).toHaveCount(0);
 		// Drag the first thumbnail below the second, then undo the single edit.
 		const jump1 = overview.getByRole("button", { name: "Jump to slide 1" });
 		await jump1.scrollIntoViewIfNeeded();
@@ -614,18 +616,16 @@ test.describe("Editor: content editing", () => {
 		await editor.press("ControlOrMeta+z");
 		await expect(titles).toHaveText(["Opening", "Research", "New slide", "Results", "Next steps"]);
 
-		await page.getByRole("button", { name: "Select", exact: true }).click();
+		await page.getByRole("button", { name: "Select slides" }).click();
 		await overview.getByRole("button", { name: "Select slide 1", exact: true }).press("Space");
 		await overview.getByRole("button", { name: "Select slide 3", exact: true }).click();
 		await expect(page.getByRole("status").filter({ hasText: "2 selected" })).toBeVisible();
-		await page.getByRole("button", { name: "Selection actions" }).click();
-		await page.getByRole("menuitem", { name: "Move down" }).click();
+		await page.getByRole("button", { name: "Move selected down" }).click();
 		await expect(titles).toHaveText(["Research", "Results", "Opening", "New slide", "Next steps"]);
 		await expect(
 			overview.getByRole("button", { name: "Select slide 3", exact: true }),
 		).toHaveAttribute("aria-pressed", "true");
-		await page.getByRole("button", { name: "Selection actions" }).click();
-		await page.getByRole("menuitem", { name: "Delete selected slides" }).click();
+		await page.getByRole("button", { name: "Delete selected" }).click();
 		await expect(titles).toHaveText(["Research", "Results", "Next steps"]);
 		await expect(peer.locator(".cm-content")).not.toContainText("# New slide");
 		await expect(editor).toContainText("paginate: true");
@@ -669,7 +669,7 @@ test.describe("Editor: content editing", () => {
 		await expect(frame).toBeFocused();
 		await expect(jumpTo(2)).toBeFocused();
 
-		await page.getByRole("button", { name: "Select", exact: true }).click();
+		await page.getByRole("button", { name: "Select slides" }).click();
 		for (const index of [2, 3]) {
 			await overview.getByRole("button", { name: `Select slide ${index}`, exact: true }).click();
 		}
@@ -697,7 +697,8 @@ test.describe("Editor: content editing", () => {
 		await page.getByRole("button", { name: /^Slides \(/ }).click();
 		const overview = page.frameLocator('iframe[title="Slide overview"]');
 		const titles = overview.getByRole("heading", { level: 1 });
-		const openSlideActions = () => page.getByRole("button", { name: "Slide actions" }).click();
+		const openSlideActions = () =>
+			overview.locator('.thumb-label[aria-current="true"]').press("Shift+F10");
 
 		for (const [slide, name] of [
 			[1, "Introduction"],
@@ -741,7 +742,7 @@ test.describe("Editor: content editing", () => {
 			"Introduction",
 		]);
 
-		await page.getByRole("button", { name: "Select", exact: true }).click();
+		await page.getByRole("button", { name: "Select slides" }).click();
 		await overview.getByRole("button", { name: "Select section Field findings" }).click();
 		await expect(page.getByRole("status").filter({ hasText: "2 selected" })).toBeVisible();
 		await expect(
@@ -791,16 +792,14 @@ test.describe("Editor: content editing", () => {
 		await expect(peerEditor).toContainText("# Deck defaults");
 		await page.bringToFront();
 
-		const actions = page.getByRole("button", { name: "Slide actions" });
 		const deleteSlide = page.getByRole("menuitem", { name: "Delete slide", exact: true });
-		await actions.click();
+		await settingsSlide.press("Shift+F10");
 		await expect(deleteSlide).toBeVisible();
 		await peerEditor.fill(source + "\n\n# Closing");
 		await expect(overview.getByRole("heading", { name: "Closing" })).toBeVisible();
 		await expect(deleteSlide).toBeHidden();
 
-		await settingsSlide.click();
-		await actions.click();
+		await settingsSlide.press("Shift+F10");
 		await deleteSlide.click();
 		await expect(
 			page.getByText(
@@ -810,14 +809,14 @@ test.describe("Editor: content editing", () => {
 		await expect(editor).toContainText("<!-- theme: gaia -->");
 		await expect(overview.getByRole("heading", { name: "Deck defaults" })).toBeVisible();
 
-		await page.getByRole("button", { name: "Select", exact: true }).click();
+		await page.getByRole("button", { name: "Select slides" }).click();
 		await overview.getByRole("button", { name: "Select slide 2", exact: true }).click();
 		await expect(page.getByRole("status").filter({ hasText: "1 selected" })).toBeVisible();
 		await peerEditor.fill(source);
-		await expect(page.getByRole("button", { name: "Select", exact: true })).toBeVisible();
+		await expect(page.getByRole("button", { name: "Select slides" })).toBeVisible();
 		await peerEditor.fill(source + "\n\n# Closing");
 		await expect(overview.getByRole("heading", { name: "Closing" })).toBeVisible();
-		await expect(page.getByRole("button", { name: "Select", exact: true })).toBeVisible();
+		await expect(page.getByRole("button", { name: "Select slides" })).toBeVisible();
 		await peer.close();
 	});
 

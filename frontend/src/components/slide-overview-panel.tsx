@@ -638,9 +638,9 @@ export const SlideOverviewPanel = ({
 		}
 
 		// Must mirror index.css; the srcDoc iframe can't read the parent's
-		// custom properties.
+		// custom properties. Its own background stays transparent so the
+		// thumbnails sit directly on the sidebar.
 		const isDark = resolvedTheme === "dark";
-		const background = isDark ? "oklch(0.14 0 0)" : "oklch(0.92 0 0)";
 		const pageShadow = isDark ? "0 1px 6px rgb(0 0 0 / 0.55)" : "0 1px 4px rgb(0 0 0 / 0.18)";
 		const liftShadow = isDark ? "0 10px 24px rgb(0 0 0 / 0.7)" : "0 10px 24px rgb(0 0 0 / 0.35)";
 		const accent = isDark ? "oklch(0.72 0.15 250)" : "oklch(0.52 0.18 255)";
@@ -659,7 +659,7 @@ export const SlideOverviewPanel = ({
       html, body {
         margin: 0;
         min-height: 100%;
-        background: ${background};
+        background: transparent;
         overflow-x: hidden;
         overflow-y: auto;
         font-family: system-ui, -apple-system, sans-serif;
@@ -783,9 +783,39 @@ export const SlideOverviewPanel = ({
 	return (
 		<SidebarGroup className="h-full min-h-0">
 			<SidebarGroupLabel className="flex shrink-0 items-center gap-2 pb-2 pl-0">
-				<LayoutGrid className="size-4" />
-				<span>Slides</span>
-				{isMarkdown ? <span className="ml-auto text-muted-foreground">{slideCount}</span> : null}
+				{!selected && (
+					<>
+						<LayoutGrid className="size-4" />
+						<span>Slides</span>
+						{isMarkdown ? (
+							<span className="text-muted-foreground tabular-nums">{slideCount}</span>
+						) : null}
+					</>
+				)}
+				{isMarkdown && editable && rendered && (
+					<SlideOverviewActions
+						key={deckFileId}
+						source={markdown}
+						slideCount={slideCount}
+						activeIndex={Math.max(0, activeIndex)}
+						sections={sections}
+						selected={selected}
+						thumbnailMenu={currentThumbnailMenu}
+						iframeRef={iframeRef}
+						onCloseThumbnailMenu={() =>
+							setThumbnailMenu((menu) => (menu?.open ? { ...menu, open: false } : menu))
+						}
+						onFocusThumbnail={(index) =>
+							portRef.current?.postMessage({
+								type: "overview-focus-slide",
+								revision: revision.current,
+								index,
+							})
+						}
+						onChangeSelection={changeSelection}
+						onAction={applyAction}
+					/>
+				)}
 			</SidebarGroupLabel>
 			<SidebarGroupContent className="flex min-h-0 flex-1 flex-col">
 				{!isMarkdown ? (
@@ -799,35 +829,11 @@ export const SlideOverviewPanel = ({
 					</p>
 				) : (
 					<>
-						{editable && (
-							<SlideOverviewActions
-								key={deckFileId}
-								source={markdown}
-								slideCount={slideCount}
-								activeIndex={Math.max(0, activeIndex)}
-								sections={sections}
-								selected={selected}
-								thumbnailMenu={currentThumbnailMenu}
-								iframeRef={iframeRef}
-								onCloseThumbnailMenu={() =>
-									setThumbnailMenu((menu) => (menu?.open ? { ...menu, open: false } : menu))
-								}
-								onFocusThumbnail={(index) =>
-									portRef.current?.postMessage({
-										type: "overview-focus-slide",
-										revision: revision.current,
-										index,
-									})
-								}
-								onChangeSelection={changeSelection}
-								onAction={applyAction}
-							/>
-						)}
 						<iframe
 							ref={iframeRef}
 							title="Slide overview"
 							srcDoc={staticSrcDoc}
-							className="min-h-0 w-full flex-1 rounded-sm"
+							className="min-h-0 w-full flex-1"
 							sandbox="allow-scripts"
 							onLoad={handleIframeLoad}
 						/>

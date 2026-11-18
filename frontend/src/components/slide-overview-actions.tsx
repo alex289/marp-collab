@@ -1,5 +1,5 @@
-import { useMemo, useRef, useState, type RefObject } from "react";
-import { ArrowDown, ArrowUp, Copy, Ellipsis, Layers, ListChecks, Plus, Trash2 } from "lucide-react";
+import { useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
+import { ArrowDown, ArrowUp, Copy, Layers, ListChecks, Plus, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
 	ContextMenu,
@@ -17,17 +17,9 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
-import {
-	DropdownMenu,
-	DropdownMenuContent,
-	DropdownMenuGroup,
-	DropdownMenuItem,
-	DropdownMenuLabel,
-	DropdownMenuSeparator,
-	DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { getSlideMoveTarget, type SlideAction, type SlideSection } from "@/lib/slide-blocks";
 
 export type ThumbnailMenu = {
@@ -52,6 +44,40 @@ type SlideOverviewActionsProps = {
 	onAction: (action: SlideAction) => void;
 };
 
+function ToolbarButton({
+	label,
+	onClick,
+	disabled,
+	destructive,
+	children,
+}: {
+	label: string;
+	onClick: () => void;
+	disabled?: boolean;
+	destructive?: boolean;
+	children: ReactNode;
+}) {
+	return (
+		<Tooltip>
+			<TooltipTrigger
+				render={
+					<Button
+						type="button"
+						variant={destructive ? "destructive" : "ghost"}
+						size="icon-sm"
+						aria-label={label}
+						disabled={disabled}
+						onClick={onClick}
+					>
+						{children}
+					</Button>
+				}
+			/>
+			<TooltipContent>{label}</TooltipContent>
+		</Tooltip>
+	);
+}
+
 const allSlides = (count: number) => Array.from({ length: count }, (_, index) => index);
 
 export function SlideOverviewActions({
@@ -68,19 +94,12 @@ export function SlideOverviewActions({
 	onAction,
 }: SlideOverviewActionsProps) {
 	const restoreThumbnailFocus = useRef(false);
-	const [menuTarget, setMenuTarget] = useState<{ source: string; activeIndex: number } | null>(
-		null,
-	);
 	const [sectionForm, setSectionForm] = useState<{
 		source: string;
 		index: number;
 		name: string;
 		rename: boolean;
 	} | null>(null);
-	const menuOpen = menuTarget?.source === source && menuTarget.activeIndex === activeIndex;
-	if (menuTarget && !menuOpen) {
-		setMenuTarget(null);
-	}
 	const form = sectionForm?.source === source ? sectionForm : null;
 	if (sectionForm && !form) {
 		setSectionForm(null);
@@ -95,70 +114,76 @@ export function SlideOverviewActions({
 	const selectionAtThumbnail =
 		thumbnailMenu && selected?.includes(thumbnailMenu.index) ? selected : null;
 
-	function menuItems(index: number, selection: number[] | null, context = false) {
-		const Group = context ? ContextMenuGroup : DropdownMenuGroup;
-		const Label = context ? ContextMenuLabel : DropdownMenuLabel;
-		const Item = context ? ContextMenuItem : DropdownMenuItem;
-		const Separator = context ? ContextMenuSeparator : DropdownMenuSeparator;
+	const moveTargets = (indices: number[]) => ({
+		up: (indices[0] ?? 0) - 1,
+		down: (indices.at(-1) ?? 0) + 2,
+	});
+
+	const selectionMove = moveTargets(selected ?? []);
+
+	function contextMenuItems(index: number, selection: number[] | null) {
 		const sectionIndex = sections.findIndex(({ end }) => index < end);
 		const section = sections[sectionIndex];
 		const firstSlideInSection = section?.name && index === section.start;
 		const count = selection?.length ?? 0;
 		const indices = selection ?? [index];
-		const moveUp = (indices[0] ?? 0) - 1;
-		const moveDown = (indices.at(-1) ?? 0) + 2;
+		const { up: moveUp, down: moveDown } = moveTargets(indices);
 		return (
 			<>
-				<Group>
-					<Label>{selection ? `${count} selected` : `Slide ${index + 1}`}</Label>
-					{context && !selection && (
-						<Item onClick={() => onAction({ type: "add", index })}>
+				<ContextMenuGroup>
+					<ContextMenuLabel>
+						{selection ? `${count} selected` : `Slide ${index + 1}`}
+					</ContextMenuLabel>
+					{!selection && (
+						<ContextMenuItem onClick={() => onAction({ type: "add", index })}>
 							<Plus /> Add slide after
-						</Item>
+						</ContextMenuItem>
 					)}
 					{selection ? (
-						<Item
+						<ContextMenuItem
 							onClick={() => onChangeSelection(count === slideCount ? [] : allSlides(slideCount))}
 						>
 							<ListChecks />
 							{count === slideCount ? "Clear selection" : "Select all slides"}
-						</Item>
+						</ContextMenuItem>
 					) : (
-						<Item onClick={() => onAction({ type: "duplicate", index })}>
+						<ContextMenuItem onClick={() => onAction({ type: "duplicate", index })}>
 							<Copy /> Duplicate slide
-						</Item>
+						</ContextMenuItem>
 					)}
-					<Item
+					<ContextMenuItem
 						disabled={getSlideMoveTarget(slideCount, indices, moveUp) === null}
 						onClick={() => onAction({ type: "move", indices, slot: moveUp })}
 					>
 						<ArrowUp /> Move up
-					</Item>
-					<Item
+					</ContextMenuItem>
+					<ContextMenuItem
 						disabled={getSlideMoveTarget(slideCount, indices, moveDown) === null}
 						onClick={() => onAction({ type: "move", indices, slot: moveDown })}
 					>
 						<ArrowDown /> Move down
-					</Item>
-					<Item
+					</ContextMenuItem>
+					<ContextMenuItem
 						variant="destructive"
 						disabled={!indices.length}
 						onClick={() => onAction({ type: "delete", indices })}
 					>
 						<Trash2 /> {selection ? "Delete selected slides" : "Delete slide"}
-					</Item>
+					</ContextMenuItem>
 					{!selection && !firstSlideInSection && (
-						<Item onClick={() => setSectionForm({ source, index, name: "", rename: false })}>
+						<ContextMenuItem
+							onClick={() => setSectionForm({ source, index, name: "", rename: false })}
+						>
 							<Layers /> Start section here
-						</Item>
+						</ContextMenuItem>
 					)}
-				</Group>
+				</ContextMenuGroup>
 				{!selection && section?.name && (
 					<>
-						<Separator />
-						<Group>
-							<Label className="truncate">{section.name}</Label>
-							<Item
+						<ContextMenuSeparator />
+						<ContextMenuGroup>
+							<ContextMenuLabel className="truncate">{section.name}</ContextMenuLabel>
+							<ContextMenuItem
 								onClick={() =>
 									setSectionForm({
 										source,
@@ -169,23 +194,25 @@ export function SlideOverviewActions({
 								}
 							>
 								Rename section
-							</Item>
-							<Item
+							</ContextMenuItem>
+							<ContextMenuItem
 								disabled={!sections[sectionIndex - 1]?.name}
 								onClick={() => onAction({ type: "move-section-up", index: section.start })}
 							>
 								<ArrowUp /> Move section up
-							</Item>
-							<Item
+							</ContextMenuItem>
+							<ContextMenuItem
 								disabled={!sections[sectionIndex + 1]?.name}
 								onClick={() => onAction({ type: "move-section-down", index: section.start })}
 							>
 								<ArrowDown /> Move section down
-							</Item>
-							<Item onClick={() => onAction({ type: "remove-section", index: section.start })}>
+							</ContextMenuItem>
+							<ContextMenuItem
+								onClick={() => onAction({ type: "remove-section", index: section.start })}
+							>
 								Remove section
-							</Item>
-						</Group>
+							</ContextMenuItem>
+						</ContextMenuGroup>
 					</>
 				)}
 			</>
@@ -194,49 +221,50 @@ export function SlideOverviewActions({
 
 	return (
 		<>
-			<div className="mb-2 flex shrink-0 flex-wrap items-center justify-between gap-1">
-				{selected ? (
-					<>
-						<p role="status" className="px-1 text-xs font-medium">
-							{selected.length} selected
-						</p>
-						<Button variant="ghost" onClick={() => onChangeSelection(null)}>
-							Done
-						</Button>
-					</>
-				) : (
-					<>
-						<Button variant="outline" onClick={() => onAction({ type: "add", index: activeIndex })}>
-							<Plus data-icon="inline-start" />
-							Add slide
-						</Button>
-						<Button variant="ghost" onClick={() => onChangeSelection([])}>
-							<ListChecks data-icon="inline-start" />
-							Select
-						</Button>
-					</>
-				)}
-
-				<DropdownMenu
-					open={menuOpen}
-					onOpenChange={(open) => setMenuTarget(open ? { source, activeIndex } : null)}
-				>
-					<DropdownMenuTrigger
-						render={
-							<Button
-								variant="ghost"
-								size="icon"
-								aria-label={selected ? "Selection actions" : "Slide actions"}
-							/>
-						}
+			{selected ? (
+				<div className="flex min-w-0 flex-1 items-center gap-0.5">
+					<ToolbarButton label="Done selecting" onClick={() => onChangeSelection(null)}>
+						<X />
+					</ToolbarButton>
+					<p role="status" className="mr-auto truncate pl-1 font-medium text-sidebar-foreground">
+						{selected.length} selected
+					</p>
+					<ToolbarButton
+						label="Move selected up"
+						disabled={getSlideMoveTarget(slideCount, selected, selectionMove.up) === null}
+						onClick={() => onAction({ type: "move", indices: selected, slot: selectionMove.up })}
 					>
-						<Ellipsis />
-					</DropdownMenuTrigger>
-					<DropdownMenuContent align="end" className="min-w-44">
-						{menuItems(activeIndex, selected)}
-					</DropdownMenuContent>
-				</DropdownMenu>
-			</div>
+						<ArrowUp />
+					</ToolbarButton>
+					<ToolbarButton
+						label="Move selected down"
+						disabled={getSlideMoveTarget(slideCount, selected, selectionMove.down) === null}
+						onClick={() => onAction({ type: "move", indices: selected, slot: selectionMove.down })}
+					>
+						<ArrowDown />
+					</ToolbarButton>
+					<ToolbarButton
+						label="Delete selected"
+						destructive
+						disabled={!selected.length}
+						onClick={() => onAction({ type: "delete", indices: selected })}
+					>
+						<Trash2 />
+					</ToolbarButton>
+				</div>
+			) : (
+				<div className="ml-auto flex shrink-0 items-center gap-0.5">
+					<ToolbarButton
+						label="Add slide"
+						onClick={() => onAction({ type: "add", index: activeIndex })}
+					>
+						<Plus />
+					</ToolbarButton>
+					<ToolbarButton label="Select slides" onClick={() => onChangeSelection([])}>
+						<ListChecks />
+					</ToolbarButton>
+				</div>
+			)}
 			<ContextMenu
 				open={thumbnailMenu?.open ?? false}
 				onOpenChange={(open, details) => {
@@ -260,7 +288,7 @@ export function SlideOverviewActions({
 						return true;
 					}}
 				>
-					{thumbnailMenu && menuItems(thumbnailMenu.index, selectionAtThumbnail, true)}
+					{thumbnailMenu && contextMenuItems(thumbnailMenu.index, selectionAtThumbnail)}
 				</ContextMenuContent>
 			</ContextMenu>
 			<Dialog
