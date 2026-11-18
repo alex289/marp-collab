@@ -41,10 +41,15 @@ import { OutlinePanel } from "@/components/outline-panel";
 import { SlideOverviewPanel } from "@/components/slide-overview-panel";
 import { parseMarkdownOutline } from "@/lib/outline";
 import { countMarpSlides, getLineForSlideIndex, getSlideIndexForLine } from "@/lib/slide-count";
-import { computeMinimalSplice, moveSlide } from "@/lib/slide-blocks";
+import {
+	computeMinimalSplice,
+	getEditableSlideDeck,
+	getSlideNavigationLines,
+	type SlideEdit,
+} from "@/lib/slide-blocks";
 import { isEditableDeckFile, isMarkdownDeckFile } from "@/lib/file-types";
 import { PaneResizeHandle } from "@/components/pane-resize-handle";
-import { listThemeNames, rewriteCssUrls, setProjectThemes } from "@/lib/marp";
+import { listThemeNames, renderMarp, rewriteCssUrls, setProjectThemes } from "@/lib/marp";
 import { useAssetToken } from "@/lib/asset-token";
 import { fetcher } from "@/lib/fetcher";
 import { applyThemeToYText, getMarkdownTheme } from "@/lib/markdown-theme";
@@ -904,51 +909,63 @@ function RouteComponent() {
 		runActiveFileSearch(query);
 	};
 
-	// Reordering rewrites the deck's own document, so it is only offered while
-	// that deck is the file the editor has open for writing.
-	const canReorderSlides = isEditingPreviewFile && !collab.readOnly && !hasIncludes;
-	const reorderHint = hasIncludes
-		? "Edit included files directly to reorder their slides."
-		: collab.readOnly
-			? "You have read-only access to this deck."
-			: canReorderSlides
-				? "Click to jump, drag to reorder."
-				: "Open this deck in the editor to reorder its slides.";
+	const canEditSlides =
+		isEditingPreviewFile && syncedYText !== null && !collab.readOnly && !hasIncludes;
+	const slideEditHint = hasIncludes
+		? "Edit the source files to change slides in this deck with includes."
+		: !isEditingPreviewFile
+			? "Open this deck in the editor to change its slides."
+			: collab.readOnly && syncedYText
+				? "You have read-only access to this deck."
+				: "Connect to the deck to change its slides.";
 
-	const handleMoveSlide = useCallback(
-		(from: number, to: number) => {
-			const yText = collab.yText;
-			if (!yText || !canReorderSlides) {
-				return;
+	function handleSlideEdit(source: string, fileId: string | null, edit: SlideEdit): boolean {
+		const yText = syncedYText;
+		if (!canEditSlides || !yText?.doc || fileId !== selectedFile?.id) {
+			return false;
+		}
+
+		// The overview and editor can lag behind a remote transaction. Never
+		// apply an action by index to a document newer than its thumbnails.
+		// oxlint-disable-next-line no-base-to-string
+		if (source !== yText.toString()) {
+			toast("The deck changed. Try the slide action again.");
+			return false;
+		}
+		const splice = computeMinimalSplice(source, edit.markdown);
+		if (!splice) {
+			return false;
+		}
+
+		let line: number;
+		try {
+			const { slideSource } = renderMarp(edit.markdown, id, fileId, assetRevision, assetToken);
+			const next = getEditableSlideDeck(edit.markdown, slideSource);
+			if (next?.blocks.length !== edit.slideCount) {
+				toast.error("This edit would change the deck’s slide breaks. Edit the Markdown directly.");
+				return false;
 			}
+			line = getSlideNavigationLines(edit.markdown, slideSource)[edit.index];
+		} catch {
+			toast.error("This edit could not be rendered. Edit the Markdown directly.");
+			return false;
+		}
 
-			// oxlint-disable-next-line no-base-to-string
-			const current = yText.toString();
-			const next = moveSlide(current, from, to);
-			const splice = computeMinimalSplice(current, next);
-			if (!splice) {
-				return;
-			}
-
-			const applyMove = () => {
+		collab.undoManager?.stopCapturing();
+		yText.doc.transact(() => {
+			if (splice.deleteCount) {
 				yText.delete(splice.index, splice.deleteCount);
-				if (splice.insert) {
-					yText.insert(splice.index, splice.insert);
-				}
-			};
-
-			if (yText.doc) {
-				yText.doc.transact(applyMove);
-			} else {
-				applyMove();
 			}
+			if (splice.insert) {
+				yText.insert(splice.index, splice.insert);
+			}
+		});
+		collab.undoManager?.stopCapturing();
 
-			// Follow the slide to its new home so the caret doesn't strand the
-			// preview on whatever content shifted into the old position.
-			editorPaneRef.current?.jumpToLine(getLineForSlideIndex(next, to));
-		},
-		[canReorderSlides, collab.yText],
-	);
+		setMarkdown(edit.markdown);
+		editorPaneRef.current?.jumpToLine(line, false);
+		return true;
+	}
 
 	// Unblank whenever presentation mode is entered. The timer restarts by remounting.
 	const [wasPresentation, setWasPresentation] = useState(isPresentation);
@@ -1623,13 +1640,15 @@ function RouteComponent() {
 							themeRevision={themeRevision}
 							assetRevision={assetRevision}
 							assetToken={assetToken}
-							activeSlideIndex={followSlideIndex}
-							canReorder={canReorderSlides}
-							reorderHint={reorderHint}
-							onSelectSlide={(index) =>
-								editorPaneRef.current?.jumpToLine(sourceLineForSlide(index))
-							}
-							onMoveSlide={handleMoveSlide}
+							activeLine={isEditingPreviewFile ? expandedLine || cursorLine : null}
+							canEdit={canEditSlides}
+							editHint={slideEditHint}
+							onSelectLine={(line) => {
+								if (isEditingPreviewFile) {
+									editorPaneRef.current?.jumpToLine(included.sourceLines[line - 1] ?? line);
+								}
+							}}
+							onEdit={handleSlideEdit}
 						/>
 					}
 				/>

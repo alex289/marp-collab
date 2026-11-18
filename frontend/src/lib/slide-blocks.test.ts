@@ -1,7 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { Marp } from "@marp-team/marp-core";
 import {
 	computeMinimalSplice,
+	editSlideDeck,
+	getEditableSlideDeck,
+	getSlideSections,
 	joinDeckBlocks,
 	moveSlide,
 	splitDeckIntoBlocks,
@@ -131,6 +135,67 @@ test("returns the input for no-op and out-of-range moves", () => {
 
 test("clamps an out-of-range target to the last slide", () => {
 	assert.equal(moveSlide(deck, 0, 99), moveSlide(deck, 0, 2));
+});
+
+test("edits explicit Marp dividers while leaving Setext headings and notes in their slides", () => {
+	const source = "First heading\n---\n\n<!--\n---\n-->\n\n* * *\n\n# Second";
+	const parsed = getEditableSlideDeck(source, { startLines: [0, 7], frontMatterEnd: 0 });
+	assert.ok(parsed);
+	const edited = editSlideDeck(parsed, { type: "duplicate", index: 0 });
+	assert.ok(edited);
+	assert.equal(edited.slideCount, 3);
+	assert.deepEqual(new Marp().render(edited.markdown).comments, [["---"], ["---"], []]);
+	assert.ok(edited.markdown.includes("* * *"));
+	assert.equal(getEditableSlideDeck(source, { startLines: [0, 9], frontMatterEnd: 0 }), null);
+});
+
+test("keeps section labels in source and moves the whole section", () => {
+	const first = editSlideDeck(splitDeckIntoBlocks(deck), {
+		type: "name-section",
+		index: 0,
+		name: 'Intro "quoted"',
+	});
+	assert.ok(first);
+	const second = editSlideDeck(splitDeckIntoBlocks(first.markdown), {
+		type: "name-section",
+		index: 1,
+		name: "Findings",
+	});
+	assert.ok(second);
+	const moved = editSlideDeck(splitDeckIntoBlocks(second.markdown), {
+		type: "move-section-up",
+		index: 1,
+	});
+	assert.ok(moved);
+	assert.deepEqual(getSlideSections(splitDeckIntoBlocks(moved.markdown)), [
+		{ name: "Findings", start: 0, end: 2 },
+		{ name: 'Intro "quoted"', start: 2, end: 3 },
+	]);
+	assert.match(moved.markdown, /# Two[\s\S]+# Three[\s\S]+# One/);
+	const rendered = new Marp().render(moved.markdown);
+	assert.deepEqual(rendered.comments, [[], [], []]);
+	assert.doesNotMatch(rendered.html, /Findings|quoted/);
+});
+
+test("retains a section after deleting its opening slide and keeps deck directives after deleting all slides", () => {
+	const preamble = "<!-- theme: gaia -->\n\n";
+	const marker = '[marp-collab-section]: # "Opening"\n\n';
+	const source = preamble + marker + "# One\n\n---\n\n# Two";
+	const parsed = splitDeckIntoBlocks(source);
+	const reduced = editSlideDeck(parsed, { type: "delete", indices: [0] });
+	assert.equal(reduced?.markdown, preamble + marker + "# Two");
+	const empty = editSlideDeck(parsed, { type: "delete", indices: [0, 1] });
+	assert.equal(empty?.markdown, preamble);
+	assert.equal(
+		editSlideDeck(splitDeckIntoBlocks(preamble), { type: "add", index: 0 })?.markdown,
+		preamble + "# New slide\n",
+	);
+});
+
+test("keeps an empty opening slide from consuming the next slide as YAML", () => {
+	const moved = moveSlide("# One\n\n---\n\n# Two\n\n---", 2, 0);
+	assert.deepEqual(new Marp().render(moved).comments, [[], [], []]);
+	assert.ok(moved.startsWith("\n---\n"));
 });
 
 test("splices only the region that changed", () => {

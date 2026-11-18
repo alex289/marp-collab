@@ -2,6 +2,7 @@ import { Marp } from "@marp-team/marp-core";
 import { API_URL } from "./config";
 import { TAILWIND_DIRECTIVE, type SlideTailwind } from "../../../shared/slide-tailwind.ts";
 import type { TailwindCatalog } from "@/features/editor/completions";
+import type { SlideSource } from "./slide-blocks";
 
 let currentProjectId = "";
 let currentMarkdownDir = "";
@@ -50,7 +51,33 @@ function rewriteImageSrc(src: string): string {
 	return `${API_URL}/projects/${currentProjectId}/files/${resolved}${assetQuery(currentAssetVersion, currentAssetToken)}`;
 }
 
-const marp = new Marp({
+type SlideSourceToken = {
+	type: string;
+	map: [number, number] | null;
+};
+
+type SlideRender = ReturnType<Marp["render"]> & { slideSource: SlideSource };
+type SlideArrayRender = Omit<SlideRender, "html"> & { html: string[] };
+
+class SourceMappedMarp extends Marp {
+	override render(markdown: string, env: { htmlAsArray: true }): SlideArrayRender;
+	override render(markdown: string, env?: unknown): SlideRender;
+	override render(markdown: string, env?: unknown): SlideRender | SlideArrayRender {
+		const rendered = super.render(markdown, env);
+		const slides: SlideSourceToken[][] = this.lastSlideTokens ?? [];
+		return {
+			...rendered,
+			slideSource: {
+				startLines: slides.map(
+					(slide) => slide.find((token) => token.type === "marpit_slide_open")?.map?.[0] ?? 0,
+				),
+				frontMatterEnd: slides[0]?.find((token) => token.type === "front_matter")?.map?.[1] ?? 0,
+			},
+		};
+	}
+}
+
+const marp = new SourceMappedMarp({
 	html: {
 		...Marp.html, // Use Marps built-in HTML allowlist
 		img: {

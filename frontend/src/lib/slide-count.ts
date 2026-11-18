@@ -42,7 +42,7 @@ type ScannedLine = {
 };
 
 /** Splits on the same terminators as `String.split(/\r\n|\n|\r/)`, keeping offsets. */
-function splitLines(markdown: string): ScannedLine[] {
+export function splitSourceLines(markdown: string): ScannedLine[] {
 	const lines: ScannedLine[] = [];
 	const terminator = /\r\n|\n|\r/g;
 	let start = 0;
@@ -83,7 +83,7 @@ export type DeckScan = {
  * other slide helper is derived from this so they can never disagree.
  */
 export function scanDeck(markdown: string): DeckScan {
-	const lines = splitLines(markdown);
+	const lines = splitSourceLines(markdown);
 	let contentLineIndex = 0;
 
 	// YAML front matter is delimited by `---` (closed by `---` or `...`) at

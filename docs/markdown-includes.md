@@ -10,4 +10,4 @@ Paths are relative to the file containing the comment, including for nested incl
 
 Included content refreshes every three seconds and PDF export reads active edits. Missing files, cycles and invalid paths produce inline errors. Expansion allows up to 10 nested levels, 100 includes and 1,000,000 total source characters. Comments in fenced or indented code examples are left unchanged.
 
-Image paths in included content currently resolve relative to the main deck. Slide reordering is disabled for decks with includes; edit the source files to reorder those slides.
+Image paths in included content currently resolve relative to the main deck. Use the source files to add, delete, duplicate, reorder, or group slides in decks with includes. The thumbnails still jump to the source.
