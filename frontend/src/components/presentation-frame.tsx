@@ -36,6 +36,7 @@ type PresentationFrameProps = {
 	demoContainer?: HTMLElement | null;
 	onDemoStart?: () => void;
 	onDemoEnd?: (options: { advance: boolean }) => void;
+	onToggleFullscreen?: () => void;
 	/** Reports whether the active slide has speaker notes, e.g. to size the demo controls. */
 	onHasSpeakerNotesChange?: (hasSpeakerNotes: boolean) => void;
 	className?: string;
@@ -281,6 +282,7 @@ const staticSrcDoc = `<!doctype html>
               shiftKey: e.shiftKey,
               altKey: e.altKey,
               metaKey: e.metaKey,
+              repeat: e.repeat,
             });
           };
         }
@@ -550,6 +552,7 @@ function SlideFrame({
 					shiftKey: payload.shiftKey,
 					altKey: payload.altKey,
 					metaKey: payload.metaKey,
+					repeat: payload.repeat,
 					bubbles: true,
 					cancelable: true,
 				}),
@@ -655,6 +658,7 @@ export function PresentationFrame({
 	demoContainer = null,
 	onDemoStart,
 	onDemoEnd,
+	onToggleFullscreen,
 	onHasSpeakerNotesChange,
 	className,
 }: PresentationFrameProps) {
@@ -879,6 +883,7 @@ export function PresentationFrame({
 					slideLabel={`Slide ${slideIndex + 1} of ${rendered.comments.length}`}
 					hasNextSlide={hasNextSlide}
 					onEnd={onDemoEnd}
+					onToggleFullscreen={onToggleFullscreen}
 				/>
 			)}
 		</div>

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
+import { useHotkey } from "@tanstack/react-hotkeys";
 import { ArrowRightIcon, PresentationIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { formatElapsed } from "@/components/presentation-timer";
@@ -12,6 +13,7 @@ type DemoControlsProps = {
 	slideLabel: string;
 	hasNextSlide: boolean;
 	onEnd: (options: { advance: boolean }) => void;
+	onToggleFullscreen?: () => void;
 };
 
 /**
@@ -25,9 +27,29 @@ export function DemoControls({
 	slideLabel,
 	hasNextSlide,
 	onEnd,
+	onToggleFullscreen,
 }: DemoControlsProps) {
 	const [startedAt] = useState(() => Date.now());
 	const [now, setNow] = useState(() => Date.now());
+	const target = container.ownerDocument;
+	useHotkey(
+		"L",
+		(event) => {
+			if (!event.repeat) {
+				onEnd({ advance: false });
+			}
+		},
+		{ target, conflictBehavior: "allow" },
+	);
+	useHotkey(
+		"F",
+		(event) => {
+			if (!event.repeat) {
+				onToggleFullscreen?.();
+			}
+		},
+		{ target, conflictBehavior: "allow" },
+	);
 
 	useEffect(() => {
 		// Tick on the Picture-in-Picture window: it stays visible during the
@@ -63,7 +85,12 @@ export function DemoControls({
 				</div>
 			)}
 			<div className="mt-auto flex flex-col gap-2">
-				<Button type="button" onClick={() => onEnd({ advance: false })}>
+				<Button
+					type="button"
+					aria-keyshortcuts="L"
+					title="Back to presentation (L)"
+					onClick={() => onEnd({ advance: false })}
+				>
 					<PresentationIcon />
 					Back to presentation
 				</Button>

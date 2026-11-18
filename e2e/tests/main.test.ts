@@ -1217,6 +1217,173 @@ test.describe("Presentation mode", () => {
 		await expect(page.locator(".cm-editor")).toBeVisible();
 	});
 
+	test("shares a demo and returns to the slide without leaving audience fullscreen", async ({
+		page,
+	}) => {
+		type DemoTestWindow = Window & { demoCaptureTrack?: MediaStreamTrack };
+		await page.addInitScript(() => {
+			let attempts = 0;
+			navigator.mediaDevices.getDisplayMedia = () => {
+				if (attempts++ === 0) {
+					return Promise.reject(new DOMException("Picker canceled", "NotAllowedError"));
+				}
+
+				const canvas = document.createElement("canvas");
+				const stream = canvas.captureStream();
+				canvas.getContext("2d")!.fillRect(0, 0, canvas.width, canvas.height);
+				const [track] = stream.getVideoTracks();
+				(window as DemoTestWindow).demoCaptureTrack = track;
+				return Promise.resolve(stream);
+			};
+		});
+
+		await page.goto("/");
+		await createPresentation(page, "Fullscreen Demo Test");
+		await waitForSidebar(page);
+		await page.getByRole("button", { name: "Start", exact: true }).click();
+		const audienceOpened = page.waitForEvent("popup");
+		await page.getByRole("button", { name: "Open clean screen" }).click();
+		const audience = await audienceOpened;
+		const slide = audience.frameLocator('iframe[title="Presentation"]').locator("section").first();
+		await expect(slide).toBeVisible();
+		await page.bringToFront();
+		await page.getByRole("button", { name: "Toggle fullscreen" }).click();
+		const isFullscreen = () => audience.evaluate(() => Boolean(document.fullscreenElement));
+		await expect.poll(isFullscreen).toBe(true);
+
+		const demo = audience.getByLabel("Shared live demo");
+		const demoPlaceholder = audience.getByText("Live demo", { exact: true });
+		const start = page.getByRole("button", { name: "Start live demo" });
+		await page.bringToFront();
+		await start.click();
+		await expect(demo).toHaveCount(0);
+		await expect(demoPlaceholder).toHaveCount(0);
+		await expect(start).toBeVisible();
+
+		await start.click();
+		await expect(demo).toBeVisible();
+		await expect
+			.poll(() => demo.evaluate((video: HTMLVideoElement) => video.videoWidth))
+			.toBeGreaterThan(0);
+		await expect.poll(isFullscreen).toBe(true);
+
+		await page.keyboard.press("b");
+		await expect(audience.getByText("Presentation paused")).toBeVisible();
+		await expect(demo).toBeHidden();
+		const independentViewer = await page.context().newPage();
+		await independentViewer.goto(audience.url());
+		await expect(independentViewer.getByText("Presentation paused")).toBeVisible();
+		await expect(independentViewer.getByLabel("Shared live demo")).toHaveCount(0);
+		const secondPresenter = await page.context().newPage();
+		await secondPresenter.goto(page.url());
+		await expect(secondPresenter.getByText(/Audience screen is blanked/)).toBeVisible();
+		await expect(secondPresenter.getByRole("button", { name: "End live demo" })).toBeVisible();
+		await expect(demo).toBeHidden();
+		await page.bringToFront();
+		await page.keyboard.press("b");
+		await expect(demo).toBeVisible();
+		await expect(independentViewer.getByText("Presentation paused")).toHaveCount(0);
+		await expect(independentViewer.getByText("Live demo", { exact: true })).toBeVisible();
+		await expect(secondPresenter.getByText(/Live demo running/)).toBeVisible();
+		await expect(page.getByRole("button", { name: "End live demo" })).toBeVisible();
+
+		await page.evaluate(() => {
+			const track = (window as DemoTestWindow).demoCaptureTrack!;
+			track.stop();
+			track.dispatchEvent(new Event("ended"));
+		});
+		await expect(demo).toHaveCount(0);
+		await expect(demoPlaceholder).toHaveCount(0);
+		await expect(independentViewer.getByText("Live demo", { exact: true })).toHaveCount(0);
+		await expect(secondPresenter.getByRole("button", { name: "Start live demo" })).toBeVisible();
+		await expect(start).toBeVisible();
+		await expect(slide).toBeVisible();
+		await expect.poll(isFullscreen).toBe(true);
+
+		await start.click();
+		await expect(demo).toBeVisible();
+		await audience.bringToFront();
+		await audience.keyboard.press("l");
+		await expect(demo).toHaveCount(0);
+		await expect.poll(isFullscreen).toBe(true);
+		await expect
+			.poll(() => page.evaluate(() => (window as DemoTestWindow).demoCaptureTrack?.readyState))
+			.toBe("ended");
+
+		await page.bringToFront();
+		await start.click();
+		await expect(demo).toBeVisible();
+		await secondPresenter.getByRole("button", { name: "End live demo" }).click();
+		await expect(demo).toHaveCount(0);
+		await expect(start).toBeVisible();
+		await expect(independentViewer.getByText("Live demo", { exact: true })).toHaveCount(0);
+		await secondPresenter.close();
+
+		await page.reload();
+		await expect(start).toBeVisible();
+		await expect(
+			page
+				.frameLocator('iframe[title="Presentation"]')
+				.getByRole("heading", { name: "Fullscreen Demo Test" }),
+		).toBeVisible();
+		await page.bringToFront();
+		await page.keyboard.press("f");
+		await expect.poll(isFullscreen).toBe(false);
+
+		await audience.evaluate(() => {
+			Element.prototype.requestFullscreen = () =>
+				Promise.reject(new TypeError("Fullscreen activation required"));
+		});
+		const fullscreenPrompt = audience.getByText("Click to enter fullscreen");
+		await page.keyboard.press("f");
+		await expect(fullscreenPrompt).toBeVisible();
+		await page.keyboard.press("f");
+		await expect(fullscreenPrompt).toHaveCount(0);
+
+		// The first picker invocation is canceled again after reloading the presenter.
+		await start.click();
+		await expect(start).toBeVisible();
+		await start.click();
+		await expect(demo).toBeVisible();
+		await audience.close();
+		await expect(start).toBeVisible();
+		await expect
+			.poll(() => page.evaluate(() => (window as DemoTestWindow).demoCaptureTrack?.readyState))
+			.toBe("ended");
+		await expect(independentViewer.getByText("Live demo", { exact: true })).toHaveCount(0);
+	});
+
+	test("ends a live demo with L in the floating controls", async ({ page }) => {
+		await page.addInitScript(() => {
+			Object.defineProperty(window, "documentPictureInPicture", {
+				value: {
+					requestWindow: () => Promise.resolve(window.open("about:blank", "_blank", "popup")),
+				},
+			});
+		});
+		await page.goto("/");
+		await createPresentation(page, "Floating Demo Shortcuts");
+		await waitForSidebar(page);
+		await page.getByRole("button", { name: "Start", exact: true }).click();
+		const start = page.getByRole("button", { name: "Start live demo" });
+		const controlsOpened = page.waitForEvent("popup");
+		await start.click();
+		const controls = await controlsOpened;
+		await expect(controls.getByRole("button", { name: "Back to presentation" })).toBeVisible();
+		await controls.bringToFront();
+		const controlsClosed = controls.waitForEvent("close");
+		await controls.keyboard.down("l");
+		await controlsClosed;
+		await expect(start).toBeVisible();
+
+		await page.bringToFront();
+		await page.keyboard.press("f");
+		const isFullscreen = () => page.evaluate(() => Boolean(document.fullscreenElement));
+		await expect.poll(isFullscreen).toBe(true);
+		await page.keyboard.press("f");
+		await expect.poll(isFullscreen).toBe(false);
+	});
+
 	test("Escape key exits presentation mode", async ({ page }) => {
 		await page.goto("/");
 
