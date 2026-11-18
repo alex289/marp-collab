@@ -230,10 +230,9 @@ function computeSlideSplices(current: DeckBlocks, next: DeckBlocks, origins: Arr
 	return { markdown: after.markdown, splices };
 }
 
-// A Markdown link reference definition stays invisible in both the slides
-// and presenter notes, including when the deck is opened in Marp itself.
-const sectionMarker =
-	/^\[marp-collab-section\]:[ \t]+#[ \t]+("(?:[^"\\\r\n]|\\.)*")[ \t]*(?:\r\n|\n|\r|$)/;
+// Like `presenter:`, a section label is an HTML comment at the top of its
+// first slide that MarpCollab keeps out of the presenter notes.
+const sectionMarker = /^<!--[ \t]*section[ \t]*:[ \t]*([^\r\n]*?)[ \t]*-->[ \t]*(?:\r\n|\n|\r|$)/i;
 
 function readSectionMarker(block: string) {
 	const match = sectionMarker.exec(block);
@@ -241,12 +240,8 @@ function readSectionMarker(block: string) {
 		return null;
 	}
 
-	try {
-		const name = (JSON.parse(match[1]) as string).trim();
-		return name ? { name, end: skipBlankLines(block, match[0].length) } : null;
-	} catch {
-		return null;
-	}
+	const name = match[1].trim();
+	return name ? { name, end: skipBlankLines(block, match[0].length) } : null;
 }
 
 export function getSlideSections({ blocks }: DeckBlocks): SlideSection[] {
@@ -284,8 +279,7 @@ export function editSlideDeck(deck: DeckBlocks, action: SlideAction): SlideEdit 
 	const count = blocks.length;
 	const eol = sourceEol(frontMatter + (blocks[0] ?? "") + (separators[0] ?? ""));
 	const withoutMarker = (body: string) => body.slice(readSectionMarker(body)?.end ?? 0);
-	const withMarker = (body: string, name: string) =>
-		`[marp-collab-section]: # ${JSON.stringify(name)}${eol}${eol}${body}`;
+	const withMarker = (body: string, name: string) => `<!-- section: ${name} -->${eol}${eol}${body}`;
 	const sections = getSlideSections(deck);
 	const origins = blocks.map((_, index): number | null => index);
 
@@ -385,7 +379,8 @@ export function editSlideDeck(deck: DeckBlocks, action: SlideAction): SlideEdit 
 			return result(next, index + 1, dividers);
 		}
 		case "name-section": {
-			const name = action.name.trim();
+			// The name can't end the comment that holds it.
+			const name = action.name.trim().replaceAll("-->", "->");
 			if (!name || /[\r\n]/.test(name)) {
 				return null;
 			}

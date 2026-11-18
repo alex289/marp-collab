@@ -293,6 +293,14 @@ const marpCollabComments: Completion[] = [
 		info: "Marks this slide as a live demo. The title on the first line is shown to the audience; press L in the presenter view to start it.",
 		section: marpCollabSection,
 	},
+	{
+		label: "section",
+		apply: "section: ",
+		type: "keyword",
+		detail: "named group of slides",
+		info: "Starts a named section at this slide in the slide overview. Put it at the top of the slide.",
+		section: marpCollabSection,
+	},
 ];
 
 function directiveKeyCompletion(context: CompletionContext): CompletionResult | null {

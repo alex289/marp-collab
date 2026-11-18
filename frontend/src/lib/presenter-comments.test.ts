@@ -17,6 +17,14 @@ test("uses an explicit presenter comment as metadata", () => {
 	);
 });
 
+test("treats a section comment as a slide overview label", () => {
+	assert.deepEqual(parseSlidePresenterComments(["section: Findings", "Section names matter"]), {
+		presenter: null,
+		demo: null,
+		speakerNotes: ["Section names matter"],
+	});
+});
+
 test("keeps plain comments as speaker notes", () => {
 	assert.deepEqual(parseSlidePresenterComments(["Alice", "Remember the demo"]), {
 		presenter: null,

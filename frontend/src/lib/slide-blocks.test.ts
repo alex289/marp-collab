@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { Marp } from "@marp-team/marp-core";
 import * as Y from "yjs";
+import { parseSlidePresenterComments } from "./presenter-comments.ts";
 import {
 	computeMinimalSplice,
 	editSlideDeck,
@@ -174,14 +175,30 @@ test("keeps section labels in source and moves the whole section", () => {
 		{ name: 'Intro "quoted"', start: 2, end: 3 },
 	]);
 	assert.match(moved.markdown, /# Two[\s\S]+# Three[\s\S]+# One/);
+	assert.match(moved.markdown, /\n<!-- section: Findings -->\n\n# Two/);
 	const rendered = new Marp().render(moved.markdown);
-	assert.deepEqual(rendered.comments, [[], [], []]);
+	assert.deepEqual(
+		rendered.comments.map((comments) => parseSlidePresenterComments(comments).speakerNotes),
+		[[], [], []],
+	);
 	assert.doesNotMatch(rendered.html, /Findings|quoted/);
+});
+
+test("keeps a section name from closing its comment", () => {
+	const named = editSlideDeck(splitDeckIntoBlocks("# One"), {
+		type: "name-section",
+		index: 0,
+		name: "A --> B",
+	});
+	assert.equal(named?.markdown, "<!-- section: A -> B -->\n\n# One");
+	assert.deepEqual(getSlideSections(splitDeckIntoBlocks(named.markdown)), [
+		{ name: "A -> B", start: 0, end: 1 },
+	]);
 });
 
 test("retains a section after deleting its opening slide and keeps deck directives after deleting all slides", () => {
 	const preamble = "<!-- theme: gaia -->\n\n";
-	const marker = '[marp-collab-section]: # "Opening"\n\n';
+	const marker = "<!-- section: Opening -->\n\n";
 	const source = preamble + marker + "# One\n\n---\n\n# Two";
 	const parsed = splitDeckIntoBlocks(source);
 	const reduced = editSlideDeck(parsed, { type: "delete", indices: [0] });

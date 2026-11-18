@@ -14,7 +14,8 @@ export type PresenterUser = {
  * A `presenter: Name` HTML comment identifies the slide's presenter and a
  * `demo` or `demo: Title` comment marks the slide as a live demo. The demo
  * title is shown to the audience, so only the marker's first line is used;
- * further lines stay private speaker notes.
+ * further lines stay private speaker notes. A `section: Name` comment labels
+ * a group of slides in the slide overview and is not a note.
  * All other comments remain available as speaker notes.
  */
 export function parseSlidePresenterComments(comments: readonly string[]): SlidePresenterComments {
@@ -34,6 +35,10 @@ export function parseSlidePresenterComments(comments: readonly string[]): SlideP
 
 		if (presenterName) {
 			presenter ??= presenterName;
+			continue;
+		}
+
+		if (/^section\s*:[^\n]*\S/i.test(comment)) {
 			continue;
 		}
 

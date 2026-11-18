@@ -102,7 +102,7 @@ const SYNTAX_TIPS: SyntaxTip[] = [
 		title: "Slide sections",
 		description:
 			"Groups slides in the slide overview. Right-click a thumbnail to start, rename or move one.",
-		code: '[marp-collab-section]: # "Introduction"',
+		code: "<!-- section: Introduction -->",
 		docs: "slide-overview.md",
 	},
 	{
