@@ -66,6 +66,16 @@ import { createProjectThemeStore } from "@/lib/project-theme-store";
 import { API_URL } from "@/lib/config";
 import { releaseWakeLock, requestWakeLock } from "@/lib/wake-lock";
 import { openDemoWindow, supportsDemoWindow } from "@/lib/demo-window";
+import {
+	hasDemoAudience,
+	publishDemoShare,
+	registerDemoPresenter,
+	stopDemoFromAudience,
+	stopDemoStream,
+	TOGGLE_AUDIENCE_FULLSCREEN,
+	toggleAudienceFullscreen,
+} from "@/lib/demo-share";
+import { DemoAudienceVideo } from "@/components/demo-audience-video";
 import { useProjectFilesWorkspace } from "@/features/project-files/use-project-files-workspace";
 import {
 	getImageUploadDestination,
@@ -75,6 +85,7 @@ import {
 	ChevronLeftIcon,
 	ChevronRightIcon,
 	LaptopIcon,
+	MaximizeIcon,
 	MonitorOffIcon,
 	MonitorPlayIcon,
 	PauseIcon,
@@ -111,8 +122,8 @@ type PresentationSearch = {
 type PresentationAwarenessState = {
 	fileId: string;
 	slideIndex: number;
-	blanked: boolean;
-	demo: boolean;
+	blanked?: boolean;
+	demo?: boolean;
 	updatedAt: number;
 	userId: string;
 	zoom: number;
@@ -154,9 +165,8 @@ function parsePresentationAwarenessState(data: unknown): PresentationAwarenessSt
 	return {
 		fileId: payload.fileId,
 		slideIndex: Math.max(0, Math.trunc(payload.slideIndex)),
-		// Older clients don't send this field; treat it as "not blanked".
-		blanked: payload.blanked === true,
-		demo: payload.demo === true,
+		blanked: typeof payload.blanked === "boolean" ? payload.blanked : undefined,
+		demo: typeof payload.demo === "boolean" ? payload.demo : undefined,
 		updatedAt: payload.updatedAt,
 		userId: payload.userId,
 		zoom: payload.zoom,
@@ -166,15 +176,6 @@ function parsePresentationAwarenessState(data: unknown): PresentationAwarenessSt
 		laserXPercent: payload.laserXPercent,
 		laserYPercent: payload.laserYPercent,
 	};
-}
-
-function subscribeFullscreen(onChange: () => void) {
-	document.addEventListener("fullscreenchange", onChange);
-	return () => document.removeEventListener("fullscreenchange", onChange);
-}
-
-function getIsFullscreen() {
-	return document.fullscreenElement !== null;
 }
 
 async function exitFullscreenQuietly() {
@@ -393,20 +394,32 @@ function RouteComponent() {
 	const assetToken = useAssetToken(id);
 	const [slideIndex, setSlideIndex] = useState(0);
 	const [isBlanked, setIsBlanked] = useState(false);
+	const hasChangedBlankingRef = useRef(false);
+	const lastBlankingUpdateRef = useRef(0);
 	const [isDemo, setIsDemo] = useState(false);
+	const hasChangedDemoRef = useRef(false);
+	const lastDemoUpdateRef = useRef(0);
+	const [isSharingDemo, setIsSharingDemo] = useState(false);
 	// Holds the Picture-in-Picture body rather than its window: React's dev
 	// tooling walks props, and a Window exposes cross-origin frames.
 	const [demoContainer, setDemoContainer] = useState<HTMLElement | null>(null);
 	const demoWindowRef = useRef<Window | null>(null);
-	// Bumped whenever the demo window closes, so a pending open request that
-	// resolves after the demo ended doesn't leave an orphaned window behind.
-	const demoWindowRequestRef = useRef(0);
-	const closeDemoWindow = useCallback(() => {
-		demoWindowRequestRef.current += 1;
+	const stopDemoShareRef = useRef<(() => void) | null>(null);
+	const demoCapturePendingRef = useRef(false);
+	// A pending picker or floating window may resolve after leaving the deck.
+	const demoRequestRef = useRef(0);
+	const closeDemoOutput = useCallback(() => {
+		demoRequestRef.current += 1;
+		stopDemoShareRef.current?.();
+		stopDemoShareRef.current = null;
 		const current = demoWindowRef.current;
 		demoWindowRef.current = null;
 		current?.close();
 	}, []);
+	const stopDemo = useCallback(() => {
+		closeDemoOutput();
+		setIsDemo(false);
+	}, [closeDemoOutput]);
 	const slideHasSpeakerNotesRef = useRef(false);
 	const handleHasSpeakerNotesChange = useCallback((hasSpeakerNotes: boolean) => {
 		slideHasSpeakerNotesRef.current = hasSpeakerNotes;
@@ -423,7 +436,7 @@ function RouteComponent() {
 	const [searchLoading, setSearchLoading] = useState(false);
 	const [searchError, setSearchError] = useState<string | null>(null);
 	const editorPaneRef = useRef<EditorPaneHandle | null>(null);
-	const viewerContainerRef = useRef<HTMLDivElement | null>(null);
+	const presentationContainerRef = useRef<HTMLDivElement | null>(null);
 	const selectedCssFileIdRef = useRef<string | null>(null);
 	// Bumped whenever project themes reload, so a pending CSS edit that resolves
 	// afterwards can't write a theme from the previous file list or project.
@@ -1024,7 +1037,7 @@ function RouteComponent() {
 		return next;
 	}
 
-	// Unblank whenever presentation mode is entered. The timer restarts by remounting.
+	// Start with local defaults when entering presentation mode, then apply shared state.
 	const [wasPresentation, setWasPresentation] = useState(isPresentation);
 	if (wasPresentation !== isPresentation) {
 		setWasPresentation(isPresentation);
@@ -1034,26 +1047,54 @@ function RouteComponent() {
 		}
 	}
 
-	// The floating controls live exactly as long as the demo, however it ends:
-	// locally, from another presenter window through awareness, or by leaving
-	// presentation mode.
+	const demoDeck = selectedFile?.type === "markdown" ? `${id}/${selectedFile.id}` : null;
+	const presenterDemoDeck = isPresentation && !isViewer ? demoDeck : null;
+	const toggleBlanked = useCallback(() => {
+		hasChangedBlankingRef.current = true;
+		setIsBlanked((current) => !current);
+	}, []);
+	const [previousDemoDeck, setPreviousDemoDeck] = useState(presenterDemoDeck);
+	if (previousDemoDeck !== presenterDemoDeck) {
+		setPreviousDemoDeck(presenterDemoDeck);
+		setIsDemo(false);
+	}
+	if (!isDemo && isSharingDemo) {
+		setIsSharingDemo(false);
+	}
 	if (!isDemo && demoContainer) {
 		setDemoContainer(null);
 	}
 
 	useEffect(() => {
 		if (!isDemo) {
-			closeDemoWindow();
+			closeDemoOutput();
 		}
-	}, [isDemo, closeDemoWindow]);
+	}, [isDemo, closeDemoOutput]);
 
 	useEffect(() => {
 		if (!isPresentation) {
 			return;
 		}
 
-		return closeDemoWindow;
-	}, [isPresentation, closeDemoWindow]);
+		const unregisterPresenter = presenterDemoDeck
+			? registerDemoPresenter(presenterDemoDeck, () => {
+					hasChangedDemoRef.current = true;
+					stopDemo();
+				})
+			: undefined;
+		if (!isViewer) {
+			window.addEventListener("pagehide", stopDemo);
+		}
+		return () => {
+			hasChangedBlankingRef.current = false;
+			hasChangedDemoRef.current = false;
+			lastBlankingUpdateRef.current = 0;
+			lastDemoUpdateRef.current = 0;
+			unregisterPresenter?.();
+			window.removeEventListener("pagehide", stopDemo);
+			closeDemoOutput();
+		};
+	}, [isPresentation, isViewer, demoDeck, presenterDemoDeck, closeDemoOutput, stopDemo]);
 
 	useEffect(() => {
 		if (!isPresentation) {
@@ -1097,14 +1138,77 @@ function RouteComponent() {
 			setSlideIndex(maxSlideIndex);
 		}
 	}
-	const [fullscreenPromptVisible, setFullscreenPromptVisible] = useState(autoFullscreen);
+	const [fullscreenPrompt, setFullscreenPrompt] = useState<"initial" | "requested" | null>(
+		autoFullscreen ? "initial" : null,
+	);
+
+	const endDemo = useCallback(
+		({ advance }: { advance: boolean }) => {
+			hasChangedDemoRef.current = true;
+			if (demoWindowRef.current) {
+				window.focus();
+			}
+			stopDemo();
+			if (advance) {
+				setSlideIndex((current) => Math.min(current + 1, maxSlideIndex));
+			}
+		},
+		[stopDemo, maxSlideIndex],
+	);
 
 	const startDemo = useCallback(async () => {
+		if (demoCapturePendingRef.current) {
+			return;
+		}
+		const request = ++demoRequestRef.current;
+		if (
+			presenterDemoDeck &&
+			hasDemoAudience(presenterDemoDeck) &&
+			navigator.mediaDevices?.getDisplayMedia
+		) {
+			demoCapturePendingRef.current = true;
+			let stream: MediaStream;
+			try {
+				const options = {
+					video: true,
+					audio: false,
+					selfBrowserSurface: "exclude",
+					monitorTypeSurfaces: "exclude",
+				} as const;
+				stream = await navigator.mediaDevices.getDisplayMedia(options);
+			} catch (error) {
+				if (
+					request === demoRequestRef.current &&
+					!(error instanceof DOMException && error.name === "NotAllowedError")
+				) {
+					toast.error("Could not share the demo. Try choosing the tab or window again.");
+				}
+				return;
+			} finally {
+				demoCapturePendingRef.current = false;
+			}
+
+			if (request !== demoRequestRef.current) {
+				stopDemoStream(stream);
+				return;
+			}
+			const stop = publishDemoShare(presenterDemoDeck, stream, stopDemo);
+			if (!stop) {
+				toast.info("Demo sharing ended before it reached the audience window.");
+				return;
+			}
+			stopDemoShareRef.current = stop;
+			hasChangedDemoRef.current = true;
+			setIsSharingDemo(true);
+			setIsDemo(true);
+			return;
+		}
+
+		hasChangedDemoRef.current = true;
 		setIsDemo(true);
-		const request = ++demoWindowRequestRef.current;
 		const opened = await openDemoWindow({ compact: !slideHasSpeakerNotesRef.current });
-		if (opened && request !== demoWindowRequestRef.current) {
-			opened.close();
+		if (request !== demoRequestRef.current) {
+			opened?.close();
 			return;
 		}
 		if (!opened) {
@@ -1128,18 +1232,7 @@ function RouteComponent() {
 			},
 			{ once: true },
 		);
-	}, []);
-
-	const endDemo = useCallback(
-		({ advance }: { advance: boolean }) => {
-			setIsDemo(false);
-			if (advance) {
-				setSlideIndex((current) => Math.min(current + 1, maxSlideIndex));
-			}
-			window.focus();
-		},
-		[maxSlideIndex],
-	);
+	}, [presenterDemoDeck, stopDemo]);
 
 	const toggleDemo = useCallback(() => {
 		if (isDemo) {
@@ -1150,52 +1243,58 @@ function RouteComponent() {
 		void startDemo();
 	}, [isDemo, endDemo, startDemo]);
 
-	// Audience windows leave fullscreen during a demo so the demo app can take
-	// over the screen. Browsers only re-enter fullscreen on a click in this
-	// window, so the fullscreen prompt comes back once the demo ends.
-	const isFullscreen = useSyncExternalStore(subscribeFullscreen, getIsFullscreen);
-	const [wasDemo, setWasDemo] = useState(isDemo);
-	const [resumeFullscreenAfterDemo, setResumeFullscreenAfterDemo] = useState(false);
-	if (wasDemo !== isDemo) {
-		setWasDemo(isDemo);
-		if (isViewer && isDemo && isFullscreen) {
-			setResumeFullscreenAfterDemo(true);
+	const enterFullscreen = useCallback(async (fromPresenter = false) => {
+		try {
+			await (presentationContainerRef.current ?? document.documentElement).requestFullscreen();
+			setFullscreenPrompt(null);
+		} catch {
+			if (fromPresenter) {
+				setFullscreenPrompt("requested");
+				return;
+			}
+			toast.error("Could not enter fullscreen. Try again in this window.");
 		}
-		if (!isDemo && resumeFullscreenAfterDemo) {
-			setResumeFullscreenAfterDemo(false);
-			setFullscreenPromptVisible(true);
-		}
-	}
-
-	useEffect(() => {
-		if (isViewer && isDemo && document.fullscreenElement) {
-			void exitFullscreenQuietly();
-		}
-	}, [isViewer, isDemo]);
-
-	const enterFullscreen = useCallback(() => {
-		void (viewerContainerRef.current ?? document.documentElement).requestFullscreen();
-		setFullscreenPromptVisible(false);
 	}, []);
 
-	const toggleViewerFullscreen = useCallback(() => {
-		// Fullscreen would cover the demo app; the prompt returns after the demo.
-		if (!isViewer || isDemo) {
+	const toggleLocalFullscreen = useCallback(
+		(fromPresenter = false) => {
+			if (document.fullscreenElement) {
+				void exitFullscreenQuietly();
+				return;
+			}
+			if (fromPresenter && fullscreenPrompt === "requested") {
+				setFullscreenPrompt(null);
+				return;
+			}
+			void enterFullscreen(fromPresenter);
+		},
+		[enterFullscreen, fullscreenPrompt],
+	);
+
+	const toggleFullscreen = useCallback(() => {
+		if (presenterDemoDeck && toggleAudienceFullscreen(presenterDemoDeck)) {
 			return;
 		}
+		toggleLocalFullscreen();
+	}, [presenterDemoDeck, toggleLocalFullscreen]);
 
-		if (fullscreenPromptVisible) {
-			enterFullscreen();
+	useEffect(() => {
+		if (!isViewer) {
 			return;
 		}
-
-		if (document.fullscreenElement) {
-			void document.exitFullscreen();
-			return;
-		}
-
-		void (viewerContainerRef.current ?? document.documentElement).requestFullscreen();
-	}, [isViewer, isDemo, fullscreenPromptVisible, enterFullscreen]);
+		const handleFullscreenRequest = (event: MessageEvent<unknown>) => {
+			if (
+				event.source !== null &&
+				event.source === window.opener &&
+				event.origin === window.location.origin &&
+				event.data === TOGGLE_AUDIENCE_FULLSCREEN
+			) {
+				toggleLocalFullscreen(true);
+			}
+		};
+		window.addEventListener("message", handleFullscreenRequest);
+		return () => window.removeEventListener("message", handleFullscreenRequest);
+	}, [isViewer, toggleLocalFullscreen]);
 
 	useEffect(() => {
 		if (!isPresentation || selectedFile?.type !== "markdown" || !collab.awareness) {
@@ -1204,6 +1303,8 @@ function RouteComponent() {
 
 		const applyNewestPresentationState = () => {
 			let newestState: PresentationAwarenessState | null = null;
+			let newestDemoState: PresentationAwarenessState | null = null;
+			let newestBlankedState: PresentationAwarenessState | null = null;
 
 			for (const state of collab.awareness?.getStates().values() ?? []) {
 				const presentationState = parsePresentationAwarenessState(
@@ -1216,25 +1317,54 @@ function RouteComponent() {
 				if (!newestState || presentationState.updatedAt > newestState.updatedAt) {
 					newestState = presentationState;
 				}
+				if (
+					presentationState.demo !== undefined &&
+					(!newestDemoState || presentationState.updatedAt > newestDemoState.updatedAt)
+				) {
+					newestDemoState = presentationState;
+				}
+				if (
+					presentationState.blanked !== undefined &&
+					(!newestBlankedState || presentationState.updatedAt > newestBlankedState.updatedAt)
+				) {
+					newestBlankedState = presentationState;
+				}
+			}
+
+			if (newestDemoState || !hasChangedDemoRef.current) {
+				const demoActive =
+					newestDemoState?.demo === true && newestDemoState.updatedAt >= lastDemoUpdateRef.current;
+				lastDemoUpdateRef.current = Math.max(
+					lastDemoUpdateRef.current,
+					newestDemoState?.updatedAt ?? 0,
+				);
+				setIsDemo((current) => {
+					if (current !== demoActive) {
+						suppressNextSlideAwarenessUpdateRef.current = true;
+					}
+					return demoActive;
+				});
+			}
+
+			const blankingUpdatedAt = newestBlankedState?.updatedAt ?? 0;
+			if (
+				newestBlankedState
+					? blankingUpdatedAt >= lastBlankingUpdateRef.current
+					: !hasChangedBlankingRef.current
+			) {
+				const blanked = newestBlankedState?.blanked === true;
+				lastBlankingUpdateRef.current = Math.max(lastBlankingUpdateRef.current, blankingUpdatedAt);
+				setIsBlanked((current) => {
+					if (current !== blanked) {
+						suppressNextSlideAwarenessUpdateRef.current = true;
+					}
+					return blanked;
+				});
 			}
 
 			if (!newestState || newestState.updatedAt < lastAppliedPresentationUpdateRef.current) {
 				return;
 			}
-
-			setIsBlanked((current) => {
-				if (current !== newestState.blanked) {
-					suppressNextSlideAwarenessUpdateRef.current = true;
-				}
-				return newestState.blanked;
-			});
-
-			setIsDemo((current) => {
-				if (current !== newestState.demo) {
-					suppressNextSlideAwarenessUpdateRef.current = true;
-				}
-				return newestState.demo;
-			});
 
 			setZoomState((current) => {
 				if (
@@ -1325,8 +1455,9 @@ function RouteComponent() {
 		collab.awareness.setLocalStateField("presentation", {
 			fileId: selectedFile.id,
 			slideIndex,
-			blanked: isBlanked,
-			demo: isDemo,
+			// Only windows that have used a control publish its state.
+			...(hasChangedBlankingRef.current ? { blanked: isBlanked } : {}),
+			...(!isViewer && hasChangedDemoRef.current ? { demo: isDemo } : {}),
 			updatedAt,
 			userId: presenceUser.userId,
 			zoom: zoomState.zoom,
@@ -1341,6 +1472,7 @@ function RouteComponent() {
 		isBlanked,
 		isDemo,
 		isPresentation,
+		isViewer,
 		laserState,
 		presenceUser.userId,
 		selectedFile?.id,
@@ -1381,23 +1513,41 @@ function RouteComponent() {
 			},
 			{
 				hotkey: "F",
-				callback: toggleViewerFullscreen,
-				options: { enabled: isViewer },
+				callback: (event) => {
+					if (!event.repeat) {
+						toggleFullscreen();
+					}
+				},
 			},
 			{
 				// PowerPoint-style "black screen": blanks the audience screen
 				// (viewer windows) while the presenter view stays visible.
 				hotkey: "B",
-				callback: () => setIsBlanked((current) => !current),
+				callback: toggleBlanked,
 			},
 			{
 				hotkey: "L",
-				callback: toggleDemo,
-				options: { enabled: !isViewer },
+				callback: (event) => {
+					if (event.repeat) {
+						return;
+					}
+					if (!isViewer) {
+						toggleDemo();
+						return;
+					}
+					if (demoDeck && isDemo) {
+						stopDemoFromAudience(demoDeck);
+					}
+				},
+				options: { enabled: !isViewer || isDemo },
 			},
 			{
 				hotkey: "Escape",
 				callback: () => {
+					if (document.fullscreenElement) {
+						void exitFullscreenQuietly();
+						return;
+					}
 					if (isViewer && window.opener) {
 						window.close();
 						return;
@@ -1438,6 +1588,7 @@ function RouteComponent() {
 				demoContainer={isViewer ? null : demoContainer}
 				onDemoStart={toggleDemo}
 				onDemoEnd={endDemo}
+				onToggleFullscreen={toggleFullscreen}
 				onHasSpeakerNotesChange={handleHasSpeakerNotesChange}
 				className="h-full w-full"
 			/>
@@ -1446,20 +1597,21 @@ function RouteComponent() {
 		if (isViewer) {
 			return (
 				<div
-					ref={viewerContainerRef}
+					ref={presentationContainerRef}
 					className="relative h-svh w-svw overflow-hidden bg-black text-white"
 				>
 					{frame}
-					{isBlanked && !isDemo && (
+					{isBlanked && (
 						<div className="absolute inset-0 z-40 flex select-none flex-col items-center justify-center gap-3 bg-black">
 							<PauseIcon aria-hidden className="size-10 text-white/70" />
 							<p className="text-sm text-white/70">Presentation paused</p>
 						</div>
 					)}
-					{fullscreenPromptVisible && !isDemo && (
+					{demoDeck && <DemoAudienceVideo key={demoDeck} deck={demoDeck} blanked={isBlanked} />}
+					{fullscreenPrompt && (
 						<div
 							className="absolute inset-0 z-50 flex cursor-pointer flex-col items-center justify-center gap-3 bg-black/70"
-							onClick={enterFullscreen}
+							onClick={() => void enterFullscreen()}
 						>
 							<p className="select-none text-xl font-medium text-white">
 								Click to enter fullscreen
@@ -1472,7 +1624,10 @@ function RouteComponent() {
 		}
 
 		return (
-			<div className="grid h-svh w-svw grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden">
+			<div
+				ref={presentationContainerRef}
+				className="grid h-svh w-svw grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden bg-background"
+			>
 				<div className="flex items-center justify-between gap-2 overflow-x-auto px-4 py-3 md:gap-3">
 					<Tooltip>
 						<TooltipTrigger
@@ -1497,7 +1652,7 @@ function RouteComponent() {
 										size="icon"
 										className="md:h-7 md:w-auto md:gap-1 md:px-2 md:text-xs/relaxed"
 										aria-label={isBlanked ? "Resume audience screen" : "Blank audience screen"}
-										onClick={() => setIsBlanked((current) => !current)}
+										onClick={toggleBlanked}
 									>
 										<MonitorOffIcon />
 										<span className="hidden md:inline">
@@ -1527,7 +1682,7 @@ function RouteComponent() {
 								}
 							/>
 							<TooltipContent>
-								{isDemo ? "End live demo (L)" : "Start live demo with floating controls (L)"}
+								{isDemo ? "End live demo (L)" : "Start live demo (L)"}
 							</TooltipContent>
 						</Tooltip>
 						<Button
@@ -1536,11 +1691,28 @@ function RouteComponent() {
 							size="icon"
 							className="md:h-7 md:w-auto md:gap-1 md:px-2 md:text-xs/relaxed"
 							aria-label="Open clean screen"
-							onClick={() => window.open(viewerUrl, "_blank", "noopener,noreferrer")}
+							onClick={() => window.open(viewerUrl, "_blank", "popup")}
 						>
 							<MonitorPlayIcon />
 							<span className="hidden md:inline">Open clean screen</span>
 						</Button>
+						<Tooltip>
+							<TooltipTrigger
+								render={
+									<Button
+										type="button"
+										variant="secondary"
+										size="icon"
+										aria-label="Toggle fullscreen"
+										aria-keyshortcuts="F"
+										onClick={toggleFullscreen}
+									>
+										<MaximizeIcon />
+									</Button>
+								}
+							/>
+							<TooltipContent>Toggle fullscreen (F)</TooltipContent>
+						</Tooltip>
 						<Button
 							type="button"
 							variant="secondary"
@@ -1563,17 +1735,19 @@ function RouteComponent() {
 
 				<div className="relative min-h-0">
 					{frame}
-					{isDemo ? (
+					{isBlanked ? (
 						<div className="pointer-events-none absolute inset-x-0 top-3 z-10 flex justify-center">
-							<span className="rounded-full bg-red-600/90 px-3 py-1 text-xs font-medium text-white shadow-lg">
-								Live demo running — audience sees the demo screen, press L to return
+							<span className="rounded-full bg-black/80 px-3 py-1 text-xs font-medium text-white shadow-lg">
+								Audience screen is blanked — press B to resume
 							</span>
 						</div>
 					) : (
-						isBlanked && (
+						isDemo && (
 							<div className="pointer-events-none absolute inset-x-0 top-3 z-10 flex justify-center">
-								<span className="rounded-full bg-black/80 px-3 py-1 text-xs font-medium text-white shadow-lg">
-									Audience screen is blanked — press B to resume
+								<span className="rounded-full bg-red-600/90 px-3 py-1 text-xs font-medium text-white shadow-lg">
+									{isSharingDemo
+										? "Demo shared to the audience screen. Stop sharing or press L to return."
+										: "Live demo running. Press L to return."}
 								</span>
 							</div>
 						)
