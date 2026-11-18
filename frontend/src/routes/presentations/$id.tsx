@@ -34,6 +34,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { PresentationTimer } from "@/components/presentation-timer";
+import { HelpDialog } from "@/components/dialog/help-dialog";
 import type { EditorPaneHandle, MarkdownImageUploadResult } from "@/components/editor-pane";
 import { SearchPanel } from "@/components/search-panel";
 import { findTextMatches, replaceTextRange, type TextSearchMatch } from "@/lib/text-search";
@@ -1436,6 +1437,7 @@ function RouteComponent() {
 						<TooltipContent>Back to first slide</TooltipContent>
 					</Tooltip>
 					<div className="flex items-center gap-1 md:gap-2">
+						<HelpDialog triggerClassName="max-md:hidden" />
 						<PresentationTimer />
 						<Separator orientation="vertical" />
 						<Tooltip>

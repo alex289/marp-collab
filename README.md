@@ -3,9 +3,9 @@
 <div align="center">
 Realtime collaboration editor for marp presentations<br><br>
 
-<a href="https://github.com/alex289/marp-collab/blob/main/LICENSE"><img alt="GitHub License" src="https://img.shields.io/github/license/alex289/marp-collab"></a>
-<a href="https://github.com/alex289/marp-collab/releases"><img alt="GitHub Release" src="https://img.shields.io/github/v/release/alex289/marp-collab"></a>
-<a href="https://github.com/alex289/marp-collab/issues"><img alt="GitHub Issues" src="https://img.shields.io/github/issues/alex289/marp-collab"></a>
+<a href="https://github.com/alex289/marp-collab/releases"><picture><source media="(prefers-color-scheme: dark)" srcset="https://shieldcn.dev/github/alex289/marp-collab/release.svg?logo=github&mode=dark&size=sm&variant=outline"><img alt="GitHub Release" src="https://shieldcn.dev/github/alex289/marp-collab/release.svg?logo=github&logoColor=%23181717&mode=light&size=sm&variant=outline"></picture></a>
+<a href="https://github.com/alex289/marp-collab/issues"><picture><source media="(prefers-color-scheme: dark)" srcset="https://shieldcn.dev/github/alex289/marp-collab/issues.svg?logo=github&mode=dark&size=sm&variant=outline"><img alt="GitHub Issues" src="https://shieldcn.dev/github/alex289/marp-collab/issues.svg?logo=github&logoColor=%23181717&mode=light&size=sm&variant=outline"></picture></a>
+<a href="https://github.com/alex289/marp-collab/blob/main/LICENSE"><picture><source media="(prefers-color-scheme: dark)" srcset="https://shieldcn.dev/github/alex289/marp-collab/license.svg?logo=opensourceinitiative&logoColor=%233da639&mode=dark&size=sm&variant=outline"><img alt="License" src="https://shieldcn.dev/github/alex289/marp-collab/license.svg?logo=opensourceinitiative&logoColor=%233da639&mode=light&size=sm&variant=outline"></picture></a>
 
 <img src="https://raw.githubusercontent.com/alex289/marp-collab/refs/heads/main/.github/demo.png" width="600"/>
 </div>
