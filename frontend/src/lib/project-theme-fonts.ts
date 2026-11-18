@@ -4,6 +4,7 @@ import { API_URL } from "./config.ts";
 // Embedded fonts are re-sent to the preview with every render, so larger files
 // keep their URL instead of bloating each push.
 export const MAX_EMBEDDED_FONT_BYTES = 5 * 1024 * 1024;
+export const MAX_EMBEDDED_THEME_FONT_BYTES = 10 * 1024 * 1024;
 const FONT_FETCH_TIMEOUT_MS = 10_000;
 
 const fontMimeTypes: Record<string, string> = {
@@ -12,6 +13,9 @@ const fontMimeTypes: Record<string, string> = {
 	ttf: "font/ttf",
 	otf: "font/otf",
 };
+
+// Font MIME types vary between servers, but an access proxy's login page never matches.
+const fontResponseTypeRegex = /^(?:font\/|application\/(?:x-)?font-|application\/octet-stream\b)/i;
 
 function toBase64(bytes: Uint8Array): string {
 	let binary = "";
@@ -28,7 +32,7 @@ async function fetchFont(path: string, mimeType: string): Promise<string | undef
 	});
 	if (
 		!response.ok ||
-		!response.headers.get("Content-Type")?.startsWith("font/") ||
+		!fontResponseTypeRegex.test(response.headers.get("Content-Type") ?? "") ||
 		Number(response.headers.get("Content-Length")) > MAX_EMBEDDED_FONT_BYTES
 	) {
 		return undefined;
@@ -62,17 +66,11 @@ export async function inlineProjectThemeFonts(
 			}
 
 			// WHY: An opaque-origin iframe cannot authenticate font requests to an access proxy.
+			// Failures stay cached until the file list changes, so an unreachable font
+			// doesn't hold up every later edit until it times out.
 			let request = requests.get(path);
 			if (!request) {
-				const fetched = fetchFont(path, mimeType);
-				request = fetched.catch(() => {
-					// Retry network failures and timeouts on the next theme update. Missing,
-					// oversized, or non-font files stay cached until the file list changes.
-					if (requests.get(path) === request) {
-						requests.delete(path);
-					}
-					return undefined;
-				});
+				request = fetchFont(path, mimeType).catch(() => undefined);
 				requests.set(path, request);
 			}
 			const dataUrl = await request;
@@ -80,7 +78,17 @@ export async function inlineProjectThemeFonts(
 		}),
 	);
 
-	for (const font of fonts.reverse()) {
+	// Keep later fonts as URLs once the theme reaches its budget.
+	let budget = (MAX_EMBEDDED_THEME_FONT_BYTES / 3) * 4;
+	const embedded = fonts.filter((font) => {
+		if (!font || font.dataUrl.length > budget) {
+			return false;
+		}
+		budget -= font.dataUrl.length;
+		return true;
+	});
+
+	for (const font of embedded.reverse()) {
 		if (font) {
 			css = css.slice(0, font.from) + font.dataUrl + css.slice(font.to);
 		}

@@ -413,6 +413,9 @@ function RouteComponent() {
 	const editorPaneRef = useRef<EditorPaneHandle | null>(null);
 	const viewerContainerRef = useRef<HTMLDivElement | null>(null);
 	const selectedCssFileIdRef = useRef<string | null>(null);
+	// Bumped whenever project themes reload, so a pending CSS edit that resolves
+	// afterwards can't write a theme from the previous file list or project.
+	const themeLoadEpochRef = useRef(0);
 	const suppressNextSlideAwarenessUpdateRef = useRef(false);
 	const lastAppliedPresentationUpdateRef = useRef(0);
 	const selectedCssFileId = selectedFile?.id.toLowerCase().endsWith(".css")
@@ -607,6 +610,7 @@ function RouteComponent() {
 	useEffect(() => {
 		const cssFiles = files.filter((file) => file.id.toLowerCase().endsWith(".css"));
 		const controller = new AbortController();
+		themeLoadEpochRef.current += 1;
 		void (async () => {
 			const themes = await Promise.all(
 				cssFiles.map(async (file) => {
@@ -662,12 +666,15 @@ function RouteComponent() {
 		let generation = 0;
 		const applyTheme = async () => {
 			const applied = ++generation;
+			const epoch = themeLoadEpochRef.current;
 			// oxlint-disable-next-line no-base-to-string
 			const css = rewriteCssUrls(syncedYText.toString(), id, selectedFile.id, assetToken);
 			// Register once with fonts embedded: a theme with plain font URLs would
 			// briefly render with fallback fonts behind an access proxy.
 			const embeddedCss = await inlineProjectThemeFonts(css, id, themeFontRequests);
-			if (applied !== generation) {
+			// A reload re-runs this effect, which re-applies the current text if the
+			// file is still selected.
+			if (applied !== generation || epoch !== themeLoadEpochRef.current) {
 				return;
 			}
 			projectThemeStore.update((current) =>

@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, test } from "node:test";
-import { MAX_EMBEDDED_FONT_BYTES, inlineProjectThemeFonts } from "./project-theme-fonts.ts";
+import {
+	MAX_EMBEDDED_FONT_BYTES,
+	MAX_EMBEDDED_THEME_FONT_BYTES,
+	inlineProjectThemeFonts,
+} from "./project-theme-fonts.ts";
 
 const prefix = "/api/v1/projects/p1/files/";
 const originalFetch = globalThis.fetch;
@@ -71,26 +75,45 @@ describe("inlineProjectThemeFonts", () => {
 		assert.equal(await inlineProjectThemeFonts(css, "p1", new Map()), css);
 	});
 
-	test("shares requests and retries only network failures", async () => {
+	test("accepts generic font MIME types from the server", async () => {
+		respond = (path) =>
+			fontResponse(
+				"font",
+				path.endsWith("a.woff2") ? "application/octet-stream" : "Application/X-Font-TTF",
+			);
+		const css = `@font-face { src: url(${prefix}a.woff2), url(${prefix}b.ttf); }`;
+
+		assert.equal(
+			await inlineProjectThemeFonts(css, "p1", new Map()),
+			`@font-face { src: url(data:font/woff2;base64,${btoa("font")}), url(data:font/ttf;base64,${btoa("font")}); }`,
+		);
+	});
+
+	test("keeps fonts beyond the theme budget as URLs", async () => {
+		respond = () => fontResponse("x".repeat(4 * 1024 * 1024));
+		const css = ["a", "b", "c"]
+			.map((name) => `@font-face { src: url(${prefix}${name}.woff2); }`)
+			.join("\n");
+
+		const result = await inlineProjectThemeFonts(css, "p1", new Map());
+
+		assert.equal(result.match(/data:font\/woff2/g)?.length, 2);
+		assert.ok(result.endsWith(`@font-face { src: url(${prefix}c.woff2); }`));
+		assert.ok(MAX_EMBEDDED_THEME_FONT_BYTES < 3 * 4 * 1024 * 1024);
+	});
+
+	test("shares requests and caches failures until the file list changes", async () => {
 		const requests = new Map<string, Promise<string | undefined>>();
 		const css = `@font-face { src: url(${prefix}a.woff2); } @font-face { src: url(${prefix}missing.woff2); }`;
-		let failNetwork = true;
 		respond = (path) => {
 			if (path.endsWith("missing.woff2")) {
 				return new Response("", { status: 404 });
 			}
-			if (failNetwork) {
-				throw new TypeError("Failed to fetch");
-			}
-			return fontResponse();
+			throw new TypeError("Failed to fetch");
 		};
 
 		assert.equal(await inlineProjectThemeFonts(css, "p1", requests), css);
-		assert.deepEqual([...requests.keys()], [`${prefix}missing.woff2`]);
-
-		failNetwork = false;
-		await inlineProjectThemeFonts(css, "p1", requests);
-		await inlineProjectThemeFonts(css, "p1", requests);
-		assert.deepEqual(requested, [`${prefix}a.woff2`, `${prefix}missing.woff2`, `${prefix}a.woff2`]);
+		assert.equal(await inlineProjectThemeFonts(css, "p1", requests), css);
+		assert.deepEqual(requested, [`${prefix}a.woff2`, `${prefix}missing.woff2`]);
 	});
 });
