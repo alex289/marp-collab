@@ -46,6 +46,7 @@ import { isEditableDeckFile, isMarkdownDeckFile } from "@/lib/file-types";
 import { PaneResizeHandle } from "@/components/pane-resize-handle";
 import { listThemeNames, rewriteCssUrls, setProjectThemes } from "@/lib/marp";
 import { useAssetToken } from "@/lib/asset-token";
+import { inlineProjectThemeFonts } from "@/lib/project-theme-fonts";
 import { fetcher } from "@/lib/fetcher";
 import { applyThemeToYText, getMarkdownTheme } from "@/lib/markdown-theme";
 import { upsertProjectTheme } from "@/lib/project-themes";
@@ -552,11 +553,16 @@ function RouteComponent() {
 
 	// Project files are served under stable URLs; bump the asset version when
 	// the file list changes so re-uploaded images bypass the browser cache.
-	const [assetRevisionFiles, setAssetRevisionFiles] = useState(files);
-	if (assetRevisionFiles !== files) {
-		setAssetRevisionFiles(files);
+	const [assetFiles, setAssetFiles] = useState(() => ({
+		id,
+		files,
+		themeFontRequests: new Map<string, Promise<string | undefined>>(),
+	}));
+	if (assetFiles.id !== id || assetFiles.files !== files) {
+		setAssetFiles({ id, files, themeFontRequests: new Map() });
 		setAssetRevision((revision) => revision + 1);
 	}
+	const { themeFontRequests } = assetFiles;
 
 	if (!selectedFile && markdown !== "") {
 		setMarkdown("");
@@ -614,7 +620,11 @@ function RouteComponent() {
 						}
 						return {
 							id: file.id,
-							css: rewriteCssUrls(await res.text(), id, file.id, assetToken),
+							css: await inlineProjectThemeFonts(
+								rewriteCssUrls(await res.text(), id, file.id, assetToken),
+								id,
+								themeFontRequests,
+							),
 						};
 					} catch {
 						return null;
@@ -640,7 +650,7 @@ function RouteComponent() {
 		})();
 
 		return () => controller.abort();
-	}, [files, id, assetToken, projectThemeStore]);
+	}, [files, id, assetToken, projectThemeStore, themeFontRequests]);
 
 	useEffect(() => {
 		// Wait for the document to sync so an empty, still-loading text never
@@ -649,12 +659,22 @@ function RouteComponent() {
 			return;
 		}
 
-		const applyTheme = () => {
+		const applyTheme = async () => {
 			// oxlint-disable-next-line no-base-to-string
 			const css = rewriteCssUrls(syncedYText.toString(), id, selectedFile.id, assetToken);
-			projectThemeStore.update((current) =>
-				upsertProjectTheme(current, { id: selectedFile.id, css }),
-			);
+			const theme = { id: selectedFile.id, css };
+			projectThemeStore.update((current) => upsertProjectTheme(current, theme));
+			const appliedTheme = projectThemeStore
+				.getSnapshot()
+				.themes.find((entry) => entry.id === theme.id);
+			const embeddedCss = await inlineProjectThemeFonts(css, id, themeFontRequests);
+			if (appliedTheme && embeddedCss !== css) {
+				projectThemeStore.update((current) =>
+					current.includes(appliedTheme)
+						? upsertProjectTheme(current, { id: theme.id, css: embeddedCss })
+						: current,
+				);
+			}
 		};
 
 		let timer: ReturnType<typeof setTimeout> | undefined;
@@ -663,7 +683,7 @@ function RouteComponent() {
 			// Wait for a typing burst to settle before parsing a partial CSS theme.
 			timer = setTimeout(() => {
 				timer = undefined;
-				applyTheme();
+				void applyTheme();
 			}, 150);
 		};
 
@@ -675,10 +695,10 @@ function RouteComponent() {
 			// Flush a pending update so switching files doesn't drop the last edits.
 			if (timer !== undefined) {
 				clearTimeout(timer);
-				applyTheme();
+				void applyTheme();
 			}
 		};
-	}, [syncedYText, id, selectedFile, assetToken, projectThemeStore]);
+	}, [syncedYText, id, selectedFile, assetToken, projectThemeStore, themeFontRequests]);
 
 	const currentTheme = useMemo(() => getMarkdownTheme(markdown) ?? "default", [markdown]);
 

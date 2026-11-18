@@ -146,7 +146,7 @@ function collectMarkdownReferences(content: string): AssetReference[] {
 	return references.sort((a, b) => a.from - b.from);
 }
 
-function collectCssReferences(content: string): AssetReference[] {
+export function collectCssReferences(content: string): AssetReference[] {
 	const references: AssetReference[] = [];
 	const tree = cssLanguage.parser.parse(content);
 
