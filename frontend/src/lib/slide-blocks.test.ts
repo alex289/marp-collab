@@ -1,7 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { Marp } from "@marp-team/marp-core";
+import * as Y from "yjs";
 import {
 	computeMinimalSplice,
+	editSlideDeck,
+	getEditableSlideDeck,
+	getSectionMarkerSlides,
+	getSlideNavigationLines,
+	getSlideSections,
 	joinDeckBlocks,
 	moveSlide,
 	splitDeckIntoBlocks,
@@ -131,6 +138,203 @@ test("returns the input for no-op and out-of-range moves", () => {
 
 test("clamps an out-of-range target to the last slide", () => {
 	assert.equal(moveSlide(deck, 0, 99), moveSlide(deck, 0, 2));
+});
+
+test("edits explicit Marp dividers while leaving Setext headings and notes in their slides", () => {
+	const source = "First heading\n---\n\n<!--\n---\n-->\n\n* * *\n\n# Second";
+	const parsed = getEditableSlideDeck(source, { startLines: [0, 7], frontMatterEnd: 0 });
+	assert.ok(parsed);
+	const edited = editSlideDeck(parsed, { type: "duplicate", index: 0 });
+	assert.ok(edited);
+	assert.equal(edited.slideCount, 3);
+	assert.deepEqual(new Marp().render(edited.markdown).comments, [["---"], ["---"], []]);
+	assert.ok(edited.markdown.includes("* * *"));
+	assert.equal(getEditableSlideDeck(source, { startLines: [0, 9], frontMatterEnd: 0 }), null);
+});
+
+test("keeps section labels in source and moves the whole section", () => {
+	const first = editSlideDeck(splitDeckIntoBlocks(deck), {
+		type: "name-section",
+		index: 0,
+		name: 'Intro "quoted"',
+	});
+	assert.ok(first);
+	const second = editSlideDeck(splitDeckIntoBlocks(first.markdown), {
+		type: "name-section",
+		index: 1,
+		name: "Findings",
+	});
+	assert.ok(second);
+	const moved = editSlideDeck(splitDeckIntoBlocks(second.markdown), {
+		type: "move-section-up",
+		index: 1,
+	});
+	assert.ok(moved);
+	assert.deepEqual(getSlideSections(splitDeckIntoBlocks(moved.markdown)), [
+		{ name: "Findings", start: 0, end: 2 },
+		{ name: 'Intro "quoted"', start: 2, end: 3 },
+	]);
+	assert.match(moved.markdown, /# Two[\s\S]+# Three[\s\S]+# One/);
+	assert.match(moved.markdown, /\n<!-- section: Findings -->\n\n# Two/);
+	const rendered = new Marp().render(moved.markdown);
+	// The presenter view drops these; see getSectionMarkerSlides.
+	assert.deepEqual(rendered.comments, [["section: Findings"], [], ['section: Intro "quoted"']]);
+	assert.doesNotMatch(rendered.html, /Findings|quoted/);
+});
+
+test("keeps a moved slide in its section until it passes the boundary", () => {
+	const sectioned = [
+		"<!-- section: A -->",
+		"# a0",
+		"---",
+		"# a1",
+		"---",
+		"# a2",
+		"---",
+		"<!-- section: B -->",
+		"# b0",
+		"---",
+		"# b1",
+	].join("\n\n");
+	const titles = (markdown: string) => {
+		const parsed = splitDeckIntoBlocks(markdown);
+		return getSlideSections(parsed).map(({ name, start, end }) => [
+			name,
+			parsed.blocks.slice(start, end).map((block) => /# (\w+)/.exec(block)?.[1]),
+		]);
+	};
+	const move = (indices: number[], slot: number) =>
+		editSlideDeck(splitDeckIntoBlocks(sectioned), { type: "move", indices, slot })?.markdown ?? "";
+
+	assert.deepEqual(titles(move([1], 3)), [
+		["A", ["a0", "a2", "a1"]],
+		["B", ["b0", "b1"]],
+	]);
+	assert.deepEqual(titles(move([2], 4)), [
+		["A", ["a0", "a1"]],
+		["B", ["b0", "a2", "b1"]],
+	]);
+	assert.deepEqual(titles(move([3], 2)), [
+		["A", ["a0", "a1", "b0", "a2"]],
+		["B", ["b1"]],
+	]);
+	assert.deepEqual(titles(move([4], 3)), [
+		["A", ["a0", "a1", "a2"]],
+		["B", ["b1", "b0"]],
+	]);
+});
+
+test("replaces an empty section marker and keeps every name inside its comment", () => {
+	for (const [name, saved] of [
+		["A --> B", "A -> B"],
+		["a ---> b", "a -> b"],
+	]) {
+		const named = editSlideDeck(splitDeckIntoBlocks("<!-- section: -->\n\n# One"), {
+			type: "name-section",
+			index: 0,
+			name,
+		});
+		assert.equal(named?.markdown, `<!-- section: ${saved} -->\n\n# One`);
+		assert.deepEqual(getSlideSections(splitDeckIntoBlocks(named.markdown)), [
+			{ name: saved, start: 0, end: 1 },
+		]);
+	}
+	assert.deepEqual(getSlideSections(splitDeckIntoBlocks("<!-- section: -->\n\n# One")), [
+		{ name: null, start: 0, end: 1 },
+	]);
+});
+
+test("finds the slides led by a section comment, as the overview reads them", () => {
+	const source = [
+		"<!-- section: A -->",
+		"# One",
+		"---",
+		"# Two\n\n<!-- section: not a label -->",
+		"---",
+		"<!-- section: -->",
+		"# Three",
+	].join("\n\n");
+	const rendered = new Marp().render(source);
+	const startLines = [0, 4, 10];
+	assert.deepEqual(rendered.comments.length, 3);
+	assert.deepEqual([...getSectionMarkerSlides(source, { startLines, frontMatterEnd: 0 })], [0, 2]);
+});
+
+test("moves keep an empty marker on an unnamed slide", () => {
+	const source = "<!-- section: -->\n\n# One\n\n---\n\n# Two";
+	const moved = editSlideDeck(splitDeckIntoBlocks(source), {
+		type: "move",
+		indices: [0],
+		slot: 2,
+	});
+	assert.equal(moved?.markdown, "# Two\n\n---\n\n<!-- section: -->\n\n# One\n\n");
+	assert.deepEqual(moved?.origins, [1, null]);
+});
+
+test("retains a section after deleting its opening slide and keeps deck directives after deleting all slides", () => {
+	const preamble = "<!-- theme: gaia -->\n\n";
+	const marker = "<!-- section: Opening -->\n\n";
+	const source = preamble + marker + "# One\n\n---\n\n# Two";
+	const parsed = splitDeckIntoBlocks(source);
+	const reduced = editSlideDeck(parsed, { type: "delete", indices: [0] });
+	assert.equal(reduced?.markdown, preamble + marker + "# Two");
+	const empty = editSlideDeck(parsed, { type: "delete", indices: [0, 1] });
+	assert.equal(empty?.markdown, preamble);
+	assert.equal(
+		editSlideDeck(splitDeckIntoBlocks(preamble), { type: "add", index: 0 })?.markdown,
+		preamble + "# New slide\n",
+	);
+});
+
+test("keeps an empty opening slide from consuming the next slide as YAML", () => {
+	const moved = moveSlide("# One\n\n---\n\n# Two\n\n---", 2, 0);
+	assert.deepEqual(new Marp().render(moved).comments, [[], [], []]);
+	assert.ok(moved.startsWith("\n---\n"));
+});
+
+test("can jump to a blank last slide after a divider at the end of the file", () => {
+	const source = "# One\r\n\r\n---";
+	assert.deepEqual(
+		getSlideNavigationLines(source, { startLines: [0, 2], frontMatterEnd: 0 }),
+		[1, 3],
+	);
+});
+
+test("keeps leading mixed deck defaults while deleting the first slide", () => {
+	const defaults = "<!--\ntheme: gaia\npaginate: true\n-->\n\n";
+	const source = defaults + "<!-- _class: lead -->\n\n# One\n\n---\n\n# Two";
+	const result = editSlideDeck(splitDeckIntoBlocks(source), { type: "delete", indices: [0] });
+	assert.equal(result?.markdown, defaults + "# Two");
+});
+
+test("bulk deletion and moves retain concurrent edits inside an untouched slide", () => {
+	for (const type of ["delete", "move"] as const) {
+		const left = new Y.Doc();
+		const right = new Y.Doc();
+		const source = "# One\n\n---\n\n# Two retained text\n\n---\n\n# Three";
+		const content = left.getText("content");
+		content.insert(0, source);
+		Y.applyUpdate(right, Y.encodeStateAsUpdate(left));
+		const shared = Y.encodeStateVector(right);
+
+		const action =
+			type === "delete" ? { type, indices: [0, 2] } : { type, indices: [0, 2], slot: 3 };
+		const edit = editSlideDeck(splitDeckIntoBlocks(source), action);
+		assert.ok(edit);
+		left.transact(() => {
+			for (const { index, deleteCount, insert } of [...edit.splices].reverse()) {
+				content.delete(index, deleteCount);
+				content.insert(index, insert);
+			}
+		});
+		assert.equal(content.toJSON(), edit.markdown);
+
+		right.getText("content").insert(source.indexOf("retained"), "concurrent ");
+		Y.applyUpdate(left, Y.encodeStateAsUpdate(right, shared));
+		assert.equal(content.toJSON(), edit.markdown.replace("retained", "concurrent retained"));
+		left.destroy();
+		right.destroy();
+	}
 });
 
 test("splices only the region that changed", () => {

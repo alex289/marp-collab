@@ -2,11 +2,13 @@ import { Marp } from "@marp-team/marp-core";
 import { API_URL } from "./config";
 import { TAILWIND_DIRECTIVE, type SlideTailwind } from "../../../shared/slide-tailwind.ts";
 import type { TailwindCatalog } from "@/features/editor/completions";
+import type { SlideSource } from "./slide-blocks";
 
 let currentProjectId = "";
 let currentMarkdownDir = "";
 let currentAssetVersion = 0;
 let currentAssetToken = "";
+let tailwindEnabled = false;
 
 function assetQuery(version: number, token: string): string {
 	const params = new URLSearchParams();
@@ -50,7 +52,58 @@ function rewriteImageSrc(src: string): string {
 	return `${API_URL}/projects/${currentProjectId}/files/${resolved}${assetQuery(currentAssetVersion, currentAssetToken)}`;
 }
 
-const marp = new Marp({
+type SlideSourceToken = {
+	type: string;
+	map: [number, number] | null;
+	meta?: { marpitDirectives?: Record<string, unknown> } | null;
+};
+
+/** What a slide edit must leave unchanged for the slides it doesn't move. */
+export type SlideChecks = {
+	/** Deck-wide directives and Tailwind. */
+	slideSettings: string;
+	/** Each slide's resolved directives, including those it inherits. */
+	slideDirectives: string[];
+};
+
+type SlideRender = ReturnType<Marp["render"]> & SlideChecks & { slideSource: SlideSource };
+type SlideArrayRender = Omit<SlideRender, "html"> & { html: string[] };
+
+class SourceMappedMarp extends Marp {
+	override render(markdown: string, env: { htmlAsArray: true }): SlideArrayRender;
+	override render(markdown: string, env?: unknown): SlideRender;
+	override render(markdown: string, env?: unknown): SlideRender | SlideArrayRender {
+		const rendered = super.render(markdown, env);
+		const slides: SlideSourceToken[][] = this.lastSlideTokens ?? [];
+		const globals = this.lastGlobalDirectives ?? {};
+		return {
+			...rendered,
+			slideSettings: JSON.stringify([
+				Object.keys(globals)
+					.sort()
+					.map((key) => [key, globals[key]]),
+				tailwindEnabled,
+			]),
+			slideDirectives: slides.map((slide) => {
+				const directives =
+					slide.find((token) => token.type === "marpit_slide_open")?.meta?.marpitDirectives ?? {};
+				return JSON.stringify(
+					Object.keys(directives)
+						.sort()
+						.map((key) => [key, directives[key]]),
+				);
+			}),
+			slideSource: {
+				startLines: slides.map(
+					(slide) => slide.find((token) => token.type === "marpit_slide_open")?.map?.[0] ?? 0,
+				),
+				frontMatterEnd: slides[0]?.find((token) => token.type === "front_matter")?.map?.[1] ?? 0,
+			},
+		};
+	}
+}
+
+const marp = new SourceMappedMarp({
 	html: {
 		...Marp.html, // Use Marps built-in HTML allowlist
 		img: {
@@ -84,7 +137,6 @@ marp.use((md) => {
 	);
 });
 
-let tailwindEnabled = false;
 marp.customDirectives.global[TAILWIND_DIRECTIVE] = (value) => {
 	tailwindEnabled = value === "true";
 	return {};
@@ -164,6 +216,13 @@ export const renderMarp = (
 		...rendered,
 		css: `${rendered.css}\n${projectId ? rewriteCssUrls(tailwindCss, projectId, selectedFileId ?? "", assetToken, assetVersion) : tailwindCss}`,
 	};
+};
+
+/** Slide boundaries and deck-wide settings, without the Tailwind pass of a full render. */
+export const analyzeSlides = (markdown: string) => {
+	tailwindEnabled = false;
+	const { slideSource, slideSettings, slideDirectives } = marp.render(markdown);
+	return { slideSource, slideSettings, slideDirectives };
 };
 
 const customThemeNames = new Set<string>();

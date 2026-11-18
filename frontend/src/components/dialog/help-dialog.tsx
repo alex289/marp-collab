@@ -40,6 +40,8 @@ function shortcutGroups(isMac: boolean): { title: string; shortcuts: Shortcut[] 
 				{ keys: [[alt, "2"]], label: "Search" },
 				{ keys: [[alt, "3"]], label: "Outline" },
 				{ keys: [[alt, "4"]], label: "Slide overview" },
+				{ keys: [["Shift", "F10"]], label: "Slide actions (on a thumbnail)" },
+				{ keys: [["Shift", "Click"]], label: "Select a range of slides" },
 				{ keys: [[alt, "5"]], label: "Settings" },
 				{ keys: [["D"]], label: "Toggle dark mode" },
 				{ keys: [["?"]], label: "Show this help" },
@@ -95,6 +97,13 @@ const SYNTAX_TIPS: SyntaxTip[] = [
 		description: "Reuses the slides of another Markdown file in this project.",
 		code: "<!-- @include: chapters/intro.md -->",
 		docs: "markdown-includes.md",
+	},
+	{
+		title: "Slide sections",
+		description:
+			"Groups slides in the slide overview. Right-click a thumbnail to start, rename or move one.",
+		code: "<!-- section: Introduction -->",
+		docs: "slide-overview.md",
 	},
 	{
 		title: "Tailwind CSS",

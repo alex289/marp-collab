@@ -510,6 +510,15 @@ test.describe("Editor: content editing", () => {
 		});
 		await expect(editor).toContainText("<!-- @include: part.md -->");
 		await expect(editor).not.toContainText("Updated second");
+		await page.getByRole("button", { name: /^Slides \(/ }).click();
+		const overview = page.frameLocator('iframe[title="Slide overview"]');
+		await expect(overview.getByRole("heading", { name: "Updated second" })).toBeVisible();
+		await expect(
+			page.getByText("Edit the source files to change slides in this deck with includes."),
+		).toBeVisible();
+		await expect(page.getByRole("button", { name: "Add slide" })).toHaveCount(0);
+		await overview.getByRole("button", { name: "Jump to slide 3", exact: true }).click();
+		await expect(editor.locator(".cm-activeLine")).toContainText("<!-- @include: part.md -->");
 		await page.getByRole("button", { name: "Start", exact: true }).click();
 		await expect(page.getByText("Slide 1/3", { exact: true })).toBeVisible();
 		await page.getByRole("button", { name: "Next", exact: true }).click();
@@ -536,6 +545,311 @@ test.describe("Editor: content editing", () => {
 			timeout: 15_000,
 		});
 		await expect(page.getByText("Slide 3/3", { exact: true })).toBeVisible();
+	});
+
+	test("adds, duplicates, reorders and bulk deletes slides from thumbnails", async ({
+		page,
+		context,
+	}) => {
+		await page.goto("/");
+		await createPresentation(page, "Thumbnail slide actions");
+		await waitForSidebar(page);
+
+		const editor = page.locator(".cm-content");
+		await editor.fill(
+			"---\nmarp: true\npaginate: true\n---\n\n# Opening\n\n---\n\n<!-- _class: lead -->\n\n# Research\n\n---\n\n# Results\n\n---\n\n# Next steps",
+		);
+		await page.getByRole("button", { name: /^Slides \(/ }).click();
+
+		const overview = page.frameLocator('iframe[title="Slide overview"]');
+		const titles = overview.getByRole("heading", { level: 1 });
+		const openSlideActions = () =>
+			overview.locator('.thumb-label[aria-current="true"]').press("Shift+F10");
+		await expect(titles).toHaveText(["Opening", "Research", "Results", "Next steps"]);
+		await overview.getByRole("button", { name: "Jump to slide 2" }).press("Enter");
+		await expect(overview.getByRole("button", { name: "Jump to slide 2" })).toHaveAttribute(
+			"aria-current",
+			"true",
+		);
+
+		const peer = await context.newPage();
+		await peer.goto(page.url());
+		await expect(peer.locator(".cm-content")).toContainText("# Research");
+		await page.bringToFront();
+		await page.getByRole("button", { name: "Add slide" }).click();
+		await expect(titles).toHaveText(["Opening", "Research", "New slide", "Results", "Next steps"]);
+		await expect(peer.locator(".cm-content")).toContainText("# New slide");
+
+		await overview.getByRole("button", { name: "Jump to slide 2" }).click();
+		await expect(overview.getByRole("button", { name: "Jump to slide 2" })).toHaveAttribute(
+			"aria-current",
+			"true",
+		);
+		await openSlideActions();
+		await page.getByRole("menuitem", { name: "Duplicate slide" }).click();
+		await expect(titles).toHaveText([
+			"Opening",
+			"Research",
+			"Research",
+			"New slide",
+			"Results",
+			"Next steps",
+		]);
+		await expect(overview.locator("section.lead")).toHaveCount(2);
+		await openSlideActions();
+		await page.getByRole("menuitem", { name: "Delete slide", exact: true }).click();
+		await expect(titles).toHaveText(["Opening", "Research", "New slide", "Results", "Next steps"]);
+
+		await expect(page.getByRole("menu")).toHaveCount(0);
+		// Drag the first thumbnail below the second, then undo the single edit.
+		const jump1 = overview.getByRole("button", { name: "Jump to slide 1" });
+		await jump1.scrollIntoViewIfNeeded();
+		const first = (await jump1.boundingBox())!;
+		const second = (await overview.locator(".thumb-grid > svg").nth(1).boundingBox())!;
+		await page.mouse.move(first.x + first.width / 2, first.y + first.height / 2);
+		await page.mouse.down();
+		await page.mouse.move(second.x + second.width / 2, second.y + second.height * 0.8, {
+			steps: 12,
+		});
+		await page.mouse.up();
+		await expect(titles).toHaveText(["Research", "Opening", "New slide", "Results", "Next steps"]);
+		await editor.press("ControlOrMeta+z");
+		await expect(titles).toHaveText(["Opening", "Research", "New slide", "Results", "Next steps"]);
+
+		await page.getByRole("button", { name: "Select slides" }).click();
+		await overview.getByRole("button", { name: "Select slide 1", exact: true }).press("Space");
+		await overview.getByRole("button", { name: "Select slide 3", exact: true }).click();
+		await expect(page.getByRole("status").filter({ hasText: "2 selected" })).toBeVisible();
+		await page.getByRole("button", { name: "Move selected down" }).click();
+		await expect(titles).toHaveText(["Research", "Results", "Opening", "New slide", "Next steps"]);
+		await expect(
+			overview.getByRole("button", { name: "Select slide 3", exact: true }),
+		).toHaveAttribute("aria-pressed", "true");
+		await page.getByRole("button", { name: "Delete selected" }).click();
+		await expect(titles).toHaveText(["Research", "Results", "Next steps"]);
+		await expect(peer.locator(".cm-content")).not.toContainText("# New slide");
+		await expect(editor).toContainText("paginate: true");
+		await expect(overview.locator("section.lead")).toHaveCount(1);
+		await editor.press("ControlOrMeta+z");
+		await expect(titles).toHaveText(["Research", "Results", "Opening", "New slide", "Next steps"]);
+		await peer.close();
+	});
+
+	test("opens the shadcn context menu on the clicked slide or selected slides", async ({
+		page,
+	}) => {
+		await page.goto("/");
+		await createPresentation(page, "Thumbnail context menu");
+		await waitForSidebar(page);
+
+		await page.locator(".cm-content").fill("# Opening\n\n---\n\n# Research\n\n---\n\n# Findings");
+		await page.getByRole("button", { name: /^Slides \(/ }).click();
+		const frame = page.locator('iframe[title="Slide overview"]');
+		const overview = frame.contentFrame();
+		const titles = overview.getByRole("heading", { level: 1 });
+		const slideMenu = page.getByRole("menu", { name: "Slide actions" });
+		const jumpTo = (index: number) =>
+			overview.getByRole("button", { name: `Jump to slide ${index}`, exact: true });
+		await expect(titles).toHaveText(["Opening", "Research", "Findings"]);
+		await jumpTo(1).click();
+
+		await overview.locator(".thumb-slide").nth(1).click({ button: "right" });
+		await expect(slideMenu.getByText("Slide 2", { exact: true })).toBeVisible();
+		await expect(jumpTo(1)).toHaveAttribute("aria-current", "true");
+		await slideMenu.getByRole("menuitem", { name: "Duplicate slide" }).click();
+		await expect(titles).toHaveText(["Opening", "Research", "Research", "Findings"]);
+
+		await jumpTo(2).press("Shift+F10");
+		const addAfter = slideMenu.getByRole("menuitem", { name: "Add slide after" });
+		// The menu takes focus a moment after it appears.
+		await expect(slideMenu).toBeFocused();
+		await page.keyboard.press("ArrowDown");
+		await expect(addAfter).toBeFocused();
+		await page.keyboard.press("Escape");
+		await expect(slideMenu).toBeHidden();
+		await expect(frame).toBeFocused();
+		await expect(jumpTo(2)).toBeFocused();
+		await jumpTo(2).press("Shift+F10");
+		await expect(slideMenu).toBeFocused();
+		await page.keyboard.press("Escape");
+		await expect(slideMenu).toBeHidden();
+
+		await page.getByRole("button", { name: "Select slides" }).click();
+		for (const index of [2, 3]) {
+			await overview.getByRole("button", { name: `Select slide ${index}`, exact: true }).click();
+		}
+		await expect(page.getByRole("status").filter({ hasText: "2 selected" })).toBeVisible();
+		await overview.locator(".thumb-slide").nth(0).click({ button: "right" });
+		await expect(slideMenu.getByText("Slide 1", { exact: true })).toBeVisible();
+		await page.keyboard.press("Escape");
+		await overview.locator(".thumb-slide").nth(1).click({ button: "right" });
+		await page
+			.getByRole("menu", { name: "Selection actions" })
+			.getByRole("menuitem", { name: "Delete selected slides" })
+			.click();
+		await expect(titles).toHaveText(["Opening", "Findings"]);
+	});
+
+	test("names and moves slide sections from thumbnails", async ({ page }, testInfo) => {
+		await page.goto("/");
+		await createPresentation(page, "Field research briefing");
+		await waitForSidebar(page);
+
+		const editor = page.locator(".cm-content");
+		await editor.fill(
+			"---\nmarp: true\n---\n\n# Project brief\n\nScope and objectives\n\n---\n\n# Research plan\n\nMethods and fieldwork\n\n---\n\n# Observations\n\nPatterns from the field\n\n---\n\n# Next steps\n\nWhat we’ll test next",
+		);
+		await page.getByRole("button", { name: /^Slides \(/ }).click();
+		const overview = page.frameLocator('iframe[title="Slide overview"]');
+		const titles = overview.getByRole("heading", { level: 1 });
+		const openSlideActions = () =>
+			overview.locator('.thumb-label[aria-current="true"]').press("Shift+F10");
+
+		for (const [slide, name] of [
+			[1, "Introduction"],
+			[3, "Findings"],
+		] as const) {
+			const thumbnail = overview.getByRole("button", {
+				name: `Jump to slide ${slide}`,
+				exact: true,
+			});
+			await thumbnail.click();
+			await expect(thumbnail).toHaveAttribute("aria-current", "true");
+			await openSlideActions();
+			await page.getByRole("menuitem", { name: "Start section here" }).click();
+			await page.getByLabel("Section name").fill(name);
+			await page.getByRole("button", { name: "Create section" }).click();
+			await expect(overview.getByRole("button", { name: `Jump to section ${name}` })).toBeVisible();
+		}
+		await openSlideActions();
+		await page.getByRole("menuitem", { name: "Rename section" }).click();
+		await page.getByLabel("Section name").fill("Field findings");
+		await page.getByRole("button", { name: "Save name" }).click();
+		await expect(
+			overview.getByRole("button", { name: "Jump to section Field findings" }),
+		).toBeVisible();
+
+		await overview.locator(".thumb-slide").nth(2).click({ button: "right" });
+		await expect(page.getByRole("menuitem", { name: "Move section up" })).toBeVisible();
+		await testInfo.attach("Slide thumbnail context menu and sections", {
+			body: await page.screenshot({ animations: "disabled" }),
+			contentType: "image/png",
+		});
+		await page.getByRole("menuitem", { name: "Move section up" }).click();
+		await expect(titles).toHaveText([
+			"Observations",
+			"Next steps",
+			"Project brief",
+			"Research plan",
+		]);
+		await expect(overview.getByRole("button", { name: /Jump to section/ })).toHaveText([
+			"Field findings",
+			"Introduction",
+		]);
+
+		await page.getByRole("button", { name: "Select slides" }).click();
+		await overview.getByRole("button", { name: "Select section Field findings" }).click();
+		await expect(page.getByRole("status").filter({ hasText: "2 selected" })).toBeVisible();
+		await expect(
+			overview.getByRole("button", { name: "Select slide 2", exact: true }),
+		).toHaveAttribute("aria-pressed", "true");
+		await testInfo.attach("Slide thumbnail multi-selection", {
+			body: await page.screenshot({ animations: "disabled" }),
+			contentType: "image/png",
+		});
+		await page.reload();
+		await page.getByRole("button", { name: /^Slides \(/ }).click();
+		await expect(
+			overview.getByRole("button", { name: "Jump to section Field findings" }),
+		).toBeVisible();
+		await expect(titles).toHaveText([
+			"Observations",
+			"Next steps",
+			"Project brief",
+			"Research plan",
+		]);
+	});
+
+	test("guards thumbnail actions when a collaborator changes the deck or a slide holds deck settings", async ({
+		page,
+		context,
+	}) => {
+		await page.goto("/");
+		await createPresentation(page, "Thumbnail edit safeguards");
+		await waitForSidebar(page);
+
+		const source = "# Opening\n\n---\n\n# Deck defaults\n\n<!-- theme: gaia -->\n\n---";
+		const editor = page.locator(".cm-content");
+		await editor.fill(source);
+		await page.getByRole("button", { name: /^Slides \(/ }).click();
+		const overview = page.frameLocator('iframe[title="Slide overview"]');
+		const last = overview.getByRole("button", { name: "Jump to slide 3", exact: true });
+		await last.click();
+		await expect(last).toHaveAttribute("aria-current", "true");
+
+		const settingsSlide = overview.getByRole("button", { name: "Jump to slide 2", exact: true });
+		await settingsSlide.click();
+		await expect(settingsSlide).toHaveAttribute("aria-current", "true");
+
+		const peer = await context.newPage();
+		await peer.goto(page.url());
+		const peerEditor = peer.locator(".cm-content");
+		await expect(peerEditor).toContainText("# Deck defaults");
+		await page.bringToFront();
+
+		const deleteSlide = page.getByRole("menuitem", { name: "Delete slide", exact: true });
+		await settingsSlide.press("Shift+F10");
+		await expect(deleteSlide).toBeVisible();
+		// Typing in another slide keeps the menu open; a slide moving into its
+		// place closes it.
+		await peerEditor.fill(source + "\n\n# Closing");
+		await expect(overview.getByRole("heading", { name: "Closing" })).toBeVisible();
+		await expect(deleteSlide).toBeVisible();
+		await peerEditor.fill("# Opening\n\n---\n\n# Inserted\n\n---\n\n" + source.slice(16));
+		await expect(overview.getByRole("heading", { name: "Inserted" })).toBeVisible();
+		await expect(deleteSlide).toBeHidden();
+		await peerEditor.fill(source + "\n\n# Closing");
+		await expect(overview.getByRole("heading", { name: "Inserted" })).toHaveCount(0);
+
+		await settingsSlide.press("Shift+F10");
+		await deleteSlide.click();
+		await expect(
+			page.getByText(
+				"Move deck-wide directives to the front matter before making this slide edit.",
+			),
+		).toBeVisible();
+		await expect(editor).toContainText("<!-- theme: gaia -->");
+		await expect(overview.getByRole("heading", { name: "Deck defaults" })).toBeVisible();
+
+		await page.getByRole("button", { name: "Select slides" }).click();
+		await overview.getByRole("button", { name: "Select slide 2", exact: true }).click();
+		await expect(page.getByRole("status").filter({ hasText: "1 selected" })).toBeVisible();
+		await peerEditor.fill(source + "\n\n# Closing remarks\n\n---\n\n# Appendix");
+		await expect(overview.getByRole("heading", { name: "Appendix" })).toBeVisible();
+		await expect(page.getByRole("status").filter({ hasText: "1 selected" })).toBeVisible();
+		await peerEditor.fill("# Opening\n\n---\n\n# Closing remarks\n\n---\n\n" + source.slice(16));
+		await expect(overview.getByRole("heading", { level: 1 })).toHaveText([
+			"Opening",
+			"Closing remarks",
+			"Deck defaults",
+		]);
+		await expect(page.getByRole("button", { name: "Select slides" })).toBeVisible();
+		await page.getByRole("button", { name: "Select slides" }).click();
+		await expect(
+			overview.getByRole("button", { name: "Select slide 2", exact: true }),
+		).toHaveAttribute("aria-pressed", "false");
+		await page.getByRole("button", { name: "Done selecting" }).click();
+
+		// Deleting the slide that turns on pagination would restyle the slides after it.
+		await peerEditor.fill("# One\n\n---\n\n<!-- paginate: true -->\n\n# Two\n\n---\n\n# Three");
+		await expect(overview.getByRole("heading", { name: "Three" })).toBeVisible();
+		await settingsSlide.press("Shift+F10");
+		await deleteSlide.click();
+		await expect(
+			page.getByText(/restyle other slides through directives they inherit/),
+		).toBeVisible();
+		await expect(editor).toContainText("<!-- paginate: true -->");
+		await peer.close();
 	});
 
 	test("type into the CodeMirror editor and see live preview update", async ({ page }) => {

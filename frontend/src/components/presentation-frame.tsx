@@ -1,4 +1,5 @@
 import { renderMarp } from "@/lib/marp";
+import { getSectionMarkerSlides } from "@/lib/slide-blocks";
 import { useSlideTailwindReady } from "@/hooks/use-slide-tailwind-ready";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -682,8 +683,18 @@ export function PresentationFrame({
 		assetToken,
 	]);
 
-	const activeComments = parseSlidePresenterComments(rendered.comments[slideIndex] ?? []);
-	const nextComments = parseSlidePresenterComments(rendered.comments[slideIndex + 1] ?? []);
+	// A section comment labels slides in the overview and isn't a note.
+	const sectionMarkerSlides = useMemo(
+		() =>
+			"slideSource" in rendered
+				? getSectionMarkerSlides(markdown, rendered.slideSource)
+				: new Set<number>(),
+		[markdown, rendered],
+	);
+	const slideComments = (index: number) =>
+		(rendered.comments[index] ?? []).slice(sectionMarkerSlides.has(index) ? 1 : 0);
+	const activeComments = parseSlidePresenterComments(slideComments(slideIndex));
+	const nextComments = parseSlidePresenterComments(slideComments(slideIndex + 1));
 	const nextPresenterChange = getNextPresenterChange(
 		activeComments.presenter,
 		nextComments.presenter,

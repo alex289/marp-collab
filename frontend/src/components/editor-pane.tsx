@@ -60,7 +60,7 @@ export type MarkdownImageUploadResult = {
 };
 
 export type EditorPaneHandle = {
-	jumpToLine: (line: number) => void;
+	jumpToLine: (line: number, focus?: boolean) => void;
 	jumpToOffset: (offset: number) => void;
 };
 
@@ -593,7 +593,7 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 	]);
 
 	useImperativeHandle(ref, () => ({
-		jumpToLine(line: number) {
+		jumpToLine(line: number, focus = true) {
 			const view = viewRef.current;
 			if (!view) {
 				return;
@@ -605,7 +605,9 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 				selection: { anchor: docLine.from },
 				effects: EditorView.scrollIntoView(docLine.from, { y: "start" }),
 			});
-			view.focus();
+			if (focus) {
+				view.focus();
+			}
 		},
 		jumpToOffset(offset: number) {
 			const view = viewRef.current;
