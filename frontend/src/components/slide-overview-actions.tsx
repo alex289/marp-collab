@@ -43,13 +43,23 @@ export function SlideOverviewActions({
 	onChangeSelection,
 	onAction,
 }: SlideOverviewActionsProps) {
+	const [menuTarget, setMenuTarget] = useState<{ source: string; activeIndex: number } | null>(
+		null,
+	);
 	const [sectionForm, setSectionForm] = useState<{
 		source: string;
 		index: number;
 		name: string;
 		rename: boolean;
 	} | null>(null);
+	const menuOpen = menuTarget?.source === source && menuTarget.activeIndex === activeIndex;
+	if (menuTarget && !menuOpen) {
+		setMenuTarget(null);
+	}
 	const form = sectionForm?.source === source ? sectionForm : null;
+	if (sectionForm && !form) {
+		setSectionForm(null);
+	}
 	const sectionIndex = sections.findIndex(({ end }) => activeIndex < end);
 	const section = sections[sectionIndex];
 	const firstSlideInSection = section?.name && activeIndex === section.start;
@@ -83,7 +93,10 @@ export function SlideOverviewActions({
 					</>
 				)}
 
-				<DropdownMenu>
+				<DropdownMenu
+					open={menuOpen}
+					onOpenChange={(open) => setMenuTarget(open ? { source, activeIndex } : null)}
+				>
 					<DropdownMenuTrigger
 						render={
 							<Button

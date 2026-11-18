@@ -8,4 +8,6 @@ Use **Start section here** to name a group that runs from the active slide to th
 
 Read-only viewers can still use thumbnail navigation. Decks with Markdown includes or implicit heading-based slide breaks use source editing for slide changes.
 
+Put deck-wide directives in the YAML front matter to keep them independent of slide edits. The overview stops edits that would change a deck-wide setting.
+
 ![Slide overview with the slide and section actions menu open](images/slide-thumbnail-actions.png)

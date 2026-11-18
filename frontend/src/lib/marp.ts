@@ -8,6 +8,7 @@ let currentProjectId = "";
 let currentMarkdownDir = "";
 let currentAssetVersion = 0;
 let currentAssetToken = "";
+let tailwindEnabled = false;
 
 function assetQuery(version: number, token: string): string {
 	const params = new URLSearchParams();
@@ -56,7 +57,7 @@ type SlideSourceToken = {
 	map: [number, number] | null;
 };
 
-type SlideRender = ReturnType<Marp["render"]> & { slideSource: SlideSource };
+type SlideRender = ReturnType<Marp["render"]> & { slideSource: SlideSource; slideSettings: string };
 type SlideArrayRender = Omit<SlideRender, "html"> & { html: string[] };
 
 class SourceMappedMarp extends Marp {
@@ -65,8 +66,15 @@ class SourceMappedMarp extends Marp {
 	override render(markdown: string, env?: unknown): SlideRender | SlideArrayRender {
 		const rendered = super.render(markdown, env);
 		const slides: SlideSourceToken[][] = this.lastSlideTokens ?? [];
+		const globals = this.lastGlobalDirectives ?? {};
 		return {
 			...rendered,
+			slideSettings: JSON.stringify([
+				Object.keys(globals)
+					.sort()
+					.map((key) => [key, globals[key]]),
+				tailwindEnabled,
+			]),
 			slideSource: {
 				startLines: slides.map(
 					(slide) => slide.find((token) => token.type === "marpit_slide_open")?.map?.[0] ?? 0,
@@ -111,7 +119,6 @@ marp.use((md) => {
 	);
 });
 
-let tailwindEnabled = false;
 marp.customDirectives.global[TAILWIND_DIRECTIVE] = (value) => {
 	tailwindEnabled = value === "true";
 	return {};

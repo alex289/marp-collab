@@ -19,7 +19,12 @@ export type DeckBlocks = {
 
 export type SlideSection = { name: string | null; start: number; end: number };
 export type SlideSource = { startLines: number[]; frontMatterEnd: number };
-export type SlideEdit = { markdown: string; index: number; slideCount: number };
+export type SlideEdit = {
+	markdown: string;
+	index: number;
+	slideCount: number;
+	splices: TextSplice[];
+};
 
 export type SlideAction =
 	| { type: "add" | "duplicate"; index: number }
@@ -52,24 +57,30 @@ const explicitDivider = /^ {0,3}(?:(?:-[ \t]*){3,}|(?:\*[ \t]*){3,}|(?:_[ \t]*){
 const leadingComment = /<!--([\s\S]*?)-->[ \t]*(?:\r\n|\n|\r|$)/y;
 const globalDirective =
 	/^(?:marp|theme|size|style|lang|math|headingDivider|tailwind|title|description|author|keywords|url|image|html):/;
+const stickyDirective =
+	/^(?:backgroundColor|backgroundImage|backgroundPosition|backgroundRepeat|backgroundSize|class|color|footer|header|paginate):/;
 
 function splitBlocks(markdown: string, contentOffset: number, dividers: DeckDivider[]): DeckBlocks {
 	const blocks: string[] = [];
 	const separators: string[] = [];
 	let start = skipBlankLines(markdown, contentOffset);
 
-	// A leading comment containing only deck-wide directives stays with the
-	// deck. Spot and sticky directives in the slide body move with that slide.
+	// Leading deck-wide settings may include defaults for the whole deck.
+	// A comment with a spot directive belongs to its slide.
 	while (start < (dividers[0]?.start ?? markdown.length)) {
 		leadingComment.lastIndex = start;
 		const match = leadingComment.exec(markdown);
 		if (!match) {
 			break;
 		}
-		const lines = match[1].trimStart().trimEnd().split(eolPattern);
+		const lines = match[1].split(eolPattern).filter((line) => line.trim());
+		const indent = lines[0]?.match(/^[ \t]*/)?.[0].length ?? 0;
+		const keys = lines
+			.filter((line) => line.length - line.trimStart().length <= indent)
+			.map((line) => line.trimStart().match(/^[\w-]+:/)?.[0] ?? "");
 		if (
-			!globalDirective.test(lines[0]) ||
-			!lines.every((line) => /^\s/.test(line) || !line || globalDirective.test(line))
+			!keys.some((key) => globalDirective.test(key)) ||
+			!keys.every((key) => globalDirective.test(key) || stickyDirective.test(key))
 		) {
 			break;
 		}
@@ -124,9 +135,12 @@ export function getEditableSlideDeck(
 export function getSlideNavigationLines(markdown: string, source: SlideSource): number[] {
 	const lines = splitSourceLines(markdown);
 	return source.startLines.map((line, index) =>
-		index === 0
-			? source.frontMatterEnd + 1
-			: line + (explicitDivider.test(lines[line]?.text ?? "") ? 2 : 1),
+		Math.min(
+			lines.length,
+			index === 0
+				? source.frontMatterEnd + 1
+				: line + (explicitDivider.test(lines[line]?.text ?? "") ? 2 : 1),
+		),
 	);
 }
 
@@ -147,26 +161,73 @@ function ensureBlankLineEnding(block: string): string {
 }
 
 /** Reassembles a deck, restoring the blank line each divider needs. */
-export function joinDeckBlocks({ frontMatter, blocks, separators }: DeckBlocks): string {
+function assembleDeck({ frontMatter, blocks, separators }: DeckBlocks, normalize: boolean) {
 	const eol = sourceEol(frontMatter || separators[0] || blocks[0] || "");
 	// An empty opening slide must not turn its divider into a YAML opener.
 	const emptyOpeningSlide = !frontMatter && blocks[0] === "" && separators[0]?.trim() === "---";
-	const prefix =
-		frontMatter && !/(?:\r\n|\n|\r)$/.test(frontMatter) && (blocks[0] || separators[0])
-			? frontMatter + eol + eol
-			: frontMatter || (emptyOpeningSlide ? eol : "");
-
-	return blocks.reduce((markdown, block, index) => {
-		const separator = separators[index];
-
-		if (separator === undefined) {
-			return markdown + block;
+	let markdown = frontMatter;
+	if (normalize) {
+		if (frontMatter && !eolPattern.test(frontMatter.at(-1) ?? "") && (blocks[0] || separators[0])) {
+			markdown += eol + eol;
+		} else if (emptyOpeningSlide) {
+			markdown = eol;
 		}
+	}
 
-		const endsDeck = index === blocks.length - 2 && blocks[index + 1] === "";
-		const afterSeparator = endsDeck || eolPattern.test(separator) ? "" : eol;
-		return markdown + ensureBlankLineEnding(block) + separator + afterSeparator;
-	}, prefix);
+	const starts = blocks.map((block, index) => {
+		const start = markdown.length;
+		const separator = separators[index];
+		if (separator === undefined || !normalize) {
+			markdown += block + (separator ?? "");
+		} else {
+			const endsDeck = index === blocks.length - 2 && blocks[index + 1] === "";
+			const afterSeparator = endsDeck || eolPattern.test(separator) ? "" : eol;
+			markdown += ensureBlankLineEnding(block) + separator + afterSeparator;
+		}
+		return start;
+	});
+	return { markdown, starts };
+}
+
+export function joinDeckBlocks(deck: DeckBlocks): string {
+	return assembleDeck(deck, true).markdown;
+}
+
+/**
+ * Keep the Yjs identities of stationary slides, even when an edit touches both
+ * sides of one. The splices use original offsets and apply in reverse order.
+ */
+function computeSlideSplices(current: DeckBlocks, next: DeckBlocks, origins: Array<number | null>) {
+	const before = assembleDeck(current, false);
+	const after = assembleDeck(next, true);
+	const splices: TextSplice[] = [];
+	let beforeStart = 0;
+	let afterStart = 0;
+
+	function compareUntil(beforeEnd: number, afterEnd: number) {
+		const splice = computeMinimalSplice(
+			before.markdown.slice(beforeStart, beforeEnd),
+			after.markdown.slice(afterStart, afterEnd),
+		);
+		if (splice) {
+			splices.push({ ...splice, index: beforeStart + splice.index });
+		}
+		beforeStart = beforeEnd;
+		afterStart = afterEnd;
+	}
+
+	for (const [index, origin] of origins.entries()) {
+		if (origin === null || !current.blocks[origin]) {
+			continue;
+		}
+		compareUntil(before.starts[origin], after.starts[index]);
+		compareUntil(
+			before.starts[origin] + current.blocks[origin].length,
+			after.starts[index] + next.blocks[index].length,
+		);
+	}
+	compareUntil(before.markdown.length, after.markdown.length);
+	return { markdown: after.markdown, splices };
 }
 
 // A Markdown link reference definition stays invisible in both the slides
@@ -226,10 +287,20 @@ export function editSlideDeck(deck: DeckBlocks, action: SlideAction): SlideEdit 
 	const withMarker = (body: string, name: string) =>
 		`[marp-collab-section]: # ${JSON.stringify(name)}${eol}${eol}${body}`;
 	const sections = getSlideSections(deck);
+	const origins = blocks.map((_, index): number | null => index);
 
-	function result(bodies: string[], index: number, dividers = separators) {
+	function result(
+		bodies: string[],
+		index: number,
+		dividers = separators,
+		stationary = origins,
+	): SlideEdit {
 		return {
-			markdown: joinDeckBlocks({ frontMatter, blocks: bodies, separators: dividers }),
+			...computeSlideSplices(
+				deck,
+				{ frontMatter, blocks: bodies, separators: dividers },
+				stationary,
+			),
 			index,
 			slideCount: bodies.length,
 		};
@@ -261,12 +332,13 @@ export function editSlideDeck(deck: DeckBlocks, action: SlideAction): SlideEdit 
 
 		if (action.type === "delete") {
 			if (!remaining.length) {
-				return result([""], 0, []);
+				return result([""], 0, [], [null]);
 			}
 			return result(
 				assemble(),
 				Math.min(moving[0].index, remaining.length - 1),
 				remaining.slice(1).map(({ index }) => separators[index - 1]),
+				remaining.map(({ index }) => index),
 			);
 		}
 		const target = getSlideMoveTarget(
@@ -283,7 +355,12 @@ export function editSlideDeck(deck: DeckBlocks, action: SlideAction): SlideEdit 
 			return null;
 		}
 		remaining.splice(target, 0, ...moving.map((row) => ({ ...row, section: destination })));
-		return result(assemble(), target);
+		return result(
+			assemble(),
+			target,
+			separators,
+			remaining.map(({ index }) => (selected.has(index) ? null : index)),
+		);
 	}
 
 	const { index } = action;
@@ -302,6 +379,7 @@ export function editSlideDeck(deck: DeckBlocks, action: SlideAction): SlideEdit 
 				return result(next, 0);
 			}
 			next.splice(index + 1, 0, body);
+			origins.splice(index + 1, 0, null);
 			const dividers = [...separators];
 			dividers.splice(index, 0, `---${eol}${eol}`);
 			return result(next, index + 1, dividers);
@@ -339,7 +417,11 @@ export function editSlideDeck(deck: DeckBlocks, action: SlideAction): SlideEdit 
 				...blocks.slice(first.start, first.end),
 			];
 			next.splice(first.start, swapped.length, ...swapped);
-			return result(next, direction < 0 ? first.start : first.start + second.end - second.start);
+			const newIndex = direction < 0 ? first.start : first.start + second.end - second.start;
+			const movedCount = sections[position].end - sections[position].start;
+			origins.splice(index, movedCount);
+			origins.splice(newIndex, 0, ...Array<number | null>(movedCount).fill(null));
+			return result(next, newIndex);
 		}
 	}
 }

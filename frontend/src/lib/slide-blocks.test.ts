@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { Marp } from "@marp-team/marp-core";
+import * as Y from "yjs";
 import {
 	computeMinimalSplice,
 	editSlideDeck,
 	getEditableSlideDeck,
+	getSlideNavigationLines,
 	getSlideSections,
 	joinDeckBlocks,
 	moveSlide,
@@ -196,6 +198,51 @@ test("keeps an empty opening slide from consuming the next slide as YAML", () =>
 	const moved = moveSlide("# One\n\n---\n\n# Two\n\n---", 2, 0);
 	assert.deepEqual(new Marp().render(moved).comments, [[], [], []]);
 	assert.ok(moved.startsWith("\n---\n"));
+});
+
+test("can jump to a blank last slide after a divider at the end of the file", () => {
+	const source = "# One\r\n\r\n---";
+	assert.deepEqual(
+		getSlideNavigationLines(source, { startLines: [0, 2], frontMatterEnd: 0 }),
+		[1, 3],
+	);
+});
+
+test("keeps leading mixed deck defaults while deleting the first slide", () => {
+	const defaults = "<!--\ntheme: gaia\npaginate: true\n-->\n\n";
+	const source = defaults + "<!-- _class: lead -->\n\n# One\n\n---\n\n# Two";
+	const result = editSlideDeck(splitDeckIntoBlocks(source), { type: "delete", indices: [0] });
+	assert.equal(result?.markdown, defaults + "# Two");
+});
+
+test("bulk deletion and moves retain concurrent edits inside an untouched slide", () => {
+	for (const type of ["delete", "move"] as const) {
+		const left = new Y.Doc();
+		const right = new Y.Doc();
+		const source = "# One\n\n---\n\n# Two retained text\n\n---\n\n# Three";
+		const content = left.getText("content");
+		content.insert(0, source);
+		Y.applyUpdate(right, Y.encodeStateAsUpdate(left));
+		const shared = Y.encodeStateVector(right);
+
+		const action =
+			type === "delete" ? { type, indices: [0, 2] } : { type, indices: [0, 2], slot: 3 };
+		const edit = editSlideDeck(splitDeckIntoBlocks(source), action);
+		assert.ok(edit);
+		left.transact(() => {
+			for (const { index, deleteCount, insert } of [...edit.splices].reverse()) {
+				content.delete(index, deleteCount);
+				content.insert(index, insert);
+			}
+		});
+		assert.equal(content.toJSON(), edit.markdown);
+
+		right.getText("content").insert(source.indexOf("retained"), "concurrent ");
+		Y.applyUpdate(left, Y.encodeStateAsUpdate(right, shared));
+		assert.equal(content.toJSON(), edit.markdown.replace("retained", "concurrent retained"));
+		left.destroy();
+		right.destroy();
+	}
 });
 
 test("splices only the region that changed", () => {

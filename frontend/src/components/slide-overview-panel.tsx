@@ -29,7 +29,7 @@ type SlideOverviewPanelProps = {
 	canEdit: boolean;
 	editHint: string;
 	onSelectLine: (line: number) => void;
-	onEdit: (source: string, fileId: string | null, edit: SlideEdit) => boolean;
+	onEdit: (source: string, fileId: string | null, edit: SlideEdit, settings: string) => boolean;
 };
 
 // Marpit scopes its theme CSS with child combinators (`div.marpit > svg > ...`),
@@ -51,7 +51,12 @@ const staticSrcDoc = `<!doctype html>
       var canReorder = false;
       var activeIndex = -1;
       var selected = null;
+      var slides = [];
+      var labels = [];
+      var sectionHeaders = [];
       var pressIndex = -1;
+      var pointerId = null;
+      var pressTarget = null;
       var pressY = 0;
       var pressScrollY = 0;
       var dragging = false;
@@ -59,14 +64,6 @@ const staticSrcDoc = `<!doctype html>
 
       function post(message) {
         if (port) port.postMessage(Object.assign({ revision: revision }, message));
-      }
-
-      function slideElements() {
-        var grid = document.querySelector('.thumb-grid');
-        if (!grid) return [];
-        return Array.prototype.slice.call(
-          grid.querySelectorAll(':scope > svg[data-marpit-svg], :scope > section')
-        );
       }
 
       function activate(index, range) {
@@ -80,9 +77,9 @@ const staticSrcDoc = `<!doctype html>
         var grid = stage.querySelector('div.marpit') || stage;
         grid.classList.add('thumb-grid');
 
-        var slides = Array.prototype.slice.call(
-          grid.querySelectorAll(':scope > svg[data-marpit-svg], :scope > section')
-        );
+        slides = Array.from(grid.querySelectorAll(':scope > svg[data-marpit-svg], :scope > section'));
+        labels = [];
+        sectionHeaders = [];
 
         slides.forEach(function (slide, index) {
           var section = sections[index];
@@ -96,9 +93,15 @@ const staticSrcDoc = `<!doctype html>
             header.addEventListener('click', function () {
               post({ type: selected ? 'overview-section-select' : 'overview-slide-click', index: index });
             });
+            sectionHeaders.push(header);
             grid.insertBefore(header, slide);
           }
 
+          // Thumbnail artwork is separate from the controls around it.
+          slide.querySelectorAll('a, [tabindex]').forEach(function (element) {
+            element.setAttribute('tabindex', '-1');
+          });
+          slide.addEventListener('click', function (event) { event.preventDefault(); });
           slide.classList.add('thumb-slide');
           slide.setAttribute('data-index', String(index));
           var label = document.createElement('button');
@@ -109,42 +112,44 @@ const staticSrcDoc = `<!doctype html>
           label.addEventListener('click', function (e) {
             if (e.detail === 0) activate(index, e.shiftKey);
           });
+          labels.push(label);
           grid.insertBefore(label, slide);
         });
       }
 
       function paintActive() {
-        slideElements().forEach(function (slide) {
-          var index = Number(slide.getAttribute('data-index'));
+        var selectedSet = new Set(selected);
+        slides.forEach(function (slide, index) {
           slide.classList.toggle('is-active', index === activeIndex);
-          slide.classList.toggle('is-selected', selected !== null && selected.includes(index));
+          slide.classList.toggle('is-selected', selectedSet.has(index));
         });
-        Array.prototype.forEach.call(document.querySelectorAll('.thumb-label'), function (label) {
-          var index = Number(label.getAttribute('data-index'));
+        labels.forEach(function (label, index) {
           label.classList.toggle('is-active', index === activeIndex);
           label.setAttribute('aria-label', (selected ? 'Select slide ' : 'Jump to slide ') + (index + 1));
-          if (selected) label.setAttribute('aria-pressed', String(selected.includes(index)));
+          if (selected) label.setAttribute('aria-pressed', String(selectedSet.has(index)));
           else label.removeAttribute('aria-pressed');
           if (index === activeIndex) label.setAttribute('aria-current', 'true');
           else label.removeAttribute('aria-current');
         });
-        Array.prototype.forEach.call(document.querySelectorAll('.section-header'), function (header) {
+        sectionHeaders.forEach(function (header) {
           header.setAttribute('aria-label', (selected ? 'Select section ' : 'Jump to section ') + header.textContent);
           if (!selected) {
             header.removeAttribute('aria-pressed');
             return;
           }
-          var count = selected.filter(function (index) {
-            return index >= Number(header.dataset.start) && index < Number(header.dataset.end);
-          }).length;
+          var start = Number(header.dataset.start);
+          var end = Number(header.dataset.end);
+          var count = 0;
+          for (var index = start; index < end; index++) {
+            if (selectedSet.has(index)) count++;
+          }
           header.setAttribute('aria-pressed', count === 0 ? 'false' : (
-            count === Number(header.dataset.end) - Number(header.dataset.start) ? 'true' : 'mixed'
+            count === end - start ? 'true' : 'mixed'
           ));
         });
       }
 
       function revealActive() {
-        var slides = slideElements();
         var target = slides[activeIndex];
         if (!target) return;
 
@@ -156,7 +161,8 @@ const staticSrcDoc = `<!doctype html>
 
       function elementWithIndex(node) {
         while (node && node !== document.body) {
-          if (node.getAttribute && node.getAttribute('data-index') !== null) return node;
+          var index = node.getAttribute && node.getAttribute('data-index');
+          if (index !== null && (slides[index] === node || labels[index] === node)) return node;
           node = node.parentNode;
         }
         return null;
@@ -166,7 +172,6 @@ const staticSrcDoc = `<!doctype html>
       // The lifted slide rides along with the cursor, so its own rect says
       // nothing about where the drop belongs and has to be ignored.
       function slotFromPoint(y) {
-        var slides = slideElements();
         for (var i = 0; i < slides.length; i++) {
           if (dragging && i === pressIndex) continue;
           var rect = slides[i].getBoundingClientRect();
@@ -176,7 +181,6 @@ const staticSrcDoc = `<!doctype html>
       }
 
       function paintDropSlot(slot) {
-        var slides = slideElements();
         var moving = selected && selected.includes(pressIndex) ? selected : [pressIndex];
         var target = slot - moving.filter(function (index) { return index < slot; }).length;
         var settled = moving.every(function (index, position) { return index === target + position; });
@@ -191,34 +195,38 @@ const staticSrcDoc = `<!doctype html>
       }
 
       function liftDragged(offset) {
-        var slide = slideElements()[pressIndex];
+        var slide = slides[pressIndex];
         if (slide) slide.style.setProperty('--drag-offset', offset + 'px');
-      }
-
-      function labelFor(index) {
-        return document.querySelector('.thumb-label[data-index="' + index + '"]');
       }
 
       function clearDrag() {
         document.body.classList.remove('is-dragging');
-        slideElements().forEach(function (slide) {
+        slides.forEach(function (slide) {
           slide.classList.remove('drop-before', 'drop-after', 'is-dragged');
           slide.style.removeProperty('--drag-offset');
         });
-        Array.prototype.forEach.call(document.querySelectorAll('.thumb-label'), function (label) {
+        labels.forEach(function (label) {
           label.classList.remove('is-dragged-label');
         });
+        if (pointerId !== null && pressTarget?.hasPointerCapture(pointerId)) {
+          pressTarget.releasePointerCapture(pointerId);
+        }
+        pointerId = null;
+        pressTarget = null;
         pressIndex = -1;
         dragging = false;
         dragAllowed = false;
       }
 
       document.addEventListener('pointerdown', function (e) {
-        if (e.button !== 0) return;
+        if (!e.isPrimary || e.button !== 0 || pointerId !== null) return;
 
         var element = elementWithIndex(e.target);
         if (!element) return;
 
+        pointerId = e.pointerId;
+        pressTarget = element;
+        pressTarget.setPointerCapture(pointerId);
         pressIndex = Number(element.getAttribute('data-index'));
         pressY = e.clientY;
         pressScrollY = window.scrollY;
@@ -232,16 +240,14 @@ const staticSrcDoc = `<!doctype html>
       document.addEventListener(
         'pointermove',
         function (e) {
-          if (pressIndex < 0 || !dragAllowed) return;
+          if (e.pointerId !== pointerId || !dragAllowed) return;
 
           if (!dragging) {
             if (Math.abs(e.clientY - pressY) < 6) return;
             dragging = true;
             document.body.classList.add('is-dragging');
-            var slides = slideElements();
-            if (slides[pressIndex]) slides[pressIndex].classList.add('is-dragged');
-            var label = labelFor(pressIndex);
-            if (label) label.classList.add('is-dragged-label');
+            slides[pressIndex].classList.add('is-dragged');
+            labels[pressIndex].classList.add('is-dragged-label');
           }
 
           e.preventDefault();
@@ -258,7 +264,7 @@ const staticSrcDoc = `<!doctype html>
       );
 
       document.addEventListener('pointerup', function (e) {
-        if (pressIndex < 0) return;
+        if (e.pointerId !== pointerId) return;
 
         var from = pressIndex;
         var slot = dragging ? slotFromPoint(e.clientY) : -1;
@@ -266,14 +272,23 @@ const staticSrcDoc = `<!doctype html>
         clearDrag();
 
         if (!wasDragging) {
-          if (Number(elementWithIndex(e.target)?.dataset.index) === from) activate(from, e.shiftKey);
+          var released = elementWithIndex(document.elementFromPoint(e.clientX, e.clientY));
+          if (Number(released?.dataset.index) === from) activate(from, e.shiftKey);
           return;
         }
 
-        post({ type: 'overview-slide-move', from: from, slot: slot });
+        if (e.clientX >= 0 && e.clientX < window.innerWidth && e.clientY >= 0 && e.clientY < window.innerHeight) {
+          post({ type: 'overview-slide-move', from: from, slot: slot });
+        }
       });
 
-      document.addEventListener('pointercancel', clearDrag);
+      function cancelPointer(e) {
+        if (e.pointerId === pointerId) clearDrag();
+      }
+
+      document.addEventListener('pointercancel', cancelPointer);
+      document.addEventListener('lostpointercapture', cancelPointer);
+      window.addEventListener('blur', clearDrag);
 
       // Images inside a slide are still natively draggable, which would spawn a
       // ghost image and swallow the reorder gesture.
@@ -408,6 +423,9 @@ export const SlideOverviewPanel = ({
 		editable && selection?.markdown === markdown && selection.fileId === deckFileId
 			? selection
 			: null;
+	if (selection && !currentSelection) {
+		setSelection(null);
+	}
 	const selected = currentSelection?.indices ?? null;
 
 	function changeSelection(indices: number[] | null, anchor: number | null = null) {
@@ -415,11 +433,11 @@ export const SlideOverviewPanel = ({
 	}
 
 	function applyAction(action: SlideAction) {
-		if (!editable || !deck) {
+		if (!editable || !deck || !rendered) {
 			return;
 		}
 		const edit = editSlideDeck(deck, action);
-		if (!edit || !onEdit(markdown, deckFileId, edit)) {
+		if (!edit || !onEdit(markdown, deckFileId, edit, rendered.slideSettings)) {
 			return;
 		}
 
@@ -446,6 +464,13 @@ export const SlideOverviewPanel = ({
 			}
 
 			if (payload.type === "presentation-key") {
+				if (
+					(payload.eventType !== "keydown" && payload.eventType !== "keyup") ||
+					typeof payload.key !== "string" ||
+					typeof payload.code !== "string"
+				) {
+					return;
+				}
 				document.dispatchEvent(
 					new KeyboardEvent(payload.eventType, {
 						key: payload.key,
@@ -464,6 +489,7 @@ export const SlideOverviewPanel = ({
 			if (
 				payload.type === "overview-slide-move" &&
 				Number.isInteger(payload.from) &&
+				slideLines[payload.from] !== undefined &&
 				Number.isInteger(payload.slot)
 			) {
 				const indices = selected?.includes(payload.from) ? selected : [payload.from];
@@ -480,48 +506,46 @@ export const SlideOverviewPanel = ({
 				onSelectLine(slideLines[index]);
 				return;
 			}
-			if (!currentSelection) {
+			if (
+				!editable ||
+				(payload.type !== "overview-slide-select" && payload.type !== "overview-section-select")
+			) {
 				return;
 			}
-
-			if (payload.type === "overview-section-select") {
-				const section = sections.find(({ start }) => start === index);
-				if (!section) {
-					return;
+			setSelection((previous) => {
+				if (previous?.markdown !== markdown || previous.fileId !== deckFileId) {
+					return previous;
 				}
-				const group = Array.from(
-					{ length: section.end - section.start },
-					(_, offset) => index + offset,
-				);
-				const allSelected = group.every((item) => currentSelection.indices.includes(item));
-				const next = allSelected
-					? currentSelection.indices.filter((item) => item < index || item >= section.end)
-					: Array.from(new Set([...currentSelection.indices, ...group]));
-				changeSelection(
-					next.sort((a, b) => a - b),
-					index,
-				);
-			} else if (payload.type === "overview-slide-select") {
-				const next = new Set(currentSelection.indices);
-				const anchor = currentSelection.anchor;
-				if (payload.range && anchor !== null) {
+				const next = new Set(previous.indices);
+				let anchor = index;
+				if (payload.type === "overview-section-select") {
+					const section = sections.find(({ start }) => start === index);
+					if (!section) {
+						return previous;
+					}
+					const group = Array.from(
+						{ length: section.end - section.start },
+						(_, offset) => index + offset,
+					);
+					if (group.every((item) => next.has(item))) {
+						for (const item of group) {
+							next.delete(item);
+						}
+					} else {
+						for (const item of group) {
+							next.add(item);
+						}
+					}
+				} else if (payload.range && previous.anchor !== null) {
+					anchor = previous.anchor;
 					for (let item = Math.min(index, anchor); item <= Math.max(index, anchor); item += 1) {
 						next.add(item);
 					}
-					changeSelection(
-						[...next].sort((a, b) => a - b),
-						anchor,
-					);
-				} else {
-					if (!next.delete(index)) {
-						next.add(index);
-					}
-					changeSelection(
-						[...next].sort((a, b) => a - b),
-						index,
-					);
+				} else if (!next.delete(index)) {
+					next.add(index);
 				}
-			}
+				return { ...previous, indices: [...next].sort((a, b) => a - b), anchor };
+			});
 		};
 	});
 
@@ -652,7 +676,6 @@ export const SlideOverviewPanel = ({
         border-radius: 4px;
         font-size: 10px;
         font-variant-numeric: tabular-nums;
-        touch-action: none;
       }
       .thumb-label[aria-pressed] {
         border: 1px solid color-mix(in srgb, ${muted} 50%, transparent);
@@ -667,7 +690,7 @@ export const SlideOverviewPanel = ({
         .thumb-grid > .thumb-slide { transition: none; }
       }
       .thumb-label.is-active { color: ${accent}; font-weight: 600; }
-      body.can-reorder .thumb-label { cursor: grab; }
+      body.can-reorder .thumb-label { cursor: grab; touch-action: none; }
       body.is-dragging, body.is-dragging .thumb-label { cursor: grabbing; }
     `,
 		});

@@ -41,12 +41,7 @@ import { OutlinePanel } from "@/components/outline-panel";
 import { SlideOverviewPanel } from "@/components/slide-overview-panel";
 import { parseMarkdownOutline } from "@/lib/outline";
 import { countMarpSlides, getLineForSlideIndex, getSlideIndexForLine } from "@/lib/slide-count";
-import {
-	computeMinimalSplice,
-	getEditableSlideDeck,
-	getSlideNavigationLines,
-	type SlideEdit,
-} from "@/lib/slide-blocks";
+import { getEditableSlideDeck, getSlideNavigationLines, type SlideEdit } from "@/lib/slide-blocks";
 import { isEditableDeckFile, isMarkdownDeckFile } from "@/lib/file-types";
 import { PaneResizeHandle } from "@/components/pane-resize-handle";
 import { listThemeNames, renderMarp, rewriteCssUrls, setProjectThemes } from "@/lib/marp";
@@ -919,7 +914,12 @@ function RouteComponent() {
 				? "You have read-only access to this deck."
 				: "Connect to the deck to change its slides.";
 
-	function handleSlideEdit(source: string, fileId: string | null, edit: SlideEdit): boolean {
+	function handleSlideEdit(
+		source: string,
+		fileId: string | null,
+		edit: SlideEdit,
+		settings: string,
+	): boolean {
 		const yText = syncedYText;
 		if (!canEditSlides || !yText?.doc || fileId !== selectedFile?.id) {
 			return false;
@@ -932,14 +932,23 @@ function RouteComponent() {
 			toast("The deck changed. Try the slide action again.");
 			return false;
 		}
-		const splice = computeMinimalSplice(source, edit.markdown);
-		if (!splice) {
+		if (source === edit.markdown) {
 			return false;
 		}
 
 		let line: number;
 		try {
-			const { slideSource } = renderMarp(edit.markdown, id, fileId, assetRevision, assetToken);
+			const { slideSource, slideSettings } = renderMarp(
+				edit.markdown,
+				id,
+				fileId,
+				assetRevision,
+				assetToken,
+			);
+			if (slideSettings !== settings) {
+				toast.error("Move deck-wide directives to the front matter before making this slide edit.");
+				return false;
+			}
 			const next = getEditableSlideDeck(edit.markdown, slideSource);
 			if (next?.blocks.length !== edit.slideCount) {
 				toast.error("This edit would change the deck’s slide breaks. Edit the Markdown directly.");
@@ -953,11 +962,14 @@ function RouteComponent() {
 
 		collab.undoManager?.stopCapturing();
 		yText.doc.transact(() => {
-			if (splice.deleteCount) {
-				yText.delete(splice.index, splice.deleteCount);
-			}
-			if (splice.insert) {
-				yText.insert(splice.index, splice.insert);
+			for (let i = edit.splices.length - 1; i >= 0; i -= 1) {
+				const { index, deleteCount, insert } = edit.splices[i];
+				if (deleteCount) {
+					yText.delete(index, deleteCount);
+				}
+				if (insert) {
+					yText.insert(index, insert);
+				}
 			}
 		});
 		collab.undoManager?.stopCapturing();

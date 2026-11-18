@@ -714,6 +714,63 @@ test.describe("Editor: content editing", () => {
 		]);
 	});
 
+	test("guards thumbnail actions when a collaborator changes the deck or a slide holds deck settings", async ({
+		page,
+		context,
+	}) => {
+		await page.goto("/");
+		await createPresentation(page, "Thumbnail edit safeguards");
+		await waitForSidebar(page);
+
+		const source = "# Opening\n\n---\n\n# Deck defaults\n\n<!-- theme: gaia -->\n\n---";
+		const editor = page.locator(".cm-content");
+		await editor.fill(source);
+		await page.getByRole("button", { name: /^Slides \(/ }).click();
+		const overview = page.frameLocator('iframe[title="Slide overview"]');
+		const last = overview.getByRole("button", { name: "Jump to slide 3", exact: true });
+		await last.click();
+		await expect(last).toHaveAttribute("aria-current", "true");
+
+		const settingsSlide = overview.getByRole("button", { name: "Jump to slide 2", exact: true });
+		await settingsSlide.click();
+		await expect(settingsSlide).toHaveAttribute("aria-current", "true");
+
+		const peer = await context.newPage();
+		await peer.goto(page.url());
+		const peerEditor = peer.locator(".cm-content");
+		await expect(peerEditor).toContainText("# Deck defaults");
+		await page.bringToFront();
+
+		const actions = page.getByRole("button", { name: "Slide actions" });
+		const deleteSlide = page.getByRole("menuitem", { name: "Delete slide", exact: true });
+		await actions.click();
+		await expect(deleteSlide).toBeVisible();
+		await peerEditor.fill(source + "\n\n# Closing");
+		await expect(overview.getByRole("heading", { name: "Closing" })).toBeVisible();
+		await expect(deleteSlide).toBeHidden();
+
+		await settingsSlide.click();
+		await actions.click();
+		await deleteSlide.click();
+		await expect(
+			page.getByText(
+				"Move deck-wide directives to the front matter before making this slide edit.",
+			),
+		).toBeVisible();
+		await expect(editor).toContainText("<!-- theme: gaia -->");
+		await expect(overview.getByRole("heading", { name: "Deck defaults" })).toBeVisible();
+
+		await page.getByRole("button", { name: "Select", exact: true }).click();
+		await overview.getByRole("button", { name: "Select slide 2", exact: true }).click();
+		await expect(page.getByRole("status").filter({ hasText: "1 selected" })).toBeVisible();
+		await peerEditor.fill(source);
+		await expect(page.getByRole("button", { name: "Select", exact: true })).toBeVisible();
+		await peerEditor.fill(source + "\n\n# Closing");
+		await expect(overview.getByRole("heading", { name: "Closing" })).toBeVisible();
+		await expect(page.getByRole("button", { name: "Select", exact: true })).toBeVisible();
+		await peer.close();
+	});
+
 	test("type into the CodeMirror editor and see live preview update", async ({ page }) => {
 		await page.goto("/");
 
