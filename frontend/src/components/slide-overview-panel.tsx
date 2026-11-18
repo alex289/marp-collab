@@ -639,7 +639,8 @@ export const SlideOverviewPanel = ({
 
 		// Must mirror index.css; the srcDoc iframe can't read the parent's
 		// custom properties. Its own background stays transparent so the
-		// thumbnails sit directly on the sidebar.
+		// thumbnails sit directly on the sidebar; browsers only honour that
+		// when the frame's color-scheme matches the page's.
 		const isDark = resolvedTheme === "dark";
 		const pageShadow = isDark ? "0 1px 6px rgb(0 0 0 / 0.55)" : "0 1px 4px rgb(0 0 0 / 0.18)";
 		const liftShadow = isDark ? "0 10px 24px rgb(0 0 0 / 0.7)" : "0 10px 24px rgb(0 0 0 / 0.35)";
@@ -660,6 +661,7 @@ export const SlideOverviewPanel = ({
         margin: 0;
         min-height: 100%;
         background: transparent;
+        color-scheme: ${resolvedTheme};
         overflow-x: hidden;
         overflow-y: auto;
         font-family: system-ui, -apple-system, sans-serif;
@@ -682,6 +684,8 @@ export const SlideOverviewPanel = ({
         padding: 10px 12px 28px 8px;
       }
       .thumb-grid > .thumb-slide {
+        /* Slide artwork renders as in the preview, whatever the app theme. */
+        color-scheme: light;
         grid-column: 2;
         width: 100% !important;
         height: auto !important;
