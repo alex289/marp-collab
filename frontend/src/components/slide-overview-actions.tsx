@@ -1,6 +1,14 @@
-import { useState } from "react";
+import { useMemo, useRef, useState, type RefObject } from "react";
 import { ArrowDown, ArrowUp, Copy, Ellipsis, Layers, ListChecks, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+	ContextMenu,
+	ContextMenuContent,
+	ContextMenuGroup,
+	ContextMenuItem,
+	ContextMenuLabel,
+	ContextMenuSeparator,
+} from "@/components/ui/context-menu";
 import {
 	Dialog,
 	DialogClose,
@@ -22,12 +30,24 @@ import { Field, FieldGroup, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { getSlideMoveTarget, type SlideAction, type SlideSection } from "@/lib/slide-blocks";
 
+export type ThumbnailMenu = {
+	index: number;
+	x: number;
+	y: number;
+	keyboard: boolean;
+	open: boolean;
+};
+
 type SlideOverviewActionsProps = {
 	source: string;
 	slideCount: number;
 	activeIndex: number;
 	sections: SlideSection[];
 	selected: number[] | null;
+	thumbnailMenu: ThumbnailMenu | null;
+	iframeRef: RefObject<HTMLIFrameElement | null>;
+	onCloseThumbnailMenu: () => void;
+	onFocusThumbnail: (index: number) => void;
 	onChangeSelection: (indices: number[] | null) => void;
 	onAction: (action: SlideAction) => void;
 };
@@ -40,9 +60,14 @@ export function SlideOverviewActions({
 	activeIndex,
 	sections,
 	selected,
+	thumbnailMenu,
+	iframeRef,
+	onCloseThumbnailMenu,
+	onFocusThumbnail,
 	onChangeSelection,
 	onAction,
 }: SlideOverviewActionsProps) {
+	const restoreThumbnailFocus = useRef(false);
 	const [menuTarget, setMenuTarget] = useState<{ source: string; activeIndex: number } | null>(
 		null,
 	);
@@ -60,13 +85,112 @@ export function SlideOverviewActions({
 	if (sectionForm && !form) {
 		setSectionForm(null);
 	}
-	const sectionIndex = sections.findIndex(({ end }) => activeIndex < end);
-	const section = sections[sectionIndex];
-	const firstSlideInSection = section?.name && activeIndex === section.start;
-	const count = selected?.length ?? 0;
-	const indices = selected ?? [activeIndex];
-	const moveUp = (indices[0] ?? 0) - 1;
-	const moveDown = (indices.at(-1) ?? 0) + 2;
+	const anchor = useMemo(
+		() =>
+			thumbnailMenu && {
+				getBoundingClientRect: () => new DOMRect(thumbnailMenu.x, thumbnailMenu.y, 0, 0),
+			},
+		[thumbnailMenu],
+	);
+	const selectionAtThumbnail =
+		thumbnailMenu && selected?.includes(thumbnailMenu.index) ? selected : null;
+
+	function menuItems(index: number, selection: number[] | null, context = false) {
+		const Group = context ? ContextMenuGroup : DropdownMenuGroup;
+		const Label = context ? ContextMenuLabel : DropdownMenuLabel;
+		const Item = context ? ContextMenuItem : DropdownMenuItem;
+		const Separator = context ? ContextMenuSeparator : DropdownMenuSeparator;
+		const sectionIndex = sections.findIndex(({ end }) => index < end);
+		const section = sections[sectionIndex];
+		const firstSlideInSection = section?.name && index === section.start;
+		const count = selection?.length ?? 0;
+		const indices = selection ?? [index];
+		const moveUp = (indices[0] ?? 0) - 1;
+		const moveDown = (indices.at(-1) ?? 0) + 2;
+		return (
+			<>
+				<Group>
+					<Label>{selection ? `${count} selected` : `Slide ${index + 1}`}</Label>
+					{context && !selection && (
+						<Item onClick={() => onAction({ type: "add", index })}>
+							<Plus /> Add slide after
+						</Item>
+					)}
+					{selection ? (
+						<Item
+							onClick={() => onChangeSelection(count === slideCount ? [] : allSlides(slideCount))}
+						>
+							<ListChecks />
+							{count === slideCount ? "Clear selection" : "Select all slides"}
+						</Item>
+					) : (
+						<Item onClick={() => onAction({ type: "duplicate", index })}>
+							<Copy /> Duplicate slide
+						</Item>
+					)}
+					<Item
+						disabled={getSlideMoveTarget(slideCount, indices, moveUp) === null}
+						onClick={() => onAction({ type: "move", indices, slot: moveUp })}
+					>
+						<ArrowUp /> Move up
+					</Item>
+					<Item
+						disabled={getSlideMoveTarget(slideCount, indices, moveDown) === null}
+						onClick={() => onAction({ type: "move", indices, slot: moveDown })}
+					>
+						<ArrowDown /> Move down
+					</Item>
+					<Item
+						variant="destructive"
+						disabled={!indices.length}
+						onClick={() => onAction({ type: "delete", indices })}
+					>
+						<Trash2 /> {selection ? "Delete selected slides" : "Delete slide"}
+					</Item>
+					{!selection && !firstSlideInSection && (
+						<Item onClick={() => setSectionForm({ source, index, name: "", rename: false })}>
+							<Layers /> Start section here
+						</Item>
+					)}
+				</Group>
+				{!selection && section?.name && (
+					<>
+						<Separator />
+						<Group>
+							<Label className="truncate">{section.name}</Label>
+							<Item
+								onClick={() =>
+									setSectionForm({
+										source,
+										index: section.start,
+										name: section.name ?? "",
+										rename: true,
+									})
+								}
+							>
+								Rename section
+							</Item>
+							<Item
+								disabled={!sections[sectionIndex - 1]?.name}
+								onClick={() => onAction({ type: "move-section-up", index: section.start })}
+							>
+								<ArrowUp /> Move section up
+							</Item>
+							<Item
+								disabled={!sections[sectionIndex + 1]?.name}
+								onClick={() => onAction({ type: "move-section-down", index: section.start })}
+							>
+								<ArrowDown /> Move section down
+							</Item>
+							<Item onClick={() => onAction({ type: "remove-section", index: section.start })}>
+								Remove section
+							</Item>
+						</Group>
+					</>
+				)}
+			</>
+		);
+	}
 
 	return (
 		<>
@@ -74,7 +198,7 @@ export function SlideOverviewActions({
 				{selected ? (
 					<>
 						<p role="status" className="px-1 text-xs font-medium">
-							{count} selected
+							{selected.length} selected
 						</p>
 						<Button variant="ghost" onClick={() => onChangeSelection(null)}>
 							Done
@@ -109,95 +233,36 @@ export function SlideOverviewActions({
 						<Ellipsis />
 					</DropdownMenuTrigger>
 					<DropdownMenuContent align="end" className="min-w-44">
-						<DropdownMenuGroup>
-							<DropdownMenuLabel>
-								{selected ? `${count} selected` : `Slide ${activeIndex + 1}`}
-							</DropdownMenuLabel>
-							{selected ? (
-								<DropdownMenuItem
-									onClick={() =>
-										onChangeSelection(count === slideCount ? [] : allSlides(slideCount))
-									}
-								>
-									<ListChecks />
-									{count === slideCount ? "Clear selection" : "Select all slides"}
-								</DropdownMenuItem>
-							) : (
-								<DropdownMenuItem
-									onClick={() => onAction({ type: "duplicate", index: activeIndex })}
-								>
-									<Copy /> Duplicate slide
-								</DropdownMenuItem>
-							)}
-							<DropdownMenuItem
-								disabled={getSlideMoveTarget(slideCount, indices, moveUp) === null}
-								onClick={() => onAction({ type: "move", indices, slot: moveUp })}
-							>
-								<ArrowUp /> Move up
-							</DropdownMenuItem>
-							<DropdownMenuItem
-								disabled={getSlideMoveTarget(slideCount, indices, moveDown) === null}
-								onClick={() => onAction({ type: "move", indices, slot: moveDown })}
-							>
-								<ArrowDown /> Move down
-							</DropdownMenuItem>
-							<DropdownMenuItem
-								variant="destructive"
-								disabled={!indices.length}
-								onClick={() => onAction({ type: "delete", indices })}
-							>
-								<Trash2 /> {selected ? "Delete selected slides" : "Delete slide"}
-							</DropdownMenuItem>
-							{!selected && !firstSlideInSection && (
-								<DropdownMenuItem
-									onClick={() =>
-										setSectionForm({ source, index: activeIndex, name: "", rename: false })
-									}
-								>
-									<Layers /> Start section here
-								</DropdownMenuItem>
-							)}
-						</DropdownMenuGroup>
-						{!selected && section?.name && (
-							<>
-								<DropdownMenuSeparator />
-								<DropdownMenuGroup>
-									<DropdownMenuLabel className="truncate">{section.name}</DropdownMenuLabel>
-									<DropdownMenuItem
-										onClick={() =>
-											setSectionForm({
-												source,
-												index: section.start,
-												name: section.name ?? "",
-												rename: true,
-											})
-										}
-									>
-										Rename section
-									</DropdownMenuItem>
-									<DropdownMenuItem
-										disabled={!sections[sectionIndex - 1]?.name}
-										onClick={() => onAction({ type: "move-section-up", index: section.start })}
-									>
-										<ArrowUp /> Move section up
-									</DropdownMenuItem>
-									<DropdownMenuItem
-										disabled={!sections[sectionIndex + 1]?.name}
-										onClick={() => onAction({ type: "move-section-down", index: section.start })}
-									>
-										<ArrowDown /> Move section down
-									</DropdownMenuItem>
-									<DropdownMenuItem
-										onClick={() => onAction({ type: "remove-section", index: section.start })}
-									>
-										Remove section
-									</DropdownMenuItem>
-								</DropdownMenuGroup>
-							</>
-						)}
+						{menuItems(activeIndex, selected)}
 					</DropdownMenuContent>
 				</DropdownMenu>
 			</div>
+			<ContextMenu
+				open={thumbnailMenu?.open ?? false}
+				onOpenChange={(open, details) => {
+					if (!open) {
+						restoreThumbnailFocus.current =
+							thumbnailMenu?.keyboard === true && details.reason === "escape-key";
+						onCloseThumbnailMenu();
+					}
+				}}
+			>
+				<ContextMenuContent
+					anchor={anchor}
+					aria-label={selectionAtThumbnail ? "Selection actions" : "Slide actions"}
+					className="min-w-44"
+					finalFocus={() => {
+						if (thumbnailMenu && restoreThumbnailFocus.current) {
+							restoreThumbnailFocus.current = false;
+							onFocusThumbnail(thumbnailMenu.index);
+							return iframeRef.current;
+						}
+						return true;
+					}}
+				>
+					{thumbnailMenu && menuItems(thumbnailMenu.index, selectionAtThumbnail, true)}
+				</ContextMenuContent>
+			</ContextMenu>
 			<Dialog
 				open={form !== null}
 				onOpenChange={(open) => {

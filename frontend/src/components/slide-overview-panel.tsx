@@ -11,7 +11,7 @@ import {
 	type SlideAction,
 	type SlideEdit,
 } from "@/lib/slide-blocks";
-import { SlideOverviewActions } from "./slide-overview-actions";
+import { SlideOverviewActions, type ThumbnailMenu } from "./slide-overview-actions";
 import { useTheme } from "./theme-provider";
 import marpitSvgPolyfillScript from "@marp-team/marpit-svg-polyfill/lib/polyfill.browser.js?raw";
 
@@ -108,6 +108,7 @@ const staticSrcDoc = `<!doctype html>
           label.type = 'button';
           label.className = 'thumb-label';
           label.setAttribute('data-index', String(index));
+          if (canReorder) label.setAttribute('aria-keyshortcuts', 'Shift+F10');
           label.textContent = String(index + 1);
           label.addEventListener('click', function (e) {
             if (e.detail === 0) activate(index, e.shiftKey);
@@ -167,6 +168,24 @@ const staticSrcDoc = `<!doctype html>
         }
         return null;
       }
+
+      function openContextMenu(element, x, y, keyboard) {
+        post({
+          type: 'overview-slide-contextmenu',
+          index: Number(element.dataset.index),
+          x: x,
+          y: y,
+          keyboard: keyboard,
+        });
+      }
+
+      document.addEventListener('contextmenu', function (e) {
+        if (!canReorder) return;
+        var element = elementWithIndex(e.target);
+        if (!element) return;
+        e.preventDefault();
+        openContextMenu(element, e.clientX, e.clientY, false);
+      });
 
       // Returns the insertion slot (0..count) the pointer currently sits in.
       // The lifted slide rides along with the cursor, so its own rect says
@@ -300,6 +319,17 @@ const staticSrcDoc = `<!doctype html>
       // hotkeys would die once a thumbnail has focus. Mirrors the preview pane.
       function forwardKey(type) {
         return function (e) {
+          if (canReorder && (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10'))) {
+            var element = elementWithIndex(e.target);
+            if (element) {
+              e.preventDefault();
+              if (type === 'keydown' && !e.repeat) {
+                var rect = element.getBoundingClientRect();
+                openContextMenu(element, rect.right, rect.bottom, true);
+              }
+              return;
+            }
+          }
           if (e.target instanceof HTMLButtonElement && (e.key === ' ' || e.key === 'Enter')) return;
           post({
             type: 'presentation-key',
@@ -341,6 +371,10 @@ const staticSrcDoc = `<!doctype html>
           paintActive();
           if (activeChanged && !dragging) revealActive();
         }
+
+        if (e.data.type === 'overview-focus-slide' && e.data.revision === revision) {
+          labels[e.data.index]?.focus({ preventScroll: true });
+        }
       }
 
       window.addEventListener('message', function (e) {
@@ -380,6 +414,9 @@ export const SlideOverviewPanel = ({
 		indices: number[];
 		anchor: number | null;
 	} | null>(null);
+	const [thumbnailMenu, setThumbnailMenu] = useState<
+		(ThumbnailMenu & { markdown: string; fileId: string | null }) | null
+	>(null);
 
 	const slideTailwindReady = useSlideTailwindReady();
 	const rendered = useMemo(() => {
@@ -427,6 +464,13 @@ export const SlideOverviewPanel = ({
 		setSelection(null);
 	}
 	const selected = currentSelection?.indices ?? null;
+	const currentThumbnailMenu =
+		editable && thumbnailMenu?.markdown === markdown && thumbnailMenu.fileId === deckFileId
+			? thumbnailMenu
+			: null;
+	if (thumbnailMenu && !currentThumbnailMenu) {
+		setThumbnailMenu(null);
+	}
 
 	function changeSelection(indices: number[] | null, anchor: number | null = null) {
 		setSelection(indices && { markdown, fileId: deckFileId, indices, anchor });
@@ -499,6 +543,34 @@ export const SlideOverviewPanel = ({
 
 			const index: number = payload.index;
 			if (!Number.isInteger(index) || slideLines[index] === undefined) {
+				return;
+			}
+
+			if (payload.type === "overview-slide-contextmenu") {
+				const frame = iframeRef.current;
+				const { x, y } = payload;
+				if (
+					!editable ||
+					!frame ||
+					!Number.isFinite(x) ||
+					!Number.isFinite(y) ||
+					x < 0 ||
+					y < 0 ||
+					x > frame.clientWidth ||
+					y > frame.clientHeight
+				) {
+					return;
+				}
+				const rect = frame.getBoundingClientRect();
+				setThumbnailMenu({
+					markdown,
+					fileId: deckFileId,
+					index,
+					x: rect.left + x,
+					y: rect.top + y,
+					keyboard: payload.keyboard === true,
+					open: true,
+				});
 				return;
 			}
 
@@ -735,6 +807,18 @@ export const SlideOverviewPanel = ({
 								activeIndex={Math.max(0, activeIndex)}
 								sections={sections}
 								selected={selected}
+								thumbnailMenu={currentThumbnailMenu}
+								iframeRef={iframeRef}
+								onCloseThumbnailMenu={() =>
+									setThumbnailMenu((menu) => (menu?.open ? { ...menu, open: false } : menu))
+								}
+								onFocusThumbnail={(index) =>
+									portRef.current?.postMessage({
+										type: "overview-focus-slide",
+										revision: revision.current,
+										index,
+									})
+								}
 								onChangeSelection={changeSelection}
 								onAction={applyAction}
 							/>
@@ -754,7 +838,7 @@ export const SlideOverviewPanel = ({
 									? "Edit this deck’s slide breaks in the source."
 									: selected
 										? "Click to select. Shift-click for a range. Drag to move."
-										: "Click to jump. Drag to reorder."}
+										: "Click to jump. Drag to move. Right-click for actions."}
 						</p>
 					</>
 				)}

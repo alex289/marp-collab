@@ -635,6 +635,56 @@ test.describe("Editor: content editing", () => {
 		await peer.close();
 	});
 
+	test("opens the shadcn context menu on the clicked slide or selected slides", async ({
+		page,
+	}) => {
+		await page.goto("/");
+		await createPresentation(page, "Thumbnail context menu");
+		await waitForSidebar(page);
+
+		await page.locator(".cm-content").fill("# Opening\n\n---\n\n# Research\n\n---\n\n# Findings");
+		await page.getByRole("button", { name: /^Slides \(/ }).click();
+		const frame = page.locator('iframe[title="Slide overview"]');
+		const overview = frame.contentFrame();
+		const titles = overview.getByRole("heading", { level: 1 });
+		const slideMenu = page.getByRole("menu", { name: "Slide actions" });
+		const jumpTo = (index: number) =>
+			overview.getByRole("button", { name: `Jump to slide ${index}`, exact: true });
+		await expect(titles).toHaveText(["Opening", "Research", "Findings"]);
+		await jumpTo(1).click();
+
+		await overview.locator(".thumb-slide").nth(1).click({ button: "right" });
+		await expect(slideMenu.getByText("Slide 2", { exact: true })).toBeVisible();
+		await expect(jumpTo(1)).toHaveAttribute("aria-current", "true");
+		await slideMenu.getByRole("menuitem", { name: "Duplicate slide" }).click();
+		await expect(titles).toHaveText(["Opening", "Research", "Research", "Findings"]);
+
+		await jumpTo(2).press("Shift+F10");
+		const addAfter = slideMenu.getByRole("menuitem", { name: "Add slide after" });
+		await expect(addAfter).toBeVisible();
+		await page.keyboard.press("ArrowDown");
+		await expect(addAfter).toBeFocused();
+		await page.keyboard.press("Escape");
+		await expect(slideMenu).toBeHidden();
+		await expect(frame).toBeFocused();
+		await expect(jumpTo(2)).toBeFocused();
+
+		await page.getByRole("button", { name: "Select", exact: true }).click();
+		for (const index of [2, 3]) {
+			await overview.getByRole("button", { name: `Select slide ${index}`, exact: true }).click();
+		}
+		await expect(page.getByRole("status").filter({ hasText: "2 selected" })).toBeVisible();
+		await overview.locator(".thumb-slide").nth(0).click({ button: "right" });
+		await expect(slideMenu.getByText("Slide 1", { exact: true })).toBeVisible();
+		await page.keyboard.press("Escape");
+		await overview.locator(".thumb-slide").nth(1).click({ button: "right" });
+		await page
+			.getByRole("menu", { name: "Selection actions" })
+			.getByRole("menuitem", { name: "Delete selected slides" })
+			.click();
+		await expect(titles).toHaveText(["Opening", "Findings"]);
+	});
+
 	test("names and moves slide sections from thumbnails", async ({ page }, testInfo) => {
 		await page.goto("/");
 		await createPresentation(page, "Field research briefing");
@@ -673,9 +723,9 @@ test.describe("Editor: content editing", () => {
 			overview.getByRole("button", { name: "Jump to section Field findings" }),
 		).toBeVisible();
 
-		await openSlideActions();
+		await overview.locator(".thumb-slide").nth(2).click({ button: "right" });
 		await expect(page.getByRole("menuitem", { name: "Move section up" })).toBeVisible();
-		await testInfo.attach("Slide thumbnail actions and sections", {
+		await testInfo.attach("Slide thumbnail context menu and sections", {
 			body: await page.screenshot({ animations: "disabled" }),
 			contentType: "image/png",
 		});
