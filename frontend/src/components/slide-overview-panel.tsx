@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LayoutGrid } from "lucide-react";
+import { toast } from "sonner";
 import { SidebarGroup, SidebarGroupContent, SidebarGroupLabel } from "@/components/ui/sidebar";
 import { renderMarp } from "@/lib/marp";
 import { useSlideTailwindReady } from "@/hooks/use-slide-tailwind-ready";
 import {
 	editSlideDeck,
 	getEditableSlideDeck,
+	getInheritedDirectiveConflict,
 	getSlideNavigationLines,
 	getSlideSections,
 	type SlideAction,
@@ -203,13 +205,16 @@ const staticSrcDoc = `<!doctype html>
         var moving = selected && selected.includes(pressIndex) ? selected : [pressIndex];
         var target = slot - moving.filter(function (index) { return index < slot; }).length;
         var settled = moving.every(function (index, position) { return index === target + position; });
+        // Moving down into a section boundary lands at the end of the section
+        // above it, so the line is drawn above that section's name.
+        var endOfSection = slot === slides.length || (
+          target > moving[0] &&
+          sectionHeaders.some(function (header) { return Number(header.dataset.start) === slot; })
+        );
 
         slides.forEach(function (slide, index) {
-          slide.classList.toggle('drop-before', !settled && index === slot);
-          slide.classList.toggle(
-            'drop-after',
-            !settled && slot === slides.length && index === slides.length - 1
-          );
+          slide.classList.toggle('drop-before', !settled && !endOfSection && index === slot);
+          slide.classList.toggle('drop-after', !settled && endOfSection && index === slot - 1);
         });
       }
 
@@ -409,14 +414,13 @@ export const SlideOverviewPanel = ({
 	const revision = useRef(0);
 	const [iframeLoad, setIframeLoad] = useState(0);
 	const [selection, setSelection] = useState<{
-		markdown: string;
-		fileId: string | null;
+		shape: string;
 		indices: number[];
 		anchor: number | null;
 	} | null>(null);
-	const [thumbnailMenu, setThumbnailMenu] = useState<
-		(ThumbnailMenu & { markdown: string; fileId: string | null }) | null
-	>(null);
+	const [thumbnailMenu, setThumbnailMenu] = useState<(ThumbnailMenu & { shape: string }) | null>(
+		null,
+	);
 
 	const slideTailwindReady = useSlideTailwindReady();
 	const rendered = useMemo(() => {
@@ -456,28 +460,33 @@ export const SlideOverviewPanel = ({
 		}
 	}
 	const editable = canEdit && deck !== null;
-	const currentSelection =
-		editable && selection?.markdown === markdown && selection.fileId === deckFileId
-			? selection
-			: null;
+	// Selections, menus and forms outlive edits that keep the slides in place,
+	// such as a collaborator typing, and reset once slides are added or removed.
+	const shapeOf = (count: number) => `${deckFileId}\n${count}`;
+	const deckShape = shapeOf(slideCount);
+	const currentSelection = editable && selection?.shape === deckShape ? selection : null;
 	if (selection && !currentSelection) {
 		setSelection(null);
 	}
 	const selected = currentSelection?.indices ?? null;
 	const currentThumbnailMenu =
-		editable && thumbnailMenu?.markdown === markdown && thumbnailMenu.fileId === deckFileId
-			? thumbnailMenu
-			: null;
+		editable && thumbnailMenu?.shape === deckShape ? thumbnailMenu : null;
 	if (thumbnailMenu && !currentThumbnailMenu) {
 		setThumbnailMenu(null);
 	}
 
 	function changeSelection(indices: number[] | null, anchor: number | null = null) {
-		setSelection(indices && { markdown, fileId: deckFileId, indices, anchor });
+		setSelection(indices && { shape: deckShape, indices, anchor });
 	}
 
 	function applyAction(action: SlideAction) {
 		if (!editable || !deck || !rendered) {
+			return;
+		}
+		if (getInheritedDirectiveConflict(deck, action)) {
+			toast.error(
+				"A slide in this edit sets a directive that later slides inherit, like paginate or class. Edit the Markdown directly.",
+			);
 			return;
 		}
 		const edit = editSlideDeck(deck, action);
@@ -487,8 +496,7 @@ export const SlideOverviewPanel = ({
 
 		if (selected && action.type === "move") {
 			setSelection({
-				markdown: edit.markdown,
-				fileId: deckFileId,
+				shape: shapeOf(edit.slideCount),
 				indices: action.indices.map((_, offset) => edit.index + offset),
 				anchor: edit.index,
 			});
@@ -563,8 +571,7 @@ export const SlideOverviewPanel = ({
 				}
 				const rect = frame.getBoundingClientRect();
 				setThumbnailMenu({
-					markdown,
-					fileId: deckFileId,
+					shape: deckShape,
 					index,
 					x: rect.left + x,
 					y: rect.top + y,
@@ -585,7 +592,7 @@ export const SlideOverviewPanel = ({
 				return;
 			}
 			setSelection((previous) => {
-				if (previous?.markdown !== markdown || previous.fileId !== deckFileId) {
+				if (previous?.shape !== deckShape) {
 					return previous;
 				}
 				const next = new Set(previous.indices);
@@ -799,7 +806,7 @@ export const SlideOverviewPanel = ({
 				{isMarkdown && editable && rendered && (
 					<SlideOverviewActions
 						key={deckFileId}
-						source={markdown}
+						deckShape={deckShape}
 						slideCount={slideCount}
 						activeIndex={Math.max(0, activeIndex)}
 						sections={sections}

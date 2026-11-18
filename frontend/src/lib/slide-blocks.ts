@@ -240,8 +240,8 @@ function readSectionMarker(block: string) {
 		return null;
 	}
 
-	const name = match[1].trim();
-	return name ? { name, end: skipBlankLines(block, match[0].length) } : null;
+	// An empty marker starts no section but is still replaced when naming one.
+	return { name: match[1].trim(), end: skipBlankLines(block, match[0].length) };
 }
 
 export function getSlideSections({ blocks }: DeckBlocks): SlideSection[] {
@@ -249,7 +249,7 @@ export function getSlideSections({ blocks }: DeckBlocks): SlideSection[] {
 	let section: SlideSection = { name: null, start: 0, end: blocks.length };
 	for (const [index, block] of blocks.entries()) {
 		const marker = readSectionMarker(block);
-		if (!marker) {
+		if (!marker?.name) {
 			continue;
 		}
 		if (index > section.start) {
@@ -259,6 +259,36 @@ export function getSlideSections({ blocks }: DeckBlocks): SlideSection[] {
 	}
 	sections.push(section);
 	return sections;
+}
+
+const htmlComment = /<!--([\s\S]*?)-->/g;
+
+/**
+ * Local directives without an underscore carry over to every later slide, so
+ * moving or deleting the slide that sets one restyles the rest of the deck.
+ */
+function setsInheritedDirective(block: string) {
+	return Array.from(block.matchAll(htmlComment), (match) => match[1]).some((comment) =>
+		comment.split(eolPattern).some((line) => stickyDirective.test(line.trim())),
+	);
+}
+
+/** The slides whose inherited directives an action would move or remove. */
+export function getInheritedDirectiveConflict(deck: DeckBlocks, action: SlideAction) {
+	let affected: number[] = [];
+	if (action.type === "delete" || action.type === "move") {
+		affected = action.indices;
+	} else if (action.type === "move-section-up" || action.type === "move-section-down") {
+		const sections = getSlideSections(deck);
+		const position = sections.findIndex(({ start }) => start === action.index);
+		const neighbor = sections[position + (action.type === "move-section-up" ? -1 : 1)];
+		for (const section of [sections[position], neighbor]) {
+			for (let index = section?.start ?? 0; index < (section?.end ?? 0); index += 1) {
+				affected.push(index);
+			}
+		}
+	}
+	return affected.some((index) => setsInheritedDirective(deck.blocks[index] ?? ""));
 }
 
 /** A slot is before the slide at that index, or after the deck at slideCount. */
@@ -344,7 +374,10 @@ export function editSlideDeck(deck: DeckBlocks, action: SlideAction): SlideEdit 
 			return null;
 		}
 
-		const destination = remaining[target]?.section ?? remaining.at(-1)?.section;
+		// Moved slides join the section of the neighbour they pass, so a slide
+		// reaches the end of its section before it crosses into the next one.
+		const neighbor = target > moving[0].index ? remaining[target - 1] : remaining[target];
+		const destination = (neighbor ?? remaining.at(-1))?.section;
 		if (!destination) {
 			return null;
 		}
@@ -380,7 +413,7 @@ export function editSlideDeck(deck: DeckBlocks, action: SlideAction): SlideEdit 
 		}
 		case "name-section": {
 			// The name can't end the comment that holds it.
-			const name = action.name.trim().replaceAll("-->", "->");
+			const name = action.name.trim().replace(/-{2,}>/g, "->");
 			if (!name || /[\r\n]/.test(name)) {
 				return null;
 			}

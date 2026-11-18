@@ -200,6 +200,13 @@ export const renderMarp = (
 	};
 };
 
+/** Slide boundaries and deck-wide settings, without the Tailwind pass of a full render. */
+export const analyzeSlides = (markdown: string) => {
+	tailwindEnabled = false;
+	const { slideSource, slideSettings } = marp.render(markdown);
+	return { slideSource, slideSettings };
+};
+
 const customThemeNames = new Set<string>();
 const themeMarkerRegex = /\/\*[\s\S]*?@theme\s+([\w-]+)/;
 

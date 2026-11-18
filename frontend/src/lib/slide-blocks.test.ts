@@ -7,6 +7,7 @@ import {
 	computeMinimalSplice,
 	editSlideDeck,
 	getEditableSlideDeck,
+	getInheritedDirectiveConflict,
 	getSlideNavigationLines,
 	getSlideSections,
 	joinDeckBlocks,
@@ -184,16 +185,83 @@ test("keeps section labels in source and moves the whole section", () => {
 	assert.doesNotMatch(rendered.html, /Findings|quoted/);
 });
 
-test("keeps a section name from closing its comment", () => {
-	const named = editSlideDeck(splitDeckIntoBlocks("# One"), {
-		type: "name-section",
-		index: 0,
-		name: "A --> B",
-	});
-	assert.equal(named?.markdown, "<!-- section: A -> B -->\n\n# One");
-	assert.deepEqual(getSlideSections(splitDeckIntoBlocks(named.markdown)), [
-		{ name: "A -> B", start: 0, end: 1 },
+test("keeps a moved slide in its section until it passes the boundary", () => {
+	const sectioned = [
+		"<!-- section: A -->",
+		"# a0",
+		"---",
+		"# a1",
+		"---",
+		"# a2",
+		"---",
+		"<!-- section: B -->",
+		"# b0",
+		"---",
+		"# b1",
+	].join("\n\n");
+	const titles = (markdown: string) => {
+		const parsed = splitDeckIntoBlocks(markdown);
+		return getSlideSections(parsed).map(({ name, start, end }) => [
+			name,
+			parsed.blocks.slice(start, end).map((block) => /# (\w+)/.exec(block)?.[1]),
+		]);
+	};
+	const move = (indices: number[], slot: number) =>
+		editSlideDeck(splitDeckIntoBlocks(sectioned), { type: "move", indices, slot })?.markdown ?? "";
+
+	assert.deepEqual(titles(move([1], 3)), [
+		["A", ["a0", "a2", "a1"]],
+		["B", ["b0", "b1"]],
 	]);
+	assert.deepEqual(titles(move([2], 4)), [
+		["A", ["a0", "a1"]],
+		["B", ["b0", "a2", "b1"]],
+	]);
+	assert.deepEqual(titles(move([3], 2)), [
+		["A", ["a0", "a1", "b0", "a2"]],
+		["B", ["b1"]],
+	]);
+	assert.deepEqual(titles(move([4], 3)), [
+		["A", ["a0", "a1", "a2"]],
+		["B", ["b1", "b0"]],
+	]);
+});
+
+test("replaces an empty section marker and keeps every name inside its comment", () => {
+	for (const [name, saved] of [
+		["A --> B", "A -> B"],
+		["a ---> b", "a -> b"],
+	]) {
+		const named = editSlideDeck(splitDeckIntoBlocks("<!-- section: -->\n\n# One"), {
+			type: "name-section",
+			index: 0,
+			name,
+		});
+		assert.equal(named?.markdown, `<!-- section: ${saved} -->\n\n# One`);
+		assert.deepEqual(getSlideSections(splitDeckIntoBlocks(named.markdown)), [
+			{ name: saved, start: 0, end: 1 },
+		]);
+	}
+	assert.deepEqual(getSlideSections(splitDeckIntoBlocks("<!-- section: -->\n\n# One")), [
+		{ name: null, start: 0, end: 1 },
+	]);
+});
+
+test("flags edits that move or delete a slide with an inherited directive", () => {
+	const parsed = splitDeckIntoBlocks(
+		"# One\n\n---\n\n<!--\npaginate: true\n-->\n\n# Two\n\n---\n\n<!-- _class: lead -->\n\n# Three",
+	);
+	assert.equal(getInheritedDirectiveConflict(parsed, { type: "delete", indices: [1] }), true);
+	assert.equal(
+		getInheritedDirectiveConflict(parsed, { type: "move", indices: [1], slot: 3 }),
+		true,
+	);
+	assert.equal(getInheritedDirectiveConflict(parsed, { type: "delete", indices: [2] }), false);
+	assert.equal(
+		getInheritedDirectiveConflict(parsed, { type: "move", indices: [0], slot: 2 }),
+		false,
+	);
+	assert.equal(getInheritedDirectiveConflict(parsed, { type: "duplicate", index: 1 }), false);
 });
 
 test("retains a section after deleting its opening slide and keeps deck directives after deleting all slides", () => {

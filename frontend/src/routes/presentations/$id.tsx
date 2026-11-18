@@ -45,7 +45,7 @@ import { countMarpSlides, getLineForSlideIndex, getSlideIndexForLine } from "@/l
 import { getEditableSlideDeck, getSlideNavigationLines, type SlideEdit } from "@/lib/slide-blocks";
 import { isEditableDeckFile, isMarkdownDeckFile } from "@/lib/file-types";
 import { PaneResizeHandle } from "@/components/pane-resize-handle";
-import { listThemeNames, renderMarp, rewriteCssUrls, setProjectThemes } from "@/lib/marp";
+import { analyzeSlides, listThemeNames, rewriteCssUrls, setProjectThemes } from "@/lib/marp";
 import { useAssetToken } from "@/lib/asset-token";
 import { inlineProjectThemeFonts } from "@/lib/project-theme-fonts";
 import { fetcher } from "@/lib/fetcher";
@@ -964,13 +964,7 @@ function RouteComponent() {
 
 		let line: number;
 		try {
-			const { slideSource, slideSettings } = renderMarp(
-				edit.markdown,
-				id,
-				fileId,
-				assetRevision,
-				assetToken,
-			);
+			const { slideSource, slideSettings } = analyzeSlides(edit.markdown);
 			if (slideSettings !== settings) {
 				toast.error("Move deck-wide directives to the front matter before making this slide edit.");
 				return false;
