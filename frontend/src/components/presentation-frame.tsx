@@ -218,8 +218,11 @@ const staticSrcDoc = `<!doctype html>
             return;
           }
           lastHtml = html;
-          lastCss = css;
-          document.getElementById('marp-theme').textContent = css;
+          // Re-parsing unchanged styles would reload embedded theme fonts on every keystroke.
+          if (css !== lastCss) {
+            lastCss = css;
+            document.getElementById('marp-theme').textContent = css;
+          }
           content.innerHTML = html;
           slides = collectSlides();
           zoom = 1;

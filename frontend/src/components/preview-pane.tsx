@@ -158,8 +158,11 @@ const staticSrcDoc = `<!doctype html>
         // would paint exactly what is already on screen.
         if (!e.data.scrollToTop && e.data.html === lastHtml && e.data.css === lastCss) return;
         lastHtml = e.data.html;
-        lastCss = e.data.css;
-        document.getElementById('marp-styles').textContent = e.data.css;
+        // Re-parsing unchanged styles would reload embedded theme fonts on every keystroke.
+        if (e.data.css !== lastCss) {
+          lastCss = e.data.css;
+          document.getElementById('marp-styles').textContent = e.data.css;
+        }
         document.body.innerHTML = e.data.html;
         if (e.data.scrollToTop) {
           window.scrollTo(0, 0);
