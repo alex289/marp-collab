@@ -2,8 +2,7 @@
  * Replaces each inert source block with its own diagram or error.
  * @param {(source: string) => Promise<{ src: string, alt: string } | null>} renderDiagram
  */
-// oxlint-disable-next-line no-unused-vars -- Called by the frame and PDF scripts that include this file.
-async function renderSlideMermaidBlocks(renderDiagram) {
+window.renderSlideMermaidBlocks = async (renderDiagram) => {
 	const blocks = document.querySelectorAll('[data-marp-mermaid="pending"]');
 	const slides = new Set(Array.from(blocks, (block) => block.parentElement));
 	for (const slide of slides) {
@@ -43,4 +42,4 @@ async function renderSlideMermaidBlocks(renderDiagram) {
 			}
 		}),
 	);
-}
+};

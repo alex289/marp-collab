@@ -47,7 +47,7 @@
 	async function start() {
 		document.body.append(stage);
 		if (window.parent === window) {
-			await renderSlideMermaidBlocks(renderDiagram);
+			await window.renderSlideMermaidBlocks(renderDiagram);
 			Reflect.set(window, "__marpMermaidReady", true);
 			return;
 		}

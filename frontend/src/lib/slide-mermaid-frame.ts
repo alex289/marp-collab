@@ -60,6 +60,6 @@ async function renderMermaidDiagram(source) {
 }
 
 function updateSlideMermaid() {
-  void renderSlideMermaidBlocks(renderMermaidDiagram);
+  void window.renderSlideMermaidBlocks(renderMermaidDiagram);
 }
 `;

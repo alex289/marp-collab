@@ -126,7 +126,7 @@ describe("Gotenberg PDF request", () => {
 		const index = init.body.get("files");
 		ok(index instanceof File);
 		const html = await index.text();
-		const rendererScript = /<script>([\s\S]*?)<\/script>/.exec(html)?.[1];
+		const rendererScript = /<script>([\s\S]*?)<\/script>/i.exec(html)?.[1];
 		ok(rendererScript);
 		match(rendererScript, /__marpMermaidReady/);
 		const hash = createHash("sha256").update(rendererScript).digest("base64");
