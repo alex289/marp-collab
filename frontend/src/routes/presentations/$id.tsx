@@ -46,6 +46,7 @@ import { isEditableDeckFile, isMarkdownDeckFile } from "@/lib/file-types";
 import { PaneResizeHandle } from "@/components/pane-resize-handle";
 import { listThemeNames, rewriteCssUrls, setProjectThemes } from "@/lib/marp";
 import { useAssetToken } from "@/lib/asset-token";
+import { inlineProjectThemeFonts } from "@/lib/project-theme-fonts";
 import { fetcher } from "@/lib/fetcher";
 import { applyThemeToYText, getMarkdownTheme } from "@/lib/markdown-theme";
 import { upsertProjectTheme } from "@/lib/project-themes";
@@ -412,6 +413,9 @@ function RouteComponent() {
 	const editorPaneRef = useRef<EditorPaneHandle | null>(null);
 	const viewerContainerRef = useRef<HTMLDivElement | null>(null);
 	const selectedCssFileIdRef = useRef<string | null>(null);
+	// Bumped whenever project themes reload, so a pending CSS edit that resolves
+	// afterwards can't write a theme from the previous file list or project.
+	const themeLoadEpochRef = useRef(0);
 	const suppressNextSlideAwarenessUpdateRef = useRef(false);
 	const lastAppliedPresentationUpdateRef = useRef(0);
 	const selectedCssFileId = selectedFile?.id.toLowerCase().endsWith(".css")
@@ -552,11 +556,16 @@ function RouteComponent() {
 
 	// Project files are served under stable URLs; bump the asset version when
 	// the file list changes so re-uploaded images bypass the browser cache.
-	const [assetRevisionFiles, setAssetRevisionFiles] = useState(files);
-	if (assetRevisionFiles !== files) {
-		setAssetRevisionFiles(files);
+	const [assetFiles, setAssetFiles] = useState(() => ({
+		id,
+		files,
+		themeFontRequests: new Map<string, Promise<string | undefined>>(),
+	}));
+	if (assetFiles.id !== id || assetFiles.files !== files) {
+		setAssetFiles({ id, files, themeFontRequests: new Map() });
 		setAssetRevision((revision) => revision + 1);
 	}
+	const { themeFontRequests } = assetFiles;
 
 	if (!selectedFile && markdown !== "") {
 		setMarkdown("");
@@ -601,6 +610,7 @@ function RouteComponent() {
 	useEffect(() => {
 		const cssFiles = files.filter((file) => file.id.toLowerCase().endsWith(".css"));
 		const controller = new AbortController();
+		themeLoadEpochRef.current += 1;
 		void (async () => {
 			const themes = await Promise.all(
 				cssFiles.map(async (file) => {
@@ -614,7 +624,11 @@ function RouteComponent() {
 						}
 						return {
 							id: file.id,
-							css: rewriteCssUrls(await res.text(), id, file.id, assetToken),
+							css: await inlineProjectThemeFonts(
+								rewriteCssUrls(await res.text(), id, file.id, assetToken),
+								id,
+								themeFontRequests,
+							),
 						};
 					} catch {
 						return null;
@@ -640,7 +654,7 @@ function RouteComponent() {
 		})();
 
 		return () => controller.abort();
-	}, [files, id, assetToken, projectThemeStore]);
+	}, [files, id, assetToken, projectThemeStore, themeFontRequests]);
 
 	useEffect(() => {
 		// Wait for the document to sync so an empty, still-loading text never
@@ -649,11 +663,22 @@ function RouteComponent() {
 			return;
 		}
 
-		const applyTheme = () => {
+		let generation = 0;
+		const applyTheme = async () => {
+			const applied = ++generation;
+			const epoch = themeLoadEpochRef.current;
 			// oxlint-disable-next-line no-base-to-string
 			const css = rewriteCssUrls(syncedYText.toString(), id, selectedFile.id, assetToken);
+			// Register once with fonts embedded: a theme with plain font URLs would
+			// briefly render with fallback fonts behind an access proxy.
+			const embeddedCss = await inlineProjectThemeFonts(css, id, themeFontRequests);
+			// A reload re-runs this effect, which re-applies the current text if the
+			// file is still selected.
+			if (applied !== generation || epoch !== themeLoadEpochRef.current) {
+				return;
+			}
 			projectThemeStore.update((current) =>
-				upsertProjectTheme(current, { id: selectedFile.id, css }),
+				upsertProjectTheme(current, { id: selectedFile.id, css: embeddedCss }),
 			);
 		};
 
@@ -663,7 +688,7 @@ function RouteComponent() {
 			// Wait for a typing burst to settle before parsing a partial CSS theme.
 			timer = setTimeout(() => {
 				timer = undefined;
-				applyTheme();
+				void applyTheme();
 			}, 150);
 		};
 
@@ -675,10 +700,10 @@ function RouteComponent() {
 			// Flush a pending update so switching files doesn't drop the last edits.
 			if (timer !== undefined) {
 				clearTimeout(timer);
-				applyTheme();
+				void applyTheme();
 			}
 		};
-	}, [syncedYText, id, selectedFile, assetToken, projectThemeStore]);
+	}, [syncedYText, id, selectedFile, assetToken, projectThemeStore, themeFontRequests]);
 
 	const currentTheme = useMemo(() => getMarkdownTheme(markdown) ?? "default", [markdown]);
 
