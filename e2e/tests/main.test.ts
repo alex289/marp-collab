@@ -479,6 +479,119 @@ test.describe("Editor page — file management", () => {
 });
 
 test.describe("Editor: content editing", () => {
+	test("renders Mermaid in every slide view and exports the deck to PDF", async ({
+		page,
+	}, testInfo) => {
+		const rendererRequests: string[] = [];
+		page.on("request", (request) => {
+			if (request.url().endsWith("/api/v1/mermaid-renderer.js")) {
+				rendererRequests.push(request.url());
+			}
+		});
+		await page.goto("/");
+		await createPresentation(page, "Mermaid diagrams");
+		await page.waitForURL(/\/presentations\/.+/);
+		await waitForSidebar(page);
+		const preview = page.frameLocator('iframe[title="Marp preview"]');
+		await expect(preview.getByRole("heading").first()).toBeVisible();
+		expect(rendererRequests).toHaveLength(0);
+
+		const projectId = new URL(page.url()).pathname.split("/").at(-1)!;
+		const include = await page.request.post(`/api/v1/projects/${projectId}/files/upload`, {
+			multipart: {
+				file: {
+					name: "handoff.md",
+					mimeType: "text/markdown",
+					buffer: Buffer.from(
+						[
+							"# Release handoff",
+							"",
+							"~~~mermaid",
+							"sequenceDiagram",
+							"  accTitle: Release handoff diagram",
+							"  Build->>Production: Deliver release",
+							"~~~",
+							"",
+							"```mermaid",
+							"flowchart LR",
+							"  A -->",
+							"```",
+						].join("\n"),
+					),
+				},
+			},
+		});
+		expect(include.ok()).toBeTruthy();
+
+		const editor = page.locator(".cm-content");
+		await editor.click();
+		await page.keyboard.press("ControlOrMeta+A");
+		await page.keyboard.insertText(
+			[
+				"# Deployment workflow",
+				"",
+				"```mermaid",
+				"flowchart LR",
+				"  accTitle: Deployment workflow diagram",
+				"  A[Commit] --> B[Build] --> C{Tests pass?}",
+				"  C -->|Yes| D[Deploy]",
+				"  C -->|No| E[Fix and retry]",
+				"```",
+				"",
+				"---",
+				"",
+				"<!-- @include: handoff.md -->",
+			].join("\n"),
+		);
+
+		const workflowTitle = "Deployment workflow diagram";
+		const handoffTitle = "Release handoff diagram";
+		const diagramError = "Mermaid diagram could not be rendered.";
+		await expect(preview.getByRole("img", { name: workflowTitle })).toBeVisible({
+			timeout: 15_000,
+		});
+		await expect(preview.getByRole("img", { name: handoffTitle })).toBeVisible();
+		const previewError = preview.getByText(diagramError);
+		await expect(previewError).toHaveCount(1);
+		await expect(previewError).toBeInViewport();
+		await expect(editor).toContainText("<!-- @include: handoff.md -->");
+		expect(rendererRequests.length).toBeGreaterThan(0);
+
+		await page.getByRole("button", { name: /^Slides \(/ }).click();
+		const thumbnails = page.frameLocator('iframe[title="Slide overview"]');
+		await expect(thumbnails.getByRole("img", { name: workflowTitle })).toBeVisible();
+		await expect(thumbnails.getByRole("img", { name: handoffTitle })).toBeVisible();
+
+		await testInfo.attach("Mermaid preview", {
+			body: await page.screenshot({ animations: "disabled" }),
+			contentType: "image/png",
+		});
+
+		const downloadPromise = page.waitForEvent("download");
+		await page.getByRole("button", { name: "PDF", exact: true }).click();
+		const download = await downloadPromise;
+		const pdf = readFileSync(await download.path());
+		expect(pdf.subarray(0, 5).toString()).toBe("%PDF-");
+
+		const presentationUrl = page.url();
+		await page.getByRole("button", { name: "Start", exact: true }).click();
+		await expect(
+			page.frameLocator('iframe[title="Presentation"]').getByRole("img", { name: workflowTitle }),
+		).toBeVisible();
+		const nextSlide = page.frameLocator('iframe[title="Next slide preview"]');
+		await expect(nextSlide.getByRole("img", { name: handoffTitle })).toBeVisible();
+		await expect(nextSlide.getByText(diagramError)).toBeVisible();
+
+		const audience = await page.context().newPage();
+		await audience.goto(`${presentationUrl}?mode=viewer`);
+		await expect(
+			audience
+				.frameLocator('iframe[title="Presentation"]')
+				.getByRole("img", { name: workflowTitle }),
+		).toBeVisible();
+		await audience.close();
+	});
+
 	test("expands includes, refreshes their content and navigates all included slides", async ({
 		page,
 	}) => {

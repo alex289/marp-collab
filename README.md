@@ -17,6 +17,7 @@ MarpCollab is a realtime collaboration editor for [Marp](https://marp.app/) pres
 - **Realtime collaboration** – edit decks together with live preview
 - **Presenter view** – speaker notes, timer, synced audience windows and [live demos](docs/live-demos.md)
 - **Markdown includes** – reuse slides from other files with `<!-- @include: intro.md -->` ([docs](docs/markdown-includes.md))
+- **Mermaid diagrams** – render fenced diagrams in previews, presentations, and PDF exports ([docs](docs/mermaid.md))
 - **Tailwind CSS** – style slides with utility classes via `tailwind: true` ([docs](docs/tailwind.md))
 - **Git sync** – pull from and push to a Git repository
 - **PDF export**

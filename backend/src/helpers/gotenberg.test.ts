@@ -1,5 +1,6 @@
 import { after, before, describe, test } from "node:test";
-import { deepEqual, equal, ok } from "node:assert/strict";
+import { deepEqual, equal, match, ok } from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -30,6 +31,7 @@ describe("Gotenberg PDF request", () => {
 		const rendered: RenderedPdfInput = {
 			html: "<main>Quarterly Review</main>",
 			css: "main { color: navy; }",
+			hasMermaid: false,
 			assets: new Map([
 				["assets/local.png", "asset0.png"],
 				["assets/missing.png", "asset1.png"],
@@ -76,6 +78,7 @@ describe("Gotenberg PDF request", () => {
 		equal(form.get("preferCssPageSize"), "true");
 		equal(form.get("emulatedMediaType"), "print");
 		equal(form.get("waitDelay"), "2s");
+		equal(form.get("waitForExpression"), null);
 		equal(form.get("nativeBookmarks"), "true");
 		const stages = form.get("stages");
 		ok(typeof stages === "string");
@@ -93,7 +96,6 @@ describe("Gotenberg PDF request", () => {
 
 	test("allows exactly Marp's own inline script in the PDF policy", async () => {
 		const { Marp } = await import("@marp-team/marp-core");
-		const { createHash } = await import("node:crypto");
 		const { PDF_CONTENT_SECURITY_POLICY } = await import("./gotenberg.ts");
 		const html = new Marp().render("# Deck").html;
 		const start = html.indexOf("<script>") + "<script>".length;
@@ -103,5 +105,35 @@ describe("Gotenberg PDF request", () => {
 		ok(PDF_CONTENT_SECURITY_POLICY.includes(`script-src 'sha256-${hash}';`));
 		ok(PDF_CONTENT_SECURITY_POLICY.startsWith("default-src 'none'"));
 		ok(PDF_CONTENT_SECURITY_POLICY.includes("img-src file: data:;"));
+	});
+
+	test("waits for Mermaid and allows the bundled renderer by hash", async (t) => {
+		const { renderMarkdownForPdf } = await import("../collab/marp-render.ts");
+		const { PDF_CONTENT_SECURITY_POLICY, renderPdfViaGotenberg } = await import("./gotenberg.ts");
+		const rendered = await renderMarkdownForPdf("pdf-request", "deck.md", () =>
+			Promise.resolve("# Mermaid\n\n```mermaid\nflowchart LR\nA --> B\n```"),
+		);
+		ok(rendered);
+		const fetchMock = t.mock.method(
+			globalThis,
+			"fetch",
+			(_input: RequestInfo | URL, _init?: RequestInit) => Promise.resolve(new Response()),
+		);
+		await renderPdfViaGotenberg("pdf-request", rendered);
+		const init = fetchMock.mock.calls[0]?.arguments[1] as RequestInit | undefined;
+		ok(init?.body instanceof FormData);
+		equal(init.body.get("waitForExpression"), "window.__marpMermaidReady === true");
+		const index = init.body.get("files");
+		ok(index instanceof File);
+		const html = await index.text();
+		const rendererScript = /<script>([\s\S]*?)<\/script>/.exec(html)?.[1];
+		ok(rendererScript);
+		match(rendererScript, /__marpMermaidReady/);
+		const hash = createHash("sha256").update(rendererScript).digest("base64");
+		const policy = PDF_CONTENT_SECURITY_POLICY.replace(
+			/script-src [^;]*/,
+			(source) => `${source} 'sha256-${hash}'`,
+		);
+		ok(html.includes(`content="${policy}"`));
 	});
 });

@@ -1,4 +1,5 @@
 import { renderMarp } from "@/lib/marp";
+import { slideMermaidFrameScript } from "@/lib/slide-mermaid-frame";
 import { useSlideTailwindReady } from "@/hooks/use-slide-tailwind-ready";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -47,6 +48,7 @@ const staticSrcDoc = `<!doctype html>
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>${slideMermaidFrameScript}</script>
     <style>
       html, body {
         margin: 0;
@@ -221,6 +223,7 @@ const staticSrcDoc = `<!doctype html>
           lastCss = css;
           document.getElementById('marp-theme').textContent = css;
           content.innerHTML = html;
+          updateSlideMermaid();
           slides = collectSlides();
           zoom = 1;
           zoomOriginX = 50;

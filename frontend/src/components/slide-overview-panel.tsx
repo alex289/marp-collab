@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { LayoutGrid } from "lucide-react";
 import { SidebarGroup, SidebarGroupContent, SidebarGroupLabel } from "@/components/ui/sidebar";
 import { renderMarp } from "@/lib/marp";
+import { slideMermaidFrameScript } from "@/lib/slide-mermaid-frame";
 import { useSlideTailwindReady } from "@/hooks/use-slide-tailwind-ready";
 import { countMarpSlides } from "@/lib/slide-count";
 import { useTheme } from "./theme-provider";
@@ -38,6 +39,7 @@ const staticSrcDoc = `<!doctype html>
     <script>
       ${marpitSvgPolyfillScript}
     </script>
+    <script>${slideMermaidFrameScript}</script>
     <script>
       var port = null;
       var canReorder = false;
@@ -63,6 +65,7 @@ const staticSrcDoc = `<!doctype html>
       function build(html) {
         var stage = document.getElementById('stage');
         stage.innerHTML = html;
+        updateSlideMermaid();
 
         var grid = stage.querySelector('div.marpit') || stage;
         grid.classList.add('thumb-grid');

@@ -24,6 +24,7 @@
 		"better-sqlite3": "^13.0.3",
 		"hono": "^4.13.17",
 		"isomorphic-git": "^1.40.5",
+		"mermaid": "^12.3.0",
 		"node-diff3": "^3.2.1",
 		"pino": "^10.4.0",
 		"pino-pretty": "^13.2.0",

@@ -1,6 +1,7 @@
 import { readProjectFile } from "../projects/storage.ts";
 import { MARP_SCRIPT_CSP_SOURCE, type RenderedPdfInput } from "../collab/marp-render.ts";
 import { getMimeType } from "./file-allowlist.ts";
+import { getMermaidRenderer } from "./mermaid-assets.ts";
 
 const GOTENBERG_URL = process.env.GOTENBERG_URL ?? "http://gotenberg:3000";
 
@@ -28,21 +29,29 @@ function buildStages(rendered: RenderedPdfInput): string {
  * on the uploaded files, with two fixed exceptions: the font CDNs used by Marp's
  * built-in themes (Gaia's Lato) and KaTeX math.
  */
-export const PDF_CONTENT_SECURITY_POLICY = [
-	"default-src 'none'",
-	`script-src ${MARP_SCRIPT_CSP_SOURCE}`,
-	"style-src 'unsafe-inline' https://fonts.bunny.net",
-	"font-src file: data: https://fonts.bunny.net https://cdn.jsdelivr.net",
-	"img-src file: data:",
-	"media-src file: data:",
-].join("; ");
+function pdfContentSecurityPolicy(mermaidHash?: string): string {
+	const scripts = [MARP_SCRIPT_CSP_SOURCE, mermaidHash ? `'sha256-${mermaidHash}'` : undefined];
+	return [
+		"default-src 'none'",
+		`script-src ${scripts.filter(Boolean).join(" ")}`,
+		"style-src 'unsafe-inline' https://fonts.bunny.net",
+		"font-src file: data: https://fonts.bunny.net https://cdn.jsdelivr.net",
+		"img-src file: data:",
+		"media-src file: data:",
+	].join("; ");
+}
 
-function buildIndexHtml(rendered: RenderedPdfInput): string {
+export const PDF_CONTENT_SECURITY_POLICY = pdfContentSecurityPolicy();
+
+async function buildIndexHtml(rendered: RenderedPdfInput): Promise<string> {
+	const mermaid = rendered.hasMermaid ? await getMermaidRenderer() : undefined;
+	const policy = mermaid ? pdfContentSecurityPolicy(mermaid.hash) : PDF_CONTENT_SECURITY_POLICY;
 	return `<!doctype html>
 <html>
 <head>
 <meta charset="UTF-8" />
-<meta http-equiv="Content-Security-Policy" content="${PDF_CONTENT_SECURITY_POLICY}" />
+<meta http-equiv="Content-Security-Policy" content="${policy}" />
+${mermaid ? `<script>${mermaid.script}</script>` : ""}
 <style>${rendered.css}</style>
 </head>
 <body>${rendered.html}</body>
@@ -59,7 +68,11 @@ export async function renderPdfViaGotenberg(
 	rendered: RenderedPdfInput,
 ): Promise<Response> {
 	const form = new FormData();
-	form.append("files", new Blob([buildIndexHtml(rendered)], { type: "text/html" }), "index.html");
+	form.append(
+		"files",
+		new Blob([await buildIndexHtml(rendered)], { type: "text/html" }),
+		"index.html",
+	);
 
 	for (const [fileId, flatName] of rendered.assets) {
 		try {
@@ -78,6 +91,9 @@ export async function renderPdfViaGotenberg(
 	form.append("preferCssPageSize", "true");
 	form.append("emulatedMediaType", "print");
 	form.append("waitDelay", "2s");
+	if (rendered.hasMermaid) {
+		form.append("waitForExpression", "window.__marpMermaidReady === true");
+	}
 	form.append("nativeBookmarks", "true");
 	form.append("stages", buildStages(rendered));
 

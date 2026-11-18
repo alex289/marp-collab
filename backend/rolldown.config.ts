@@ -1,5 +1,6 @@
 import { cp, mkdir } from "node:fs/promises";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { defineConfig, type Plugin } from "rolldown";
 
 function copyNativeAddonsPlugin(): Plugin {
@@ -43,6 +44,27 @@ function copyTailwindThemePlugin(): Plugin {
 	};
 }
 
+function copyMermaidAssetsPlugin(): Plugin {
+	return {
+		name: "copy-mermaid-assets",
+		writeBundle: async () => {
+			const targetDir = join(import.meta.dirname, "../dist/assets/mermaid");
+			await mkdir(targetDir, { recursive: true });
+			await Promise.all([
+				cp(
+					join(import.meta.dirname, "../shared/slide-mermaid-dom.js"),
+					join(targetDir, "slide-mermaid-dom.js"),
+				),
+				cp(
+					fileURLToPath(import.meta.resolve("mermaid/dist/mermaid.min.js")),
+					join(targetDir, "mermaid.min.js"),
+				),
+				cp(fileURLToPath(import.meta.resolve("mermaid/LICENSE")), join(targetDir, "LICENSE")),
+			]);
+		},
+	};
+}
+
 export default defineConfig({
 	// Git tasks run in their own process; see src/projects/git-process.ts.
 	input: { app: "src/app.ts", "git-worker": "src/projects/git-worker.ts" },
@@ -53,7 +75,12 @@ export default defineConfig({
 			__dirname: "import.meta.dirname",
 		},
 	},
-	plugins: [copyNativeAddonsPlugin(), copyTemplateAssetsPlugin(), copyTailwindThemePlugin()],
+	plugins: [
+		copyNativeAddonsPlugin(),
+		copyTemplateAssetsPlugin(),
+		copyTailwindThemePlugin(),
+		copyMermaidAssetsPlugin(),
+	],
 	output: {
 		dir: "../dist/bin",
 		format: "esm",

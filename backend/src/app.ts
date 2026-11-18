@@ -18,6 +18,8 @@ import { collabServer } from "./collab/hocuspocus.ts";
 import { apiAuthMiddleware } from "./middleware/api-auth-middleware.ts";
 import { mcpRouter } from "./mcp/routes.ts";
 import { cors } from "hono/cors";
+import { MERMAID_RENDERER_PATH } from "../../shared/slide-mermaid.ts";
+import { getMermaidRenderer } from "./helpers/mermaid-assets.ts";
 
 const app = new Hono<{ Variables: HonoVariables }>();
 
@@ -63,6 +65,20 @@ app.route("/", mcpRouter);
 
 app.on(["GET", "POST"], "/api/v1/auth/*", (c) => {
 	return auth.handler(c.req.raw);
+});
+
+// The renderer contains only bundled code and is loaded by opaque-origin frames.
+app.get(MERMAID_RENDERER_PATH, async (c) => {
+	const { script, hash } = await getMermaidRenderer();
+	const etag = `"${hash}"`;
+	c.header("Content-Type", "text/javascript; charset=utf-8");
+	c.header("Cross-Origin-Resource-Policy", "cross-origin");
+	c.header("Cache-Control", "public, no-cache");
+	c.header("ETag", etag);
+	if (c.req.header("If-None-Match") === etag) {
+		return c.body(null, 304);
+	}
+	return c.body(script);
 });
 
 app.use("/api/*", apiAuthMiddleware);

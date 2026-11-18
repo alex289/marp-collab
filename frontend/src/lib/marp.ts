@@ -1,6 +1,11 @@
 import { Marp } from "@marp-team/marp-core";
 import { API_URL } from "./config";
 import { TAILWIND_DIRECTIVE, type SlideTailwind } from "../../../shared/slide-tailwind.ts";
+import {
+	hasMermaidDiagrams,
+	mermaidFences,
+	MERMAID_SLIDE_CSS,
+} from "../../../shared/slide-mermaid.ts";
 import type { TailwindCatalog } from "@/features/editor/completions";
 
 let currentProjectId = "";
@@ -60,6 +65,7 @@ const marp = new Marp({
 	},
 });
 
+marp.use(mermaidFences);
 marp.use((md) => {
 	// Plugin to rewrite markdown ![]() image URLs to point to the backend API
 	md.inline.ruler2.after(
@@ -152,6 +158,9 @@ export const renderMarp = (
 	currentMarkdownDir = lastSlash > -1 ? selectedFileId!.slice(0, lastSlash + 1) : "";
 	tailwindEnabled = false;
 	const rendered = marp.render(markdown);
+	if (hasMermaidDiagrams(rendered.html)) {
+		rendered.css += MERMAID_SLIDE_CSS;
+	}
 	if (!tailwindEnabled) {
 		return rendered;
 	}

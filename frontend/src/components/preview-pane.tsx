@@ -3,6 +3,7 @@ import { Check, Copy, MinusIcon, PlusIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { renderMarp } from "@/lib/marp";
+import { slideMermaidFrameScript } from "@/lib/slide-mermaid-frame";
 import { useSlideTailwindReady } from "@/hooks/use-slide-tailwind-ready";
 import { useTheme } from "./theme-provider";
 import marpitSvgPolyfillScript from "@marp-team/marpit-svg-polyfill/lib/polyfill.browser.js?raw";
@@ -36,6 +37,7 @@ const staticSrcDoc = `<!doctype html>
     <script>
       ${marpitSvgPolyfillScript}
     </script>
+    <script>${slideMermaidFrameScript}</script>
     <script>
       var zoom = 1;
       var MIN_ZOOM = 0.5;
@@ -161,6 +163,7 @@ const staticSrcDoc = `<!doctype html>
         lastCss = e.data.css;
         document.getElementById('marp-styles').textContent = e.data.css;
         document.body.innerHTML = e.data.html;
+        updateSlideMermaid();
         if (e.data.scrollToTop) {
           window.scrollTo(0, 0);
           zoom = 1;

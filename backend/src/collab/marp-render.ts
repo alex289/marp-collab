@@ -1,5 +1,10 @@
 import { expandMarkdownIncludes } from "../../../shared/markdown-include.ts";
 import { TAILWIND_DIRECTIVE } from "../../../shared/slide-tailwind.ts";
+import {
+	hasMermaidDiagrams,
+	mermaidFences,
+	MERMAID_SLIDE_CSS,
+} from "../../../shared/slide-mermaid.ts";
 import { Marp } from "@marp-team/marp-core";
 import { createHash } from "node:crypto";
 import { posix } from "node:path";
@@ -112,6 +117,7 @@ function prepareThemeCss(css: string, fallbackName: string): { css: string; name
 export type RenderedPdfInput = {
 	html: string;
 	css: string;
+	hasMermaid: boolean;
 	assets: Map<string, string>;
 	title: string;
 	author: string | undefined;
@@ -178,6 +184,7 @@ export async function renderMarkdownForPdf(
 		inlineSVG: true,
 		printable: true,
 	});
+	marp.use(mermaidFences);
 
 	// Rewrite markdown image urls
 	marp.use((md) => {
@@ -231,7 +238,8 @@ export async function renderMarkdownForPdf(
 	};
 
 	const { html, css: themeCss } = marp.render(markdown);
-	let css = themeCss;
+	const hasMermaid = hasMermaidDiagrams(html);
+	let css = hasMermaid ? themeCss + MERMAID_SLIDE_CSS : themeCss;
 	if (tailwindEnabled) {
 		// Arbitrary values such as bg-[url(...)] resolve project assets like theme CSS.
 		// Remote URLs hidden in other syntax are blocked by the PDF's CSP (gotenberg.ts).
@@ -245,5 +253,5 @@ export async function renderMarkdownForPdf(
 		?.split(",")
 		.map((keyword) => keyword.trim())
 		.filter(Boolean);
-	return { html, css, assets, title, author, description, keywords };
+	return { html, css, hasMermaid, assets, title, author, description, keywords };
 }

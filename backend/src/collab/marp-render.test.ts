@@ -70,6 +70,26 @@ section { background-image: url("../assets/local.png"); }
 		ok(rendered?.html.includes("Live included"));
 	});
 
+	test("keeps included Mermaid fences inert for Chromium and leaves ordinary fences alone", async () => {
+		const rendered = await renderMarkdownForPdf("pdf-mermaid", "deck.md", (name) =>
+			Promise.resolve(
+				name.endsWith("/deck.md")
+					? "# Main\n\n<!-- @include: charts.md -->\n\n```js\nlet x = 1\n```"
+					: '~~~mermaid\nflowchart LR\nA["</template> & B"] --> C\n~~~',
+			),
+		);
+		ok(rendered?.hasMermaid);
+		ok(rendered.css.includes(".marp-mermaid"));
+		ok(rendered.html.includes('<template>flowchart LR\nA["&lt;/template> &amp; B"]'));
+		ok(rendered.html.includes("<pre"));
+		ok(!rendered.html.includes('<template>flowchart LR\nA["</template>'));
+
+		const ordinary = await renderMarkdownForPdf("pdf-mermaid", "deck.md", () =>
+			Promise.resolve("````markdown\n```mermaid\nflowchart LR\nA --> B\n```\n````"),
+		);
+		equal(ordinary?.hasMermaid, false);
+	});
+
 	test("preserves included slides after a YAML end marker", async () => {
 		const rendered = await renderMarkdownForPdf("pdf-yaml", "deck.md", (name) =>
 			Promise.resolve(
