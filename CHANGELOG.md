@@ -1,5 +1,11 @@
 # marp-collab
 
+## 0.6.0
+
+### Minor Changes
+
+- [#106](https://github.com/alex289/marp-collab/pull/106) [`a3b32fe`](https://github.com/alex289/marp-collab/commit/a3b32fe1dd3b76436ca53c3b1e22a4c7b92aa08f) Thanks [@alex289](https://github.com/alex289)! - Share a browser tab or app window directly to the fullscreen audience view during live demos. Use L to return to the slides from the presenter, audience, or floating controls, and F to toggle fullscreen from the presenter.
+
 ## 0.5.0
 
 ### Minor Changes
