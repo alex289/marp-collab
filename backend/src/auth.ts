@@ -33,6 +33,7 @@ export const auth = betterAuth({
 	},
 	verification: {
 		storeIdentifier: "hashed",
+		storeInDatabase: true,
 	},
 	emailAndPassword: {
 		enabled: false,
