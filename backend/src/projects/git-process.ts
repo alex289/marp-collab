@@ -42,7 +42,6 @@ export class ProjectGitProcessError extends Error {
 	}
 }
 
-/** How much of the process's error output to keep for the log. */
 const STDERR_TAIL_BYTES = 4096;
 
 function processError(reason: string | undefined, signal: NodeJS.Signals | null) {

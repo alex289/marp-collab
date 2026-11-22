@@ -21,17 +21,12 @@ import { cors } from "hono/cors";
 
 const app = new Hono<{ Variables: HonoVariables }>();
 
-app.use(timeout(30 * 1000)); // 30 seconds
+app.use(timeout(30 * 1000));
 app.use(trimTrailingSlash());
-// crossOriginResourcePolicy is set below instead of here: secureHeaders() writes its
-// headers after next() resolves, so it always runs last and would clobber any
-// per-route override (e.g. the asset-serving route needing "cross-origin").
+// secureHeaders writes after the route handler. Set the CORP default earlier so the asset route can override it.
 app.use(secureHeaders({ crossOriginResourcePolicy: false }));
 app.use((c, next) => {
-	// Prevent search engines from indexing any page
 	c.header("X-Robots-Tag", "noindex, nofollow, noarchive");
-	// Default CORP; set before next() so routes further down the stack (like the
-	// asset-serving route used by sandboxed iframes) can still override it.
 	c.header("Cross-Origin-Resource-Policy", "same-origin");
 	return next();
 });
@@ -48,7 +43,7 @@ app.use(
 app.use(compress());
 
 app.use("/mcp", bodyLimit({ maxSize: 4 * 1024 * 1024 }));
-// MCP uses OAuth access tokens. Browser clients need access to authentication headers.
+// Browser MCP clients need to read OAuth challenge and DPoP nonce headers.
 app.use(
 	"/mcp",
 	cors({
@@ -57,7 +52,6 @@ app.use(
 		allowMethods: ["POST", "OPTIONS"],
 	}),
 );
-// OAuth discovery metadata is public.
 app.use("/.well-known/*", cors({ origin: "*" }));
 app.route("/", mcpRouter);
 
@@ -74,12 +68,9 @@ app.use("/api/*", async (c) => {
 	return c.json({ error: "Not Found" }, 404);
 });
 
-// Production: serve static frontend files
 if (!isDev()) {
-	// Redirect /index.html to clean URL
 	app.get("/index.html", (c) => c.redirect("/", 301));
 
-	// Serve static files from ./frontend
 	app.use(
 		"*",
 		serveStatic({
@@ -88,40 +79,34 @@ if (!isDev()) {
 			onFound: (_path, c) => {
 				const hasExtension = extname(c.req.path) !== "";
 
-				// Dot not cache non hashed service worker files
 				const isServiceWorkerFile = c.req.path === "/sw.js" || c.req.path === "/registerSW.js";
 
 				if (hasExtension && !isServiceWorkerFile) {
 					c.header("Cache-Control", `private, immutable, max-age=86400`);
 				} else {
-					// Extensionless requests resolve to index.html (SPA routes, "/").
-					// It must always be revalidated so it never points at stale
-					// (deleted) hashed asset filenames from a previous deploy.
+					// Revalidate the app shell and service workers so they pick up each deployment's hashed assets.
 					c.header("Cache-Control", "no-cache");
 				}
 			},
 		}),
 	);
 
-	// SPA fallback: serve index.html for all unmatched routes
+	// Client-side routes need the app shell when no static file matches.
 	app.get("*", serveStatic({ root: "./frontend", path: "index.html", precompressed: true }));
 }
 
 app.onError((err, c) => {
-	// Handle known HTTP exceptions
 	if (err instanceof HTTPException) {
 		return c.json({ error: err.message }, err.status);
 	}
 
 	logger.error(err);
 
-	// Do not expose internal error details
 	return c.json({ error: "Internal Server Error" }, 500);
 });
 
 const wss = new WebSocketServer({ noServer: true });
-// A WebSocketServer that emits "error" with no listener throws synchronously
-// (EventEmitter default behavior) — make sure it's always logged.
+// An unhandled WebSocket server error would throw synchronously.
 wss.on("error", (err) => {
 	logger.error(err, "WebSocket server error");
 });

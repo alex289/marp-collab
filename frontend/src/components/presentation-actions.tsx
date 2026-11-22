@@ -55,8 +55,6 @@ export const PresentationActions = ({
 				throw new Error(`Could not export PDF (${response.status})`);
 			}
 
-			// Sadly there is still no way to download a file in a good way
-			// across browsers while tracking the download progress.
 			const blob = await response.blob();
 			const url = URL.createObjectURL(blob);
 

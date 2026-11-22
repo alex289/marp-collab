@@ -100,7 +100,6 @@ async function hasGitDirectory(dir: string): Promise<boolean> {
 	}
 }
 
-/** A cheap check for whether the project has a repository, without reading its settings. */
 export function isProjectGitConfigured(projectId: string): Promise<boolean> {
 	return hasGitDirectory(repositoryDirectory(projectId));
 }
@@ -179,7 +178,6 @@ async function resolveCredentials(
 	};
 }
 
-/** Checks that the remote accepts the credentials, without changing any settings. */
 export async function verifyProjectGitRemote({
 	projectId,
 	remoteUrl,
@@ -237,10 +235,7 @@ export async function configureProjectGit(settings: ProjectGitSettings): Promise
 	return saveProjectGitConfig(settings);
 }
 
-/**
- * Completes a rollback that was interrupted, before anything new is committed: the repository's
- * working tree may be missing files, which a commit would record as deleted.
- */
+/** Finish a pending rollback before committing an incomplete working tree. */
 async function finishRollback(dir: string, branch: string): Promise<void> {
 	const marker = join(dir, ".git", RESET_FILE);
 	const commit = await readFile(marker, "utf8").catch(() => null);
@@ -259,7 +254,6 @@ export async function pullProjectFromGit({
 	projectId: string;
 	author: GitAuthor;
 	resolutions?: Record<string, ProjectGitResolution>;
-	/** Used when the project has changes to commit before merging. */
 	message?: string;
 }): Promise<{ commit: string; pulled: boolean; overlapping: string[] }> {
 	const { dir, remoteUrl, branch, credentials, folder } = await getConfiguredProject(projectId);
@@ -274,9 +268,8 @@ export async function pullProjectFromGit({
 		author,
 		message,
 	});
-	// Until the pulled files are in the project, the repository is ahead of it, and committing the
-	// project would push a revert. So whatever stops the pull, even a server restart, the next sync
-	// rolls the repository back first.
+	// Until the project files are updated, committing them would revert the pull.
+	// Persist the rollback target so the next sync can recover after a restart.
 	const marker = join(dir, ".git", RESET_FILE);
 	await writeFile(marker, commit);
 	const rollBack = async () => {
@@ -334,7 +327,6 @@ export async function pushProjectToGit({
 }: {
 	projectId: string;
 	author: GitAuthor;
-	/** Used when the project has changes to commit. */
 	message?: string;
 }): Promise<{ commit: string; committed: boolean; pushed: boolean }> {
 	const { dir, remoteUrl, branch, credentials, folder } = await getConfiguredProject(projectId);

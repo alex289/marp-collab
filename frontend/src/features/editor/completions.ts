@@ -662,11 +662,7 @@ function tailwindOptions(catalog: TailwindCatalog): TailwindOptions {
 	return options;
 }
 
-/**
- * Completes one class name: project theme classes always, plus Tailwind utilities
- * and variants when the deck enables Tailwind. Negative utilities (`-mt-4`) are only
- * offered once a leading `-` is typed, which roughly halves the list.
- */
+/** Offer negative Tailwind utilities only after the user types a leading minus. */
 function classCompletion(
 	context: CompletionContext,
 	config: EditorCompletionConfig,

@@ -3,7 +3,6 @@ import type * as Y from "yjs";
 const frontmatterRegex = /^---\r?\n([\s\S]*?)\r?\n---/;
 const themeLineRegex = /^theme:\s*(.+?)\s*$/m;
 
-/** Reads the `theme:` directive from a Marp markdown frontmatter, if present. */
 export function getMarkdownTheme(markdown: string): string | null {
 	const frontmatter = frontmatterRegex.exec(markdown);
 	if (!frontmatter) {
@@ -13,10 +12,7 @@ export function getMarkdownTheme(markdown: string): string | null {
 	return line ? line[1] : null;
 }
 
-/**
- * Sets (or replaces) the `theme:` directive inside the collaborative document.
- * Edits only the frontmatter block so concurrent body edits stay intact.
- */
+/** Edit only the front matter so concurrent slide edits stay intact. */
 export function applyThemeToYText(yText: Y.Text, theme: string): void {
 	// oxlint-disable-next-line no-base-to-string
 	const text = yText.toString();

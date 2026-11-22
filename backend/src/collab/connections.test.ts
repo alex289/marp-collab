@@ -94,7 +94,6 @@ describe("collab connection registry", () => {
 			userId: "rc-user",
 			connection: connection.connection,
 		});
-		// Second registration for same socket and same project increments ref count
 		registerProjectConnection({
 			socketId: "rc-socket-1",
 			documentName: "project/rc-proj/notes.md",
@@ -102,7 +101,6 @@ describe("collab connection registry", () => {
 			connection: connection.connection,
 		});
 
-		// First unregister: ref count drops to 1, socket stays
 		unregisterProjectConnection("rc-socket-1", "project/rc-proj/presentation.md");
 		equal(closeProjectCollaboratorConnections("rc-proj", "rc-user"), 1);
 		equal(connection.closeCalls, 1);
@@ -120,7 +118,6 @@ describe("collab connection registry", () => {
 
 		unregisterProjectConnection("rc-socket-2");
 
-		// Socket is gone, so close finds nothing
 		equal(closeProjectCollaboratorConnections("rc-proj-2", "rc-user-2"), 0);
 		equal(connection.closeCalls, 0);
 	});
@@ -135,13 +132,11 @@ describe("collab connection registry", () => {
 			connection: connection.connection,
 		});
 
-		// Nothing was registered, so close finds nothing
 		equal(closeProjectCollaboratorConnections("invalid-name", "rc-user-3"), 0);
 		equal(connection.closeCalls, 0);
 	});
 
 	test("unregisterProjectConnection is a no-op for an unknown socket id", () => {
-		// Should not throw
 		unregisterProjectConnection("nonexistent-socket", "project/any-proj/file.md");
 		unregisterProjectConnection("nonexistent-socket");
 	});

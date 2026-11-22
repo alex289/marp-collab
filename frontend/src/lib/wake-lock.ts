@@ -22,7 +22,7 @@ async function acquire() {
 			}
 		});
 	} catch {
-		// Wake lock not supported, denied, or the page wasn't visible.
+		// Wake locks can be denied or unavailable, including while the tab is hidden.
 	}
 }
 
@@ -44,7 +44,6 @@ export async function requestWakeLock(): Promise<void> {
 	await acquire();
 }
 
-/** Releases a previously requested screen wake lock. */
 export async function releaseWakeLock(): Promise<void> {
 	active = false;
 	document.removeEventListener("visibilitychange", handleVisibilityChange);

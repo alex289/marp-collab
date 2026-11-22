@@ -79,7 +79,6 @@ async function assertWithinLimits(
 	}
 }
 
-/** Remove folders emptied by deleting `path`, but keep empty folders users created. */
 async function removeEmptiedParents(root: string, path: string): Promise<void> {
 	for (let parent = dirname(path); parent !== "."; parent = dirname(parent)) {
 		try {
@@ -93,7 +92,7 @@ async function removeEmptiedParents(root: string, path: string): Promise<void> {
 	}
 }
 
-/** Remove `path` if it is a file; a folder of the same name is the user's to keep. */
+/** Preserve a directory at this path when cleaning up an old file. */
 async function removeFile(path: string): Promise<void> {
 	const stats = await lstat(path).catch(() => null);
 	if (stats?.isFile()) {
@@ -101,7 +100,6 @@ async function removeFile(path: string): Promise<void> {
 	}
 }
 
-/** Whether removing the files in `removed` empties the folder at `path`, so it is pruned. */
 async function emptiedBy(root: string, path: string, removed: Set<string>): Promise<boolean> {
 	const entries = await readdir(join(root, path), { recursive: true, withFileTypes: true });
 	const paths = (isDirectory: boolean) =>
@@ -116,7 +114,6 @@ async function emptiedBy(root: string, path: string, removed: Set<string>): Prom
 	);
 }
 
-/** Fails before anything changes if a file or folder that stays is where a copied file goes. */
 async function assertNothingInTheWay(
 	destination: string,
 	files: Iterable<string>,
@@ -142,9 +139,8 @@ async function assertNothingInTheWay(
 }
 
 /**
- * Replace only supported files, retaining unrelated repository contents. Pass `intoProject` when
- * the destination is the project, so pulled documents stay within what collaboration can load and
- * a removed file's collaboration state goes with it.
+ * Copy supported files and retain unrelated files. For pulls into the project, enforce the
+ * collaboration size limits and remove saved collaboration state for deleted documents.
  */
 export async function syncSupportedFiles(
 	source: string,

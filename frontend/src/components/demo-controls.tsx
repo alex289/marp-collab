@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { formatElapsed } from "@/components/presentation-timer";
 
 type DemoControlsProps = {
-	/** Body of the Picture-in-Picture window the controls are rendered into. */
 	container: HTMLElement;
 	title: string | null;
 	speakerNotes: readonly string[];
@@ -16,10 +15,6 @@ type DemoControlsProps = {
 	onToggleFullscreen?: () => void;
 };
 
-/**
- * Floating presenter controls shown on top of other apps while a live demo
- * runs, so the presenter keeps their notes and can jump back into the deck.
- */
 export function DemoControls({
 	container,
 	title,
@@ -52,8 +47,7 @@ export function DemoControls({
 	);
 
 	useEffect(() => {
-		// Tick on the Picture-in-Picture window: it stays visible during the
-		// demo, while the hidden opener's timers get throttled.
+		// The opener can be hidden during a demo, which throttles its timers.
 		const timerWindow = container.ownerDocument.defaultView ?? window;
 		const interval = timerWindow.setInterval(() => setNow(Date.now()), 1000);
 

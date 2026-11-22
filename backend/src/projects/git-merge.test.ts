@@ -234,7 +234,6 @@ describe("project Git merge", () => {
 				author,
 				resolutions: { "images/image.png": resolution },
 			});
-			// Nothing is written until the result is checked out.
 			await rejects(readFile(join(dir, "new.md")), { code: "ENOENT" });
 
 			const oid = await git.resolveRef({ fs, dir, ref: "refs/heads/main" });

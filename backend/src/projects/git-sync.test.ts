@@ -271,7 +271,6 @@ describe("project Git sync", () => {
 			equal(run(remote, "rev-list", "--count", "slides"), commits);
 		});
 
-		/** Configures a project on the remote and pulls it once. */
 		async function pulledProject(t: { mock: typeof mock }, projectId: string) {
 			mockRemote(t);
 			const dir = await storage.getProjectDirectory(projectId);
@@ -286,10 +285,7 @@ describe("project Git sync", () => {
 			return { dir, repository };
 		}
 
-		/**
-		 * Pulls a remote commit that adds `names` in a `junk` folder, all one blob, so the pack is a
-		 * few kilobytes, and expects the pull to fail without checking anything out.
-		 */
+		/** Repeat one object across many paths so the checkout is large even when the pack is small. */
 		async function pullJunk(
 			t: { mock: typeof mock },
 			projectId: string,
@@ -336,7 +332,6 @@ describe("project Git sync", () => {
 
 		const names = (count: number) => Array.from({ length: count }, (_, index) => `f${index}.bin`);
 
-		/** Lowers the tree limits for one test, so it needs few files. */
 		function limitTree(
 			t: { after: (fn: () => void) => void },
 			limits: Partial<typeof GIT_TREE_LIMITS>,

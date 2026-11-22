@@ -1,7 +1,6 @@
 import { writeFile } from "node:fs/promises";
 import { handleGitTask, serializeGitError, type GitTask, type GitTaskReply } from "./git-tasks.ts";
 
-/** Entry point of the process git-process.ts starts for each Git task. */
 process.once("message", async (task: GitTask) => {
 	let reply: GitTaskReply;
 	try {

@@ -1,19 +1,12 @@
 import { scanDeck, splitSourceLines, type DeckDivider } from "./slide-count.ts";
 
-/**
- * A deck decomposed into the pieces that can be reordered independently.
- *
- * `content === blocks[0] + separators[0] + blocks[1] + separators[1] + ...`,
- * so `separators.length === blocks.length - 1`. Separators stay in their
- * positional slot when blocks move, which keeps each divider's original
- * spelling (`---` vs `-----`) where the author put it.
- */
+/** Each pair of adjacent slide bodies shares a divider that stays in place during reorders. */
 export type DeckBlocks = {
 	/** YAML front matter, leading deck-wide directives, and their surrounding whitespace. */
 	frontMatter: string;
 	/** Slide bodies in document order. Always holds at least one entry. */
 	blocks: string[];
-	/** Divider lines plus the blank lines under them. */
+	/** Includes the blank lines below each divider so reordering preserves spacing. */
 	separators: string[];
 };
 
@@ -41,11 +34,6 @@ export type TextSplice = {
 	insert: string;
 };
 
-/**
- * The blank lines under a divider are that divider's breathing room, not the
- * next slide's content. Attaching them to the separator keeps the spacing in
- * place when the blocks around it are reordered.
- */
 function skipBlankLines(markdown: string, offset: number): number {
 	const blankLines = /(?:[ \t]*(?:\r\n|\n|\r))*/y;
 	blankLines.lastIndex = offset;
@@ -67,8 +55,7 @@ function splitBlocks(markdown: string, contentOffset: number, dividers: DeckDivi
 	const separators: string[] = [];
 	let start = skipBlankLines(markdown, contentOffset);
 
-	// Leading deck-wide settings may include defaults for the whole deck.
-	// A comment with a spot directive belongs to its slide.
+	// A spot directive applies to its own slide, so leave its comment with the slide.
 	while (start < (dividers[0]?.start ?? markdown.length)) {
 		leadingComment.lastIndex = start;
 		const match = leadingComment.exec(markdown);
@@ -101,16 +88,14 @@ function splitBlocks(markdown: string, contentOffset: number, dividers: DeckDivi
 	return { frontMatter: markdown.slice(0, start), blocks, separators };
 }
 
-/** Splits a deck into its front matter, slide bodies and dividers. */
 export function splitDeckIntoBlocks(markdown: string): DeckBlocks {
 	const { contentOffset, dividers } = scanDeck(markdown);
 	return splitBlocks(markdown, contentOffset, dividers);
 }
 
 /**
- * Uses the rendered slide boundaries so fenced code, Setext headings and
- * comments cannot be mistaken for dividers. Implicit heading breaks have no
- * separator to edit and are left to the source editor.
+ * Use Marp's rendered boundaries to skip apparent dividers in code, headings or comments.
+ * The overview cannot edit implicit heading breaks because there is no divider to move.
  */
 export function getEditableSlideDeck(
 	markdown: string,
@@ -133,7 +118,6 @@ export function getEditableSlideDeck(
 	return splitBlocks(markdown, contentOffset, dividers);
 }
 
-/** Returns the editor line to jump to for each rendered thumbnail. */
 export function getSlideNavigationLines(markdown: string, source: SlideSource): number[] {
 	const lines = splitSourceLines(markdown);
 	return source.startLines.map((line, index) =>
@@ -146,12 +130,7 @@ export function getSlideNavigationLines(markdown: string, source: SlideSource): 
 	);
 }
 
-/**
- * A `---` directly below a non-empty line is a setext H2 underline, not a
- * thematic break, so a block that loses its trailing blank line would silently
- * swallow the following slide. Every block that precedes a divider therefore
- * ends with a blank line.
- */
+/** Leave a blank line before a divider so Markdown cannot parse it as a setext underline. */
 function ensureBlankLineEnding(block: string): string {
 	if (block.length === 0 || /(?:\r\n|\n|\r)[ \t]*(?:\r\n|\n|\r)[ \t]*$/.test(block)) {
 		return block;
@@ -162,7 +141,6 @@ function ensureBlankLineEnding(block: string): string {
 	return /(?:\r\n|\n|\r)[ \t]*$/.test(block) ? block + eol : block + eol + eol;
 }
 
-/** Reassembles a deck, restoring the blank line each divider needs. */
 function assembleDeck({ frontMatter, blocks, separators }: DeckBlocks, normalize: boolean) {
 	const eol = sourceEol(frontMatter || separators[0] || blocks[0] || "");
 	// An empty opening slide must not turn its divider into a YAML opener.
@@ -232,8 +210,6 @@ function computeSlideSplices(current: DeckBlocks, next: DeckBlocks, origins: Arr
 	return { markdown: after.markdown, splices };
 }
 
-// Like `presenter:`, a section label is an HTML comment at the top of its
-// first slide that MarpCollab keeps out of the presenter notes.
 const sectionMarker = /^<!--[ \t]*section[ \t]*:[ \t]*([^\r\n]*?)[ \t]*-->[ \t]*(?:\r\n|\n|\r|$)/i;
 
 function readSectionMarker(block: string) {
@@ -263,10 +239,7 @@ export function getSlideSections({ blocks }: DeckBlocks): SlideSection[] {
 	return sections;
 }
 
-/**
- * The slides led by a section comment. The presenter view leaves that comment
- * out of the notes; decks the overview can't split keep it as a note.
- */
+/** The presenter hides these section markers only when the deck can be split reliably. */
 export function getSectionMarkerSlides(markdown: string, source: SlideSource): Set<number> {
 	const deck = getEditableSlideDeck(markdown, source);
 	return new Set(
@@ -438,10 +411,7 @@ export function editSlideDeck(deck: DeckBlocks, action: SlideAction): SlideEdit 
 	}
 }
 
-/**
- * Moves the slide at `from` to position `to`, returning the new Markdown.
- * Returns the input unchanged when the move is a no-op or out of range.
- */
+/** Returns the original Markdown for a no-op or out-of-range move. */
 export function moveSlide(markdown: string, from: number, to: number): string {
 	const deck = splitDeckIntoBlocks(markdown);
 	const count = deck.blocks.length;
@@ -466,14 +436,7 @@ export function moveSlide(markdown: string, from: number, to: number): string {
 
 const isLowSurrogate = (code: number) => code >= 0xdc00 && code <= 0xdfff;
 
-/**
- * Describes `next` as a single splice of `current`, trimming the shared
- * prefix and suffix. Rewriting only the part that actually moved keeps
- * collaborators' cursors and the undo history intact, which a
- * delete-everything-then-reinsert would destroy.
- *
- * Returns `null` when the strings are equal.
- */
+/** Keep the shared prefix and suffix intact so Yjs preserves unaffected cursors and undo history. */
 export function computeMinimalSplice(current: string, next: string): TextSplice | null {
 	if (current === next) {
 		return null;
@@ -493,8 +456,7 @@ export function computeMinimalSplice(current: string, next: string): TextSplice 
 		suffix += 1;
 	}
 
-	// Yjs indexes UTF-16 code units, so a boundary that lands between the two
-	// halves of a surrogate pair would splice a broken character into the doc.
+	// Yjs uses UTF-16 offsets. Keep surrogate pairs intact.
 	if (start > 0 && isLowSurrogate(current.charCodeAt(start))) {
 		start -= 1;
 	}

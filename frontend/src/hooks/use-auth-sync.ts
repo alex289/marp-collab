@@ -4,11 +4,7 @@ import { useRouter } from "@tanstack/react-router";
 
 const CHANNEL_NAME = "marp-collab-auth";
 
-/**
- * Syncs authentication state across browser tabs using BroadcastChannel.
- * When the user logs in or out in one tab, all other open tabs will
- * automatically reflect the new state.
- */
+/** Refresh route data when another tab reports a sign-in or sign-out. */
 export function useAuthSync() {
 	const router = useRouter();
 	const { data: session } = useSession();
@@ -36,7 +32,6 @@ export function useAuthSync() {
 		const hasSession = Boolean(session);
 
 		if (prevSessionRef.current === null) {
-			// First render — just record initial state, don't broadcast
 			prevSessionRef.current = hasSession;
 			return;
 		}

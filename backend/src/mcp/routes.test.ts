@@ -554,7 +554,6 @@ test("rechecks collaborator permissions and excludes writes during Git synchroni
 });
 
 test("pulls from and pushes to the project's Git repository with a commit message", async (t) => {
-	// An unconfigured project fails before syncing would disconnect its editors.
 	const documentName = "project/training/chapters/deck.md";
 	const editor = await collab.openDirectConnection(documentName, { userId: "owner" });
 	try {
@@ -625,7 +624,6 @@ test("pulls from and pushes to the project's Git repository with a commit messag
 	equal(again.structuredContent.committed, false);
 	match(again.structuredContent.note, /message was not used/);
 
-	// A pull commits pending edits with the assistant's message instead of the default.
 	ok(
 		!(
 			await call("create_presentation", {
@@ -656,7 +654,6 @@ test("pulls from and pushes to the project's Git repository with a commit messag
 	const { syncProjectWithGit } = await import("../projects/git-actions.ts");
 	const lock = await import("../projects/git-sync-lock.ts");
 	const gitSync = await import("../projects/git-sync.ts");
-	/** Starts a sync that waits for an earlier write, and changes the project while it waits. */
 	async function syncAfterChange(userId: string, change: () => void | Promise<void>) {
 		const release = lock.beginProjectWrite("training")!;
 		let settled = false;
@@ -675,7 +672,6 @@ test("pulls from and pushes to the project's Git repository with a commit messag
 		release();
 		return sync;
 	}
-	// Changes while the sync waits stop it before it closes open documents or pushes.
 	const head = run(remote, "rev-parse", "main");
 	const openEditor = await collab.openDirectConnection(documentName, { userId: "owner" });
 	const closeConnections = t.mock.method(collab, "closeConnections");

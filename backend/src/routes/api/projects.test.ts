@@ -608,8 +608,7 @@ describe("projects routes", () => {
 
 		const response = await app.request("/import", {
 			method: "POST",
-			// This user has no row in the `user` table, so createProject's ownerId
-			// foreign key fails after the staged directory has already been committed.
+			// A missing owner triggers a foreign-key error after the staged directory has moved.
 			headers: { "x-test-user-id": "user-without-db-row" },
 			body: formData,
 		});

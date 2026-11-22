@@ -400,8 +400,7 @@ function RouteComponent() {
 	const hasChangedDemoRef = useRef(false);
 	const lastDemoUpdateRef = useRef(0);
 	const [isSharingDemo, setIsSharingDemo] = useState(false);
-	// Holds the Picture-in-Picture body rather than its window: React's dev
-	// tooling walks props, and a Window exposes cross-origin frames.
+	// React dev tooling inspects props. Passing the PiP window would expose cross-origin frames.
 	const [demoContainer, setDemoContainer] = useState<HTMLElement | null>(null);
 	const demoWindowRef = useRef<Window | null>(null);
 	const stopDemoShareRef = useRef<(() => void) | null>(null);
@@ -438,8 +437,7 @@ function RouteComponent() {
 	const editorPaneRef = useRef<EditorPaneHandle | null>(null);
 	const presentationContainerRef = useRef<HTMLDivElement | null>(null);
 	const selectedCssFileIdRef = useRef<string | null>(null);
-	// Bumped whenever project themes reload, so a pending CSS edit that resolves
-	// afterwards can't write a theme from the previous file list or project.
+	// Invalidate pending CSS edits each time the project theme list reloads.
 	const themeLoadEpochRef = useRef(0);
 	const suppressNextSlideAwarenessUpdateRef = useRef(false);
 	const lastAppliedPresentationUpdateRef = useRef(0);
@@ -509,10 +507,8 @@ function RouteComponent() {
 	const nudgePreview = useCallback((delta: number) => {
 		const rect = mainRef.current?.getBoundingClientRect();
 		setPreviewWidth((width) => {
-			// The default track is minmax(320px, 42%); resolve it to pixels so
-			// the first keyboard nudge starts from the rendered width.
+			// Resolve the default grid width so the first keyboard nudge starts at the displayed width.
 			const current = width ?? Math.max(PREVIEW_MIN_WIDTH, Math.round((rect?.width ?? 0) * 0.42));
-			// Moving the divider right shrinks the preview pane.
 			return clampPaneWidth(
 				current - delta,
 				PREVIEW_MIN_WIDTH,
@@ -548,13 +544,11 @@ function RouteComponent() {
 	const isViewer = search.mode === "viewer";
 	const autoFullscreen = search.fullscreen === true;
 	const outlineItems = useMemo(() => parseMarkdownOutline(markdown), [markdown]);
-	// Only follow the cursor when the editor is actively editing the file
-	// being previewed — editing a CSS theme shouldn't move the preview scroll.
+	// Editing another file, such as the theme, must not move the preview.
 	const isEditingPreviewFile =
 		isMarkdownDeckFile(selectedFile) && selectedFile.id === previewFile?.id;
 
-	// Rendering (preview, presentation, slide count) works on the markdown with
-	// <!-- @include: file.md --> comments expanded; the editor keeps the raw text.
+	// Render with includes expanded. The editor and its cursor keep the original source.
 	const included = useIncludedMarkdown(markdown, id, previewFile?.id ?? null);
 	const renderedMarkdown = included.markdown;
 	const hasIncludes = hasMarkdownIncludes(markdown);
@@ -596,17 +590,13 @@ function RouteComponent() {
 		setMarkdown("");
 	}
 
-	// The collab state lags one render behind a file switch, so yText can still
-	// hold the previously opened document. Only expose it once the selected
-	// file's own document has synced.
 	const syncedYText =
 		collab.yText && collab.synced && collab.documentName === (selectedFile?.documentName ?? null)
 			? collab.yText
 			: null;
 
 	useEffect(() => {
-		// Until the selected file's document has loaded, keep the previous
-		// markdown so the preview doesn't re-render and lose its scroll position.
+		// Keep rendering the last deck while the new document syncs to preserve preview scroll.
 		if (!selectedFile || selectedFile.id.endsWith(".css") || !syncedYText) {
 			return;
 		}
@@ -619,8 +609,7 @@ function RouteComponent() {
 		let frame: number;
 		const scheduleSync = () => {
 			cancelAnimationFrame(frame);
-			// Yjs observers run inside editor transactions. Publish to React after
-			// the transaction settles so rapid typing cannot nest React updates.
+			// Publish after the Yjs transaction so typing cannot nest React updates.
 			frame = requestAnimationFrame(sync);
 		};
 		sync();
@@ -682,8 +671,7 @@ function RouteComponent() {
 	}, [files, id, assetToken, projectThemeStore, themeFontRequests]);
 
 	useEffect(() => {
-		// Wait for the document to sync so an empty, still-loading text never
-		// replaces the theme loaded from the server.
+		// Unsynced text could replace a loaded theme with empty CSS.
 		if (!selectedFile?.id.toLowerCase().endsWith(".css") || !syncedYText) {
 			return;
 		}
@@ -694,11 +682,8 @@ function RouteComponent() {
 			const epoch = themeLoadEpochRef.current;
 			// oxlint-disable-next-line no-base-to-string
 			const css = rewriteCssUrls(syncedYText.toString(), id, selectedFile.id, assetToken);
-			// Register once with fonts embedded: a theme with plain font URLs would
-			// briefly render with fallback fonts behind an access proxy.
+			// Embed fonts before registering the theme to avoid a flash of fallback fonts.
 			const embeddedCss = await inlineProjectThemeFonts(css, id, themeFontRequests);
-			// A reload re-runs this effect, which re-applies the current text if the
-			// file is still selected.
 			if (applied !== generation || epoch !== themeLoadEpochRef.current) {
 				return;
 			}
@@ -710,7 +695,6 @@ function RouteComponent() {
 		let timer: ReturnType<typeof setTimeout> | undefined;
 		const syncTheme = () => {
 			clearTimeout(timer);
-			// Wait for a typing burst to settle before parsing a partial CSS theme.
 			timer = setTimeout(() => {
 				timer = undefined;
 				void applyTheme();
@@ -975,8 +959,7 @@ function RouteComponent() {
 			return null;
 		}
 
-		// The overview and editor can lag behind a remote transaction. Never
-		// apply an action by index to a document newer than its thumbnails.
+		// Thumbnail indexes can be stale after a remote edit. Verify the source before applying them.
 		// oxlint-disable-next-line no-base-to-string
 		if (source !== yText.toString()) {
 			toast("The deck changed. Try the slide action again.");
@@ -994,8 +977,7 @@ function RouteComponent() {
 				toast.error("Move deck-wide directives to the front matter before making this slide edit.");
 				return null;
 			}
-			// Slides that stay put must look the same, which catches moving or
-			// deleting a slide whose directives later slides inherit.
+			// Check stationary slides for changes in directives inherited from the edited slide.
 			if (
 				edit.origins.some(
 					(origin, index) =>
@@ -1037,7 +1019,6 @@ function RouteComponent() {
 		return next;
 	}
 
-	// Start with local defaults when entering presentation mode, then apply shared state.
 	const [wasPresentation, setWasPresentation] = useState(isPresentation);
 	if (wasPresentation !== isPresentation) {
 		setWasPresentation(isPresentation);
@@ -1220,7 +1201,7 @@ function RouteComponent() {
 
 		demoWindowRef.current = opened;
 		setDemoContainer(opened.document.body);
-		// Closing the floating window ends the demo, like its "Back to presentation" button.
+		// Closing the floating controls ends the live demo.
 		opened.addEventListener(
 			"pagehide",
 			() => {
@@ -1520,8 +1501,7 @@ function RouteComponent() {
 				},
 			},
 			{
-				// PowerPoint-style "black screen": blanks the audience screen
-				// (viewer windows) while the presenter view stays visible.
+				// Blank the audience display and keep the presenter view visible.
 				hotkey: "B",
 				callback: toggleBlanked,
 			},

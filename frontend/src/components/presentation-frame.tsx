@@ -30,20 +30,17 @@ type PresentationFrameProps = {
 	onLaserChange?: (state: LaserState) => void;
 	presenterUsers?: readonly PresenterUser[];
 	showSpeakerNotes?: boolean;
-	/** Audience windows cover the slide with a "live demo" screen while active. */
 	demoActive?: boolean;
-	/** Body of the Picture-in-Picture window that hosts the presenter's demo controls. */
 	demoContainer?: HTMLElement | null;
 	onDemoStart?: () => void;
 	onDemoEnd?: (options: { advance: boolean }) => void;
 	onToggleFullscreen?: () => void;
-	/** Reports whether the active slide has speaker notes, e.g. to size the demo controls. */
+	/** Lets the caller size the demo controls for speaker notes. */
 	onHasSpeakerNotesChange?: (hasSpeakerNotes: boolean) => void;
 	className?: string;
 };
 
-// srcDoc never changes so the iframe never reloads. Slide content is pushed
-// in via postMessage so a markdown edit doesn't flash/reset the frame.
+// Push edits over a MessagePort so updating the deck does not reload the iframe.
 const staticSrcDoc = `<!doctype html>
 <html>
   <head>
@@ -85,21 +82,16 @@ const staticSrcDoc = `<!doctype html>
         var content = document.getElementById('content');
         var slides = [];
         var active = 0;
-        // Last index the parent asked for, kept unclamped: at load time the deck
-        // isn't rendered yet, so clamping against an empty slide list would pin
-        // the frame to slide 0 until the parent next navigates.
+        // Keep the requested slide index until the first render provides slides to clamp it against.
         var desired = 0;
         var zoom = 1;
         var zoomOriginX = 50;
         var zoomOriginY = 50;
         var MIN_ZOOM = 1;
         var MAX_ZOOM = 4;
-        // Set once the parent hands over a MessagePort (see 'init-port' below).
         var port = null;
         var lastHtml = null;
         var lastCss = null;
-        // Thumbnail frames (e.g. the next-slide preview) opt out of zoom, laser
-        // pointer and key forwarding via the 'presentation-config' message.
         var interactive = true;
 
         function collectSlides() {
@@ -125,8 +117,6 @@ const staticSrcDoc = `<!doctype html>
           slide.style.setProperty('transform', 'scale(' + zoom + ')', 'important');
         }
 
-        // Reports the current zoom/origin to the parent so it can be broadcast to
-        // other presentation windows (see the presenter/viewer window split).
         function reportZoom() {
           if (!port) return;
           port.postMessage({
@@ -147,8 +137,7 @@ const staticSrcDoc = `<!doctype html>
         }
 
         function report() {
-          // Before the first render there is nothing meaningful to report, and a
-          // {active: 0, total: 0} would make the parent reset its slide index.
+          // An empty initial report would reset the parent's slide index.
           if (!port || slides.length === 0) {
             return;
           }
@@ -211,11 +200,8 @@ const staticSrcDoc = `<!doctype html>
           if (zoomReset) reportZoom();
         }
 
-        // Re-renders the slide deck in place (on markdown/theme changes) while
-        // keeping the current slide index and resetting zoom, like a fresh load.
         function updateContent(html, css) {
-          // Rebuilding the deck recreates every image element, so skip pushes
-          // that would paint exactly what is already on screen.
+          // Rebuilding the deck recreates its image elements. Skip identical updates.
           if (html === lastHtml && css === lastCss) {
             return;
           }
@@ -264,10 +250,7 @@ const staticSrcDoc = `<!doctype html>
           resetZoom();
         });
 
-        // Keydown/keyup inside the iframe don't bubble to the parent document, so the
-        // presentation hotkeys (slide navigation, escape, etc.) would stop working once
-        // the iframe has focus. Forward raw key events to the parent, which re-dispatches
-        // them on its own document.
+        // Forward keys because events inside the iframe never reach presentation shortcuts.
         function forwardKey(type) {
           return function (e) {
             if (!interactive || !port) {
@@ -290,12 +273,7 @@ const staticSrcDoc = `<!doctype html>
         window.addEventListener('keydown', forwardKey('keydown'));
         window.addEventListener('keyup', forwardKey('keyup'));
 
-        // Laser pointer: while Shift is held, replace the cursor with a glowing
-        // red dot. Position is tracked in local pixels for zero-latency feedback
-        // in this window, and reported to the parent as a percentage of the
-        // active slide's bounds (see reportLaser/sendLaserReport) so other
-        // presentation windows (e.g. the viewer on a second monitor) can render
-        // it correctly regardless of their own size/resolution.
+        // Use local pixels for immediate feedback and slide-relative percentages across windows.
         var laser = document.createElement('div');
         laser.style.cssText = 'position:fixed;left:-8px;top:-8px;width:16px;height:16px;border-radius:50%;background:radial-gradient(circle, #ff6b6b 0%, #f00 45%, rgba(255,0,0,0) 72%);box-shadow:0 0 14px 5px rgba(255,0,0,0.55);pointer-events:none;z-index:2147483647;display:none;';
         document.body.appendChild(laser);
@@ -334,8 +312,7 @@ const staticSrcDoc = `<!doctype html>
           });
         }
 
-        // Throttles reports so continuous mousemove doesn't flood the
-        // awareness/WebSocket channel with a message per pixel.
+        // Throttle mousemove reports to limit WebSocket traffic.
         function reportLaser() {
           var now = Date.now();
           var elapsed = now - lastLaserReportTime;
@@ -443,13 +420,9 @@ type SlideFrameProps = {
 	slideIndex: number;
 	/** Non-interactive frames (thumbnails) skip zoom, laser pointer and key forwarding. */
 	interactive?: boolean;
-	/** Zoom to apply, e.g. mirroring another presentation window's zoom. */
 	zoomState?: ZoomState;
-	/** Called when this frame's own zoom changes (user scroll/dblclick). */
 	onZoomChange?: (state: ZoomState) => void;
-	/** Laser pointer state to apply, e.g. mirroring another presentation window's cursor. */
 	laserState?: LaserState;
-	/** Called when this frame's own laser pointer changes (user holds Shift + moves mouse). */
 	onLaserChange?: (state: LaserState) => void;
 	onMetaChange?: (meta: { active: number; total: number }) => void;
 	className?: string;
@@ -469,8 +442,7 @@ function SlideFrame({
 	className,
 }: SlideFrameProps) {
 	const iframeRef = useRef<HTMLIFrameElement | null>(null);
-	// MessagePort to the iframe, set on load instead of using broadcast
-	// postMessage(..., "*") so a navigated-away frame can't keep receiving messages.
+	// Send updates through a MessagePort tied to the document that received it.
 	const portRef = useRef<MessagePort | null>(null);
 	const [iframeReady, setIframeReady] = useState(false);
 	const slideIndexRef = useRef(slideIndex);
@@ -664,8 +636,7 @@ export function PresentationFrame({
 }: PresentationFrameProps) {
 	const slideTailwindReady = useSlideTailwindReady();
 	const rendered = useMemo(() => {
-		// Project themes are registered on the shared Marp instance; this invalidates stale renders.
-		// Decks using Tailwind render once more after its lazily loaded compiler is ready.
+		// Re-render when project themes change or the lazy Tailwind compiler becomes ready.
 		void themeRevision;
 		void slideTailwindReady;
 		try {
@@ -687,7 +658,6 @@ export function PresentationFrame({
 		assetToken,
 	]);
 
-	// A section comment labels slides in the overview and isn't a note.
 	const sectionMarkerSlides = useMemo(
 		() =>
 			"slideSource" in rendered

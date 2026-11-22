@@ -134,9 +134,7 @@ async function clickSidebarRename(
 }
 
 async function getPreviewImageReference(page: Page) {
-	// The preview iframe is sandboxed without allow-same-origin, so
-	// iframe.contentDocument is inaccessible from the parent frame's JS context.
-	// frameLocator reaches into the frame via Playwright's own protocol instead.
+	// The sandbox gives the iframe an opaque origin, so access its DOM through frameLocator.
 	const previewFrame = page.frameLocator('iframe[title="Marp preview"]');
 	const image = previewFrame.locator("img, image").first();
 	if ((await image.count()) === 0) {
@@ -168,8 +166,7 @@ async function getPreviewSectionBackground(page: Page) {
 }
 
 async function getPreviewSlideMetrics(page: Page) {
-	// Same cross-origin constraint as getPreviewImageReference: measure the
-	// iframe element from the parent and the slide from within via frameLocator.
+	// Measure the outer iframe and its slide separately because the sandbox isolates their DOMs.
 	const iframeBox = await page.locator('iframe[title="Marp preview"]').boundingBox();
 	const previewFrame = page.frameLocator('iframe[title="Marp preview"]');
 	const slideBox = await previewFrame
@@ -601,7 +598,6 @@ test.describe("Editor: content editing", () => {
 		await expect(titles).toHaveText(["Opening", "Research", "New slide", "Results", "Next steps"]);
 
 		await expect(page.getByRole("menu")).toHaveCount(0);
-		// Drag the first thumbnail below the second, then undo the single edit.
 		const jump1 = overview.getByRole("button", { name: "Jump to slide 1" });
 		await jump1.scrollIntoViewIfNeeded();
 		const first = (await jump1.boundingBox())!;
@@ -1340,7 +1336,6 @@ test.describe("Presentation mode", () => {
 		await page.keyboard.press("f");
 		await expect(fullscreenPrompt).toHaveCount(0);
 
-		// The first picker invocation is canceled again after reloading the presenter.
 		await start.click();
 		await expect(start).toBeVisible();
 		await start.click();

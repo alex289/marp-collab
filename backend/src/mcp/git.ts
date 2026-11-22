@@ -6,7 +6,6 @@ import {
 } from "../projects/git-actions.ts";
 import { PresentationToolError } from "./presentations.ts";
 
-/** Adds what the assistant can do next to the messages the app shows. */
 function toolMessage(failure: ProjectGitFailure, action: ProjectGitAction["type"]): string {
 	switch (failure.kind) {
 		case "deleted":

@@ -60,7 +60,6 @@ function isMissingFileError(error: unknown): boolean {
 
 const EXCLUDED_FILE_EXTENSIONS = new Set([".yjs"]);
 
-/** The project's directory, without creating it. */
 export function getProjectDirectoryPath(projectId: string): string {
 	if (!isValidProjectId(projectId)) {
 		throw new Error(`Invalid project id: ${projectId}`);
@@ -450,9 +449,7 @@ export async function moveProjectFile(
 		await rename(`${sourcePath}.yjs`, `${destPath}.yjs`);
 	} catch (error) {
 		if (!isMissingFileError(error)) {
-			// The main file already moved; the .yjs companion is now orphaned at
-			// the old path. Not fatal (content still loads from the .md file),
-			// but silent otherwise.
+			// The .yjs companion is orphaned at the old path. The renamed file can still load as plain text.
 			logger.error({ err: error, sourcePath, destPath }, "Failed to move .yjs companion file");
 		}
 	}

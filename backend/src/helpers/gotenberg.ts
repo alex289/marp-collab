@@ -23,10 +23,8 @@ function buildStages(rendered: RenderedPdfInput): string {
 }
 
 /**
- * Deck HTML and CSS are user-authored, and CSS can reference URLs in ways no rewrite
- * catches reliably (image-set(), escapes, inline <style>). The policy keeps Chromium
- * on the uploaded files, with two fixed exceptions: the font CDNs used by Marp's
- * built-in themes (Gaia's Lato) and KaTeX math.
+ * User-authored CSS can fetch resources even after URL rewriting. Limit PDF rendering to
+ * local assets and the font CDNs used by Marp themes and KaTeX.
  */
 export const PDF_CONTENT_SECURITY_POLICY = [
 	"default-src 'none'",
@@ -49,11 +47,7 @@ function buildIndexHtml(rendered: RenderedPdfInput): string {
 </html>`;
 }
 
-/**
- * Submits the rendered deck and its referenced assets to Gotenberg's Chromium HTML
- * conversion route. Assets are uploaded as flat, locally-named files alongside
- * index.html so Chromium resolves them without any network fetch or authentication.
- */
+/** Gotenberg resolves the deck's assets by their flat filenames alongside index.html. */
 export async function renderPdfViaGotenberg(
 	projectId: string,
 	rendered: RenderedPdfInput,
@@ -69,8 +63,7 @@ export async function renderPdfViaGotenberg(
 			}
 			form.append("files", new Blob([bytes], { type: getMimeType(fileId) }), flatName);
 		} catch {
-			// Skip missing files instead of failing the render
-			// Marp itself is never failing on missing assets
+			// A missing or unreadable asset should not abort the PDF export.
 		}
 	}
 

@@ -16,17 +16,13 @@ type PreviewPaneProps = {
 	themeRevision: number;
 	assetRevision: number;
 	assetToken?: string;
-	// The slide index the editor cursor is currently on, or null when the
-	// editor isn't editing the previewed file. Scrolling to this slide is
-	// purely local UI state — it's never broadcast to other collaborators.
+	// Null when the editor is on another file. This scroll target stays local.
 	followSlideIndex: number | null;
-	// Called with the 0-based slide index when the user double-clicks a slide
-	// in the preview, so the caller can jump the editor to that position.
+	// Receives the zero-based slide index on double-click.
 	onSlideDoubleClick?: (index: number) => void;
 };
 
-// srcDoc never changes so the iframe never reloads.
-// Content is pushed in via postMessage to preserve scroll position.
+// Push content over a MessagePort to preserve scroll position across edits.
 const staticSrcDoc = `<!doctype html>
 <html>
   <head>
@@ -45,8 +41,7 @@ const staticSrcDoc = `<!doctype html>
       function applyZoom() {
         var el = document.querySelector('div.marpit');
         if (el) el.style.transform = 'scale(' + zoom + ')';
-        // marp-update calls this on every content push (each keystroke);
-        // only message the parent when the zoom value actually changed.
+        // Each content update calls this, so report zoom only when it changes.
         if (zoom !== lastNotifiedZoom) {
           lastNotifiedZoom = zoom;
           if (port) {
@@ -107,10 +102,7 @@ const staticSrcDoc = `<!doctype html>
         }
       });
 
-      // Keydown/keyup inside the iframe don't bubble to the parent document, so
-      // page-level hotkeys (theme toggle, focus mode, etc.) would stop working once
-      // the iframe has focus. Forward raw key events to the parent, which re-dispatches
-      // them on its own document.
+      // Forward keys because events inside the iframe never reach page-level shortcuts.
       function forwardKey(type) {
         return function (e) {
           if (!port) {
@@ -132,7 +124,6 @@ const staticSrcDoc = `<!doctype html>
       window.addEventListener('keydown', forwardKey('keydown'));
       window.addEventListener('keyup', forwardKey('keyup'));
 
-      // Set once the parent hands over a MessagePort (see 'init-port' below).
       var port = null;
       var lastHtml = null;
       var lastCss = null;
@@ -154,8 +145,7 @@ const staticSrcDoc = `<!doctype html>
           return;
         }
         if (e.data.type !== 'marp-update') return;
-        // Rebuilding the body recreates every image element, so skip pushes that
-        // would paint exactly what is already on screen.
+        // Rebuilding the body recreates its image elements. Skip identical updates.
         if (!e.data.scrollToTop && e.data.html === lastHtml && e.data.css === lastCss) return;
         lastHtml = e.data.html;
         // Re-parsing unchanged styles would reload embedded theme fonts on every keystroke.
@@ -196,8 +186,7 @@ export const PreviewPane = ({
 }: PreviewPaneProps) => {
 	const { resolvedTheme } = useTheme();
 	const iframeRef = useRef<HTMLIFrameElement>(null);
-	// MessagePort to the iframe, set on load instead of using broadcast
-	// postMessage(..., "*") so a navigated-away frame can't keep receiving messages.
+	// Send updates through a MessagePort tied to the document that received it.
 	const portRef = useRef<MessagePort | null>(null);
 	const [iframeReady, setIframeReady] = useState(false);
 	const prevFileKeyRef = useRef<string | null>(null);
@@ -229,8 +218,7 @@ export const PreviewPane = ({
 
 	const slideTailwindReady = useSlideTailwindReady();
 	const rendered = useMemo(() => {
-		// Project themes are registered on the shared Marp instance; this invalidates stale renders.
-		// Decks using Tailwind render once more after its lazily loaded compiler is ready.
+		// Re-render when project themes change or the lazy Tailwind compiler becomes ready.
 		void themeRevision;
 		void slideTailwindReady;
 		try {
@@ -298,8 +286,7 @@ export const PreviewPane = ({
 		const scrollToTop = prevFileKeyRef.current !== fileKey;
 		prevFileKeyRef.current = fileKey;
 
-		// Must match --canvas in index.css; the srcDoc iframe can't read the
-		// parent's CSS custom properties.
+		// Match --canvas in index.css because srcDoc cannot read the parent's custom properties.
 		const bg = resolvedTheme === "dark" ? "oklch(0.14 0 0)" : "oklch(0.92 0 0)";
 		const pageShadow =
 			resolvedTheme === "dark" ? "0 2px 12px rgb(0 0 0 / 0.55)" : "0 1px 6px rgb(0 0 0 / 0.18)";

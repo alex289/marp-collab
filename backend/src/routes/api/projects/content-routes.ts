@@ -42,7 +42,6 @@ import {
 
 const app = new Hono<{ Variables: ProjectRouteVariables }>();
 
-/** True when the client already holds the current representation of a file. */
 function isFresh(ifNoneMatch: string | undefined, etag: string): boolean {
 	if (!ifNoneMatch) {
 		return false;
@@ -162,8 +161,7 @@ app.get("/:projectId/files/:fileId{.+}", async (c) => {
 			return c.json({ error: "Invalid file path" }, 400);
 		}
 		c.header("Cache-Control", "no-store");
-		// Markdown is edited via the collab endpoint; serve reads from the live
-		// Yjs document when one is loaded so includes/previews see current content.
+		// Includes and previews must see edits that have yet to be flushed to disk.
 		const documentName = toDocumentName(projectId, fileId);
 		const content = await getCurrentDocumentContent(documentName);
 		if (content === undefined) {
@@ -184,19 +182,13 @@ app.get("/:projectId/files/:fileId{.+}", async (c) => {
 	c.header("Content-Disposition", "attachment");
 	c.header("ETag", etag);
 	c.header("Last-Modified", new Date(Math.floor(file.mtimeMs / 1000) * 1000).toUTCString());
-	// The preview and presentation iframes rebuild their DOM on every content push,
-	// so each image element is recreated constantly. Rendered asset URLs carry a ?v=
-	// version that the client bumps whenever the project's file list changes, so they
-	// can be cached outright — otherwise every rebuild refetches and the images
-	// visibly reload. Unversioned callers keep revalidating, which the ETag answers
-	// with a 304 instead of a full download.
+	// Rendered URLs get a new version when the file list changes. Caching each version
+	// avoids downloads when an iframe rebuilds. Unversioned URLs revalidate via ETag.
 	c.header("Cache-Control", c.req.query("v") ? "private, max-age=300" : "no-cache");
-	// Requested from sandboxed preview/presentation iframes (opaque Origin), which the
-	// default same-origin CORP header blocks in Firefox. Access is already gated by
-	// project auth or the signed asset token, so relaxing CORP here is safe.
+	// Sandboxed preview and presentation iframes have an opaque origin. Project auth
+	// or a signed asset token gates the request before we relax CORP.
 	c.header("Cross-Origin-Resource-Policy", "cross-origin");
-	// @font-face (and other CSS url()) resources are always fetched in CORS mode by
-	// spec, so the opaque-origin iframe also needs an explicit ACAO header.
+	// Font requests use CORS, so opaque-origin iframes need this header as well.
 	c.header("Access-Control-Allow-Origin", "*");
 
 	if (isFresh(c.req.header("if-none-match"), etag)) {
