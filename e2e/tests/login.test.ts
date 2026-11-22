@@ -14,7 +14,7 @@ test("automatically signs in with the only provider", async ({ page }) => {
 	expect(signInRequests).toBe(1);
 });
 
-test("offers a choice when multiple providers are configured", async ({ page }) => {
+test("offers a choice and remembers the last provider after signing out", async ({ page }) => {
 	let signInRequests = 0;
 	await page.route("**/auth-providers", (route) =>
 		route.fulfill({
@@ -32,11 +32,20 @@ test("offers a choice when multiple providers are configured", async ({ page }) 
 		}
 	});
 	await page.goto("/login");
-	await expect(page.getByRole("button", { name: "Sign in with Mock" })).toBeVisible();
-	await expect(page.getByRole("button", { name: "Sign in with Other" })).toBeVisible();
+	const mockProvider = page.getByRole("button", { name: "Sign in with Mock" });
+	const otherProvider = page.getByRole("button", { name: "Sign in with Other" });
+	await expect(mockProvider).toBeVisible();
+	await expect(otherProvider).toBeVisible();
+	await expect(page.getByText("Last used", { exact: true })).toHaveCount(0);
 	expect(signInRequests).toBe(0);
-	await page.getByRole("button", { name: "Sign in with Mock" }).click();
+	await mockProvider.click();
 	await expect(page).toHaveURL("/");
+
+	await page.getByRole("button", { name: "Logout" }).click();
+	await expect(page).toHaveURL("/login?autoSignIn=false");
+	await expect(mockProvider.getByText("Last used", { exact: true })).toBeVisible();
+	await expect(otherProvider).toBeVisible();
+	await expect(otherProvider.getByText("Last used", { exact: true })).toHaveCount(0);
 });
 
 test("allows retry after automatic sign-in fails", async ({ page }) => {
