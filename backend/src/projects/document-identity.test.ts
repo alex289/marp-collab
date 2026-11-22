@@ -4,7 +4,7 @@ import {
 	documentBelongsToProject,
 	parseProjectDocumentName,
 	toDocumentName,
-} from "./document-identity.ts";
+} from "../../../shared/collaboration.ts";
 
 describe("Project Document Identity", () => {
 	test("roundtrips a nested file identity", () => {

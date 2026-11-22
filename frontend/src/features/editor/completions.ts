@@ -6,8 +6,11 @@ import type {
 	CompletionSource,
 } from "@codemirror/autocomplete";
 import type { Text } from "@codemirror/state";
+import { isCssDeckFile, isImageDeckFile, isMarkdownDeckFile } from "../../lib/file-types.ts";
+import { getRelativeProjectFilePath } from "../../lib/project-file-path.ts";
 import type { DeckFile } from "../../lib/types.ts";
 import type { ProjectTheme } from "../../lib/project-themes.ts";
+import { defaultMarpThemeName } from "../../../../shared/marp-dialect.ts";
 import { MARP_ALLOWED_HTML_TAGS } from "../../lib/marp-html.ts";
 
 export type EditorCompletionConfig = {
@@ -153,8 +156,6 @@ const directives: DirectiveDefinition[] = [
 	},
 ];
 
-const imageExtensions = new Set(["bmp", "gif", "jpeg", "jpg", "png", "svg", "tiff", "webp"]);
-
 const marpSelectors = [
 	"section",
 	"section::after",
@@ -173,38 +174,6 @@ const marpSelectors = [
 
 function unique(values: string[]): string[] {
 	return Array.from(new Set(values));
-}
-
-function fileExtension(fileId: string): string {
-	const dot = fileId.lastIndexOf(".");
-	return dot === -1 ? "" : fileId.slice(dot + 1).toLowerCase();
-}
-
-function isImageFile(file: DeckFile): boolean {
-	return imageExtensions.has(fileExtension(file.id));
-}
-
-function currentDirectory(fileId: string | null): string[] {
-	if (!fileId) {
-		return [];
-	}
-	const parts = fileId.replace(/^\/+|\/+$/g, "").split("/");
-	return parts.slice(0, -1);
-}
-
-export function relativeProjectPath(currentFileId: string | null, targetFileId: string): string {
-	const from = currentDirectory(currentFileId);
-	const to = targetFileId.replace(/^\/+|\/+$/g, "").split("/");
-	let commonLength = 0;
-
-	while (from[commonLength] === to[commonLength] && commonLength < from.length) {
-		commonLength += 1;
-	}
-
-	return [
-		...Array.from({ length: from.length - commonLength }, () => ".."),
-		...to.slice(commonLength),
-	].join("/");
 }
 
 export function extractThemeClassNames(css: string): string[] {
@@ -539,14 +508,14 @@ function pathCompletion(
 			file.type === "folder" ||
 			file.id === config.currentFileId ||
 			(pathContext.fileKind === "asset" && file.type !== "asset") ||
-			(pathContext.fileKind === "image" && !isImageFile(file)) ||
-			(pathContext.fileKind === "css" && fileExtension(file.id) !== "css") ||
-			(pathContext.fileKind === "markdown" && !["md", "markdown"].includes(fileExtension(file.id)))
+			(pathContext.fileKind === "image" && !isImageDeckFile(file)) ||
+			(pathContext.fileKind === "css" && !isCssDeckFile(file)) ||
+			(pathContext.fileKind === "markdown" && !isMarkdownDeckFile(file))
 		) {
 			continue;
 		}
 
-		const relative = relativeProjectPath(config.currentFileId, file.id);
+		const relative = getRelativeProjectFilePath(config.currentFileId, file.id);
 		const path = rootStyle
 			? `/${file.id.replace(/^\/+/, "")}`
 			: dotStyle && !relative.startsWith("..")
@@ -760,14 +729,7 @@ function cssThemeMarkerCompletion(
 		return null;
 	}
 
-	const baseName =
-		config.currentFileId
-			?.split("/")
-			.pop()
-			?.replace(/\.css$/i, "")
-			.toLowerCase()
-			.replace(/[^\w-]+/g, "-")
-			.replace(/^-+|-+$/g, "") || "theme";
+	const baseName = defaultMarpThemeName(config.currentFileId ?? "");
 	return {
 		from: context.pos - match[1].length,
 		options: [

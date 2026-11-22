@@ -7,19 +7,66 @@ import {
 } from "../../../middleware/project-access-middleware.ts";
 import {
 	classifyGitError,
+	configureProjectGit,
+	disconnectProjectGit,
 	syncProjectWithGit,
-	withGitOperation,
-	withProjectConfigureLock,
 	type ProjectGitAction,
 	type ProjectGitFailure,
 } from "../../../projects/git-actions.ts";
-import {
-	disconnectProjectGit,
-	getProjectGitConfig,
-	saveProjectGitConfig,
-	verifyProjectGitRemote,
-} from "../../../projects/git-sync.ts";
-import { gitConfigSchema, gitPullSchema } from "./schemas.ts";
+import { getProjectGitConfig } from "../../../projects/git-sync.ts";
+import { projectGitResolutionsSchema } from "../../../projects/git-input.ts";
+
+const gitConfigSchema = z.object({
+	folder: z
+		.string()
+		.trim()
+		.max(1024)
+		.default("")
+		.refine(
+			(value) =>
+				value === "" ||
+				value
+					.split("/")
+					.every((part) => /^[A-Za-z0-9_ -][A-Za-z0-9._ -]*$/.test(part) && part !== ".."),
+			"Use a relative repository folder without hidden or parent directories",
+		),
+	remoteUrl: z
+		.string()
+		.trim()
+		.max(2048)
+		.url()
+		.refine((value) => {
+			const url = new URL(value);
+			return url.protocol === "https:" && !url.username && !url.password;
+		}, "Remote URL must be HTTPS and must not contain credentials")
+		// Git paths are appended to the URL, so a query or fragment would swallow them.
+		.refine(
+			(value) => !value.includes("?") && !value.includes("#"),
+			"Remote URL must not contain a query or fragment",
+		),
+	branch: z
+		.string()
+		.trim()
+		.min(1)
+		.max(255)
+		.regex(/^[A-Za-z0-9][A-Za-z0-9._/-]*$/, "Invalid branch name")
+		.refine(
+			(value) =>
+				value !== "HEAD" &&
+				!value.includes("..") &&
+				!value.includes("@{") &&
+				!value.includes("//") &&
+				!value.endsWith("/") &&
+				!value.endsWith(".") &&
+				!value.endsWith(".lock"),
+		),
+	username: z.string().trim().max(255).optional(),
+	token: z.string().max(2048).optional(),
+});
+
+const gitPullSchema = z.object({
+	resolutions: projectGitResolutionsSchema.optional(),
+});
 
 type GitRoutesEnv = { Variables: ProjectRouteVariables };
 
@@ -78,12 +125,7 @@ app.put("/:projectId/git", requireProjectOwner, async (c) => {
 		},
 	};
 	try {
-		const config = await withGitOperation(async () => {
-			// Check the remote before locking, so a slow network does not hold the repository.
-			await verifyProjectGitRemote(settings);
-			return withProjectConfigureLock(projectId, () => saveProjectGitConfig(settings));
-		});
-		return c.json(config);
+		return c.json(await configureProjectGit(settings));
 	} catch (error) {
 		const failure = classifyGitError(error);
 		if (failure) {
@@ -97,11 +139,7 @@ app.put("/:projectId/git", requireProjectOwner, async (c) => {
 app.delete("/:projectId/git", requireProjectOwner, async (c) => {
 	const projectId = c.req.param("projectId")!;
 	try {
-		const config = await withProjectConfigureLock(projectId, async () => {
-			await disconnectProjectGit(projectId);
-			return getProjectGitConfig(projectId);
-		});
-		return c.json(config);
+		return c.json(await disconnectProjectGit(projectId));
 	} catch (error) {
 		const failure = classifyGitError(error);
 		if (failure) {

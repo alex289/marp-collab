@@ -12,11 +12,19 @@ const IMAGE_EXTENSIONS = new Set([
 ]);
 
 export function isEditableDeckFile(file: DeckFile | null | undefined): file is DeckFile {
-	return (file?.type === "markdown" || file?.id.endsWith(".css")) ?? false;
+	return file?.type === "markdown" || isCssDeckFile(file);
+}
+
+export function isCssFileId(fileId: string): boolean {
+	return fileId.toLowerCase().endsWith(".css");
+}
+
+export function isCssDeckFile(file: DeckFile | null | undefined): boolean {
+	return Boolean(file && file.type !== "folder" && isCssFileId(file.id));
 }
 
 export function isMarkdownDeckFile(file: DeckFile | null | undefined): file is DeckFile {
-	return isEditableDeckFile(file) && !file.id.endsWith(".css");
+	return file?.type === "markdown" && !isCssDeckFile(file);
 }
 
 export function isImageDeckFile(file: DeckFile | null | undefined): file is DeckFile {

@@ -1,7 +1,5 @@
-import { join } from "node:path";
 import { test as setup } from "@playwright/test";
-
-const authFile = join(import.meta.dirname, "../playwright/.auth/user.json");
+import { AUTH_STATE_PATH } from "../test-environment.ts";
 
 setup("Authenticate", async ({ page }) => {
 	// A single provider starts sign-in automatically.
@@ -9,5 +7,5 @@ setup("Authenticate", async ({ page }) => {
 
 	await page.waitForURL("/");
 
-	await page.context().storageState({ path: authFile });
+	await page.context().storageState({ path: AUTH_STATE_PATH });
 });

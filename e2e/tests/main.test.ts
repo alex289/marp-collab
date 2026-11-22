@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
+import { AUTH_STATE_PATH } from "../test-environment.ts";
 
 const { version: APP_VERSION } = JSON.parse(
 	readFileSync(new URL("../../package.json", import.meta.url), "utf8"),
@@ -1695,7 +1696,7 @@ test.describe("Editor: collaboration", () => {
 		await expect(page.getByRole("button", { name: MARKDOWN_FILE_NAME })).toBeVisible();
 
 		const collaboratorContext = await browser.newContext({
-			storageState: "playwright/.auth/user.json",
+			storageState: AUTH_STATE_PATH,
 		});
 		const collaboratorPage = await collaboratorContext.newPage();
 		try {

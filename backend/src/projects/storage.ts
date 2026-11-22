@@ -5,7 +5,8 @@ import { Readable } from "node:stream";
 import { ZipArchive } from "archiver";
 import { getFileType, MARKDOWN_EXTENSIONS } from "../helpers/file-allowlist.ts";
 import { logger } from "../helpers/logger.ts";
-import { parseProjectDocumentName } from "./document-identity.ts";
+import { parseProjectDocumentName } from "../../../shared/collaboration.ts";
+import { DOCUMENT_STATE_SUFFIX, documentStatePath } from "./document-state-path.ts";
 
 export type DeckFile = {
 	id: string;
@@ -21,6 +22,28 @@ function isValidProjectId(projectId: string): boolean {
 	return projectIdRegex.test(projectId);
 }
 
+function isProjectRelativePath(path: string): boolean {
+	return (
+		path.length > 0 &&
+		!isAbsolute(path) &&
+		!path
+			.replace(/\\/g, "/")
+			.split("/")
+			.some((part) => part.startsWith("."))
+	);
+}
+
+function resolveContainedPath(projectId: string, path: string): string | null {
+	const resolved = resolve(presentationsDir, projectId, path);
+	return resolved.startsWith(presentationsDir + sep) ? resolved : null;
+}
+
+function resolveProjectFilePath(projectId: string, fileId: string): string | null {
+	return isValidProjectId(projectId) && isProjectRelativePath(fileId)
+		? resolveContainedPath(projectId, fileId)
+		: null;
+}
+
 function resolveDocumentPath(documentName: string): string | null {
 	const identity = parseProjectDocumentName(documentName);
 	if (!identity) {
@@ -28,26 +51,16 @@ function resolveDocumentPath(documentName: string): string | null {
 	}
 
 	const { projectId, fileId } = identity;
-	if (!isValidProjectId(projectId)) {
+	if (!isValidProjectId(projectId) || !fileId) {
 		return null;
 	}
 
-	if (!fileId) {
-		return null;
-	}
-
-	if (
-		isAbsolute(fileId) ||
-		fileId
-			.replace(/\\/g, "/")
-			.split("/")
-			.some((part) => part.startsWith("."))
-	) {
+	if (!isProjectRelativePath(fileId)) {
 		throw new Error(`Invalid presentation file id: ${fileId}`);
 	}
 
-	const filePath = resolve(presentationsDir, projectId, fileId);
-	if (!filePath.startsWith(presentationsDir + sep)) {
+	const filePath = resolveContainedPath(projectId, fileId);
+	if (!filePath) {
 		throw new Error(`Path traversal detected: ${fileId}`);
 	}
 
@@ -57,8 +70,6 @@ function resolveDocumentPath(documentName: string): string | null {
 function isMissingFileError(error: unknown): boolean {
 	return error instanceof Error && "code" in error && error.code === "ENOENT";
 }
-
-const EXCLUDED_FILE_EXTENSIONS = new Set([".yjs"]);
 
 export function getProjectDirectoryPath(projectId: string): string {
 	if (!isValidProjectId(projectId)) {
@@ -75,14 +86,14 @@ export async function getProjectDirectory(projectId: string): Promise<string> {
 
 export async function clearProjectDocumentState(projectId: string): Promise<void> {
 	const projectDir = await getProjectDirectory(projectId);
-	const files = await Array.fromAsync(glob("**/*.yjs", { cwd: projectDir, exclude: [".git/**"] }));
+	const files = await Array.fromAsync(
+		glob(`**/*${DOCUMENT_STATE_SUFFIX}`, { cwd: projectDir, exclude: [".git/**"] }),
+	);
 	await Promise.all(files.map((file) => rm(resolve(projectDir, file))));
 }
 
 export async function getDeckFiles(projectId: string): Promise<DeckFile[]> {
-	await getProjectDirectory(projectId);
-
-	const projectDir = resolve(presentationsDir, projectId);
+	const projectDir = await getProjectDirectory(projectId);
 	const entries = await Array.fromAsync(
 		glob("**/*", {
 			cwd: projectDir,
@@ -94,7 +105,7 @@ export async function getDeckFiles(projectId: string): Promise<DeckFile[]> {
 	return entries
 		.filter(
 			(dirent) =>
-				dirent.isDirectory() || !EXCLUDED_FILE_EXTENSIONS.has(extname(dirent.name).toLowerCase()),
+				dirent.isDirectory() || extname(dirent.name).toLowerCase() !== DOCUMENT_STATE_SUFFIX,
 		)
 		.map((dirent) => {
 			const id = relative(projectDir, join(dirent.parentPath, dirent.name)).replace(/\\/g, "/");
@@ -113,9 +124,7 @@ type ZipSourceEntry = {
 };
 
 export async function createProjectZipStream(projectId: string): Promise<Readable> {
-	await getProjectDirectory(projectId);
-
-	const projectDir = resolve(presentationsDir, projectId);
+	const projectDir = await getProjectDirectory(projectId);
 	const zipEntries: ZipSourceEntry[] = [];
 
 	async function collectEntries(relativeDir: string): Promise<void> {
@@ -139,7 +148,7 @@ export async function createProjectZipStream(projectId: string): Promise<Readabl
 				continue;
 			}
 
-			if (!entry.isFile() || EXCLUDED_FILE_EXTENSIONS.has(extname(entry.name).toLowerCase())) {
+			if (!entry.isFile() || extname(entry.name).toLowerCase() === DOCUMENT_STATE_SUFFIX) {
 				continue;
 			}
 
@@ -171,19 +180,12 @@ export async function createProjectDir(projectId: string, dirPath: string): Prom
 		throw new Error(`Invalid project id: ${projectId}`);
 	}
 
-	if (
-		!dirPath ||
-		isAbsolute(dirPath) ||
-		dirPath
-			.replace(/\\/g, "/")
-			.split("/")
-			.some((part) => part.startsWith("."))
-	) {
+	if (!isProjectRelativePath(dirPath)) {
 		throw new Error(`Invalid dir path: ${dirPath}`);
 	}
 
-	const dir = resolve(presentationsDir, projectId, dirPath);
-	if (!dir.startsWith(presentationsDir + sep)) {
+	const dir = resolveContainedPath(projectId, dirPath);
+	if (!dir) {
 		throw new Error(`Path traversal detected: ${dirPath}`);
 	}
 
@@ -220,7 +222,7 @@ export async function getDocumentBinary(documentName: string): Promise<Uint8Arra
 	}
 
 	try {
-		const buf = await readFile(`${filePath}.yjs`);
+		const buf = await readFile(documentStatePath(filePath));
 		return new Uint8Array(buf);
 	} catch (error) {
 		if (isMissingFileError(error)) {
@@ -267,31 +269,7 @@ export async function saveDocumentBinary(documentName: string, data: Uint8Array)
 	}
 
 	await mkdir(dirname(filePath), { recursive: true });
-	await writeFile(`${filePath}.yjs`, data);
-}
-
-function resolveProjectFilePath(projectId: string, fileId: string): string | null {
-	if (!isValidProjectId(projectId)) {
-		return null;
-	}
-
-	if (
-		!fileId ||
-		isAbsolute(fileId) ||
-		fileId
-			.replace(/\\/g, "/")
-			.split("/")
-			.some((part) => part.startsWith("."))
-	) {
-		return null;
-	}
-
-	const filePath = resolve(presentationsDir, projectId, fileId);
-	if (!filePath.startsWith(presentationsDir + sep)) {
-		return null;
-	}
-
-	return filePath;
+	await writeFile(documentStatePath(filePath), data);
 }
 
 export function isValidProjectFileLocation(projectId: string, fileId: string): boolean {
@@ -446,7 +424,7 @@ export async function moveProjectFile(
 	await rename(sourcePath, destPath);
 
 	try {
-		await rename(`${sourcePath}.yjs`, `${destPath}.yjs`);
+		await rename(documentStatePath(sourcePath), documentStatePath(destPath));
 	} catch (error) {
 		if (!isMissingFileError(error)) {
 			// The .yjs companion is orphaned at the old path. The renamed file can still load as plain text.
@@ -489,8 +467,8 @@ export async function renameProjectFile(
 		return null;
 	}
 
-	const sourceYjsPath = `${sourcePath}.yjs`;
-	const destYjsPath = `${destPath}.yjs`;
+	const sourceYjsPath = documentStatePath(sourcePath);
+	const destYjsPath = documentStatePath(destPath);
 	const hasSourceYjs = (await getFileStatsSafe(sourceYjsPath)) !== undefined;
 
 	const canRenameYjs = await isRenamePossible(sourceYjsPath, destYjsPath, "file");
@@ -570,7 +548,7 @@ export async function deleteProjectFile(projectId: string, fileId: string): Prom
 	}
 
 	try {
-		await rm(`${filePath}.yjs`);
+		await rm(documentStatePath(filePath));
 	} catch {
 		// .yjs companion may not exist for files that were never collab-edited
 	}
@@ -579,11 +557,7 @@ export async function deleteProjectFile(projectId: string, fileId: string): Prom
 }
 
 export async function deleteProjectDirectory(projectId: string): Promise<void> {
-	if (!isValidProjectId(projectId)) {
-		throw new Error(`Invalid project id: ${projectId}`);
-	}
-
-	await rm(resolve(presentationsDir, projectId), { recursive: true, force: true });
+	await rm(getProjectDirectoryPath(projectId), { recursive: true, force: true });
 }
 
 export async function commitStagedProjectDirectory(

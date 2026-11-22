@@ -1,4 +1,5 @@
 import { API_URL } from "@/lib/config";
+import { updateProject } from "@/lib/project";
 import { useState } from "react";
 import {
 	Dialog,
@@ -47,12 +48,7 @@ export function RenameProjectDialog({ project }: { project: Project }) {
 		setError(null);
 
 		try {
-			const res = await fetch(`${API_URL}/projects/${project.id}`, {
-				method: "PATCH",
-
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({ name: trimmed }),
-			});
+			const res = await updateProject(project.id, { name: trimmed });
 
 			if (!res.ok) {
 				const data = (await res.json()) as { error?: string };

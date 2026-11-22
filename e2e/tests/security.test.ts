@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { APP_URL } from "./const.ts";
+import { APP_URL } from "../test-environment.ts";
 
 test.use({ storageState: { cookies: [], origins: [] } });
 

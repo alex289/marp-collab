@@ -1,6 +1,6 @@
-import { db } from "../db.ts";
+import type { Database } from "better-sqlite3";
 
-function up() {
+function up(db: Database) {
 	db.exec(`
         create table if not exists "project" (
             "id" text not null primary key,

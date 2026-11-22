@@ -17,6 +17,6 @@ db.pragma("busy_timeout = 5000"); // Wait up to 5 seconds if the database is loc
 db.pragma("auto_vacuum = incremental");
 
 // Auto-run on import so migrations are always applied before any prepared statements are created
-runMigrations();
+runMigrations(db);
 
 export { db };

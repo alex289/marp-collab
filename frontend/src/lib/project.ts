@@ -9,18 +9,27 @@ export type ProjectResponse = {
 	readOnly: boolean;
 };
 
+function projectUrl(id: string): string {
+	return `${API_URL}/projects/${id}`;
+}
+
 export function getProject(id: string) {
-	return fetcher<ProjectResponse>(`${API_URL}/projects/${id}`);
+	return fetcher<ProjectResponse>(projectUrl(id));
 }
 
 export function useProject(id: string) {
-	const { data, mutate } = useSWR<ProjectResponse>(`${API_URL}/projects/${id}`, fetcher);
+	const { data, mutate } = useSWR<ProjectResponse>(projectUrl(id), fetcher);
 
-	return { project: data?.project, isProjectOwner: data?.isOwner || false, mutate };
+	return {
+		project: data?.project,
+		isProjectOwner: data?.isOwner ?? false,
+		readOnly: data?.readOnly ?? true,
+		mutate,
+	};
 }
 
 export function updateProject(id: string, project: { name: string }) {
-	return fetch(`${API_URL}/projects/${id}`, {
+	return fetch(projectUrl(id), {
 		method: "PATCH",
 
 		headers: { "Content-Type": "application/json" },

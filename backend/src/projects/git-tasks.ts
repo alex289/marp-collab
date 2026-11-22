@@ -1,4 +1,5 @@
 import fs from "node:fs";
+import { MAX_REPORTED_CONFLICTS } from "./git-conflicts.ts";
 import { readdir, rm } from "node:fs/promises";
 import { join } from "node:path";
 import git from "isomorphic-git";
@@ -11,13 +12,19 @@ import {
 	type ProjectGitConflict,
 	type ProjectGitResolution,
 } from "./git-merge.ts";
+import {
+	branchRef,
+	configureBranchTracking,
+	PROJECT_GIT_REMOTE,
+	remoteBranchRef,
+	type GitAuthor,
+} from "./git-repository.ts";
 
 /*
  * Every operation here reads objects that came from a Git remote. isomorphic-git unpacks those
  * without memory or time limits, so git-process.ts runs these tasks in a separate process.
  */
 
-const REMOTE = "origin";
 /**
  * Checking out a tree writes each path, so a blob listed under many paths is written many times.
  */
@@ -26,12 +33,6 @@ export const GIT_TREE_LIMITS = { entries: 50_000, bytes: MAX_GIT_PACK_UNPACKED_B
 const MAX_GIT_NAME_BYTES = 255;
 const MAX_GIT_PATH_BYTES = 4096;
 const MAX_ERROR_MESSAGE_LENGTH = 1000;
-export const MAX_REPORTED_CONFLICTS = 200;
-
-export type GitAuthor = {
-	name: string;
-	email: string;
-};
 
 export type GitCredentials = {
 	username?: string;
@@ -91,11 +92,6 @@ export type SerializedGitError =
 export type GitTaskReply =
 	| { ok: true; result: GitTaskResults[keyof GitTaskResults] }
 	| { ok: false; error: SerializedGitError };
-
-/** Always pass full refs: isomorphic-git writes a bare branch name to `.git/<name>` instead of `refs/heads/`. */
-function branchRef(branch: string): string {
-	return `refs/heads/${branch}`;
-}
 
 function authOptions(credentials: GitCredentials) {
 	if (!credentials.token) {
@@ -214,11 +210,6 @@ async function stageProjectFiles(dir: string): Promise<boolean> {
 	return changed;
 }
 
-async function configureBranch(dir: string, branch: string): Promise<void> {
-	await git.setConfig({ fs, dir, path: `branch.${branch}.remote`, value: REMOTE });
-	await git.setConfig({ fs, dir, path: `branch.${branch}.merge`, value: branchRef(branch) });
-}
-
 async function commitProjectFiles({
 	repository: dir,
 	branch,
@@ -228,7 +219,7 @@ async function commitProjectFiles({
 	message = "Sync project files",
 }: ProjectFiles): Promise<{ commit: string; committed: boolean }> {
 	const ref = branchRef(branch);
-	await configureBranch(dir, branch);
+	await configureBranchTracking(dir, branch);
 	await syncSupportedFiles(projectDirectory, join(dir, folder));
 	const changed = await stageProjectFiles(dir);
 	const hasHead = await git.resolveRef({ fs, dir, ref }).then(
@@ -298,7 +289,7 @@ async function pullRemote({
 }: Extract<GitTask, { type: "pull" }>): Promise<GitTaskResults["pull"]> {
 	const { repository: dir, branch, credentials } = remote;
 	const ref = branchRef(branch);
-	const remoteRef = `refs/remotes/${REMOTE}/${branch}`;
+	const remoteRef = remoteBranchRef(branch);
 	let pulled = false;
 	let overlapping: string[] = [];
 
@@ -307,7 +298,7 @@ async function pullRemote({
 			fs,
 			http,
 			dir,
-			remote: REMOTE,
+			remote: PROJECT_GIT_REMOTE,
 			ref: branch,
 			singleBranch: true,
 			tags: false,
@@ -358,7 +349,7 @@ async function pushProject(
 			fs,
 			http,
 			dir: task.repository,
-			remote: REMOTE,
+			remote: PROJECT_GIT_REMOTE,
 			ref: branchRef(task.branch),
 			remoteRef: branchRef(task.branch),
 			...authOptions(task.credentials),

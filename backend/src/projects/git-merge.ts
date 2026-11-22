@@ -3,11 +3,7 @@ import { diff3Merge } from "node-diff3";
 import git, { type TreeEntry as GitTreeEntry, type WalkerEntry } from "isomorphic-git";
 import { isEditableExtension } from "../helpers/file-allowlist.ts";
 import { ProjectGitContentError } from "./git-files.ts";
-
-type GitAuthor = {
-	name: string;
-	email: string;
-};
+import type { GitAuthor } from "./git-repository.ts";
 
 type TreeEntry = {
 	mode: number;

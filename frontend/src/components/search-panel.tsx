@@ -1,39 +1,23 @@
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { Replace, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SidebarGroup, SidebarGroupContent, SidebarGroupLabel } from "@/components/ui/sidebar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import type { TextSearchMatch } from "@/lib/text-search";
+import type { useActiveFileSearch } from "@/hooks/use-active-file-search";
 
-type SearchPanelProps = {
-	matches: TextSearchMatch[];
-	isLoading: boolean;
-	error: string | null;
-	onSearch: (query: string) => void;
-	onReplaceOne: (match: TextSearchMatch, replacement: string) => void;
-	onReplaceAll: (query: string, replacement: string) => void;
-};
-
-export const SearchPanel = ({
+export function SearchPanel({
+	fileId,
 	matches,
-	isLoading,
+	readOnly,
 	error,
 	onSearch,
 	onReplaceOne,
 	onReplaceAll,
-}: SearchPanelProps) => {
+}: ReturnType<typeof useActiveFileSearch>) {
 	const [query, setQuery] = useState("");
 	const [replacement, setReplacement] = useState("");
-
-	const grouped = useMemo(() => {
-		const groups = new Map<string, TextSearchMatch[]>();
-		for (const match of matches) {
-			groups.set(match.fileId, [...(groups.get(match.fileId) ?? []), match]);
-		}
-		return Array.from(groups.entries());
-	}, [matches]);
 
 	return (
 		<SidebarGroup className="h-full">
@@ -77,7 +61,7 @@ export const SearchPanel = ({
 						size="sm"
 						variant="outline"
 						onClick={() => onSearch(query)}
-						disabled={query.length === 0 || isLoading}
+						disabled={query.length === 0}
 					>
 						<Search />
 						Find
@@ -86,24 +70,22 @@ export const SearchPanel = ({
 						type="button"
 						size="sm"
 						onClick={() => onReplaceAll(query, replacement)}
-						disabled={query.length === 0 || matches.length === 0 || isLoading}
+						disabled={readOnly || query.length === 0 || matches.length === 0}
 					>
 						<Replace />
 						Replace all
 					</Button>
 				</div>
 				{error ? <p className="text-xs text-destructive">{error}</p> : null}
-				<p className="text-xs text-muted-foreground">
-					{isLoading ? "Searching..." : `${matches.length} matches`}
-				</p>
+				<p className="text-xs text-muted-foreground">{matches.length} matches</p>
 				<div className="min-h-0 flex-1 overflow-y-auto pr-1">
-					{grouped.map(([fileId, fileMatches]) => (
+					{matches.length > 0 && (
 						<div key={fileId} className="mb-3 min-w-0">
 							<p className="mb-1 truncate text-xs font-medium">{fileId}</p>
 							<div className="grid gap-1">
-								{fileMatches.map((match) => (
+								{matches.map((match) => (
 									<div
-										key={`${match.fileId}:${match.startOffset}:${match.endOffset}`}
+										key={`${match.startOffset}:${match.endOffset}`}
 										className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-2 rounded-md border border-sidebar-border p-2 text-xs"
 									>
 										<div className="min-w-0">
@@ -120,6 +102,7 @@ export const SearchPanel = ({
 														size="icon"
 														variant="ghost"
 														aria-label="Replace this match"
+														disabled={readOnly}
 														onClick={() => onReplaceOne(match, replacement)}
 													>
 														<Replace />
@@ -132,9 +115,9 @@ export const SearchPanel = ({
 								))}
 							</div>
 						</div>
-					))}
+					)}
 				</div>
 			</SidebarGroupContent>
 		</SidebarGroup>
 	);
-};
+}

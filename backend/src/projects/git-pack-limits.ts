@@ -1,6 +1,7 @@
 import { inflateSync } from "node:zlib";
+import { MAX_PROJECT_FILE_BYTES } from "./content-limits.ts";
 
-export const MAX_GIT_OBJECT_BYTES = 300 * 1024 * 1024; // 300 MB, as for project imports
+export const MAX_GIT_OBJECT_BYTES = MAX_PROJECT_FILE_BYTES;
 export const MAX_GIT_PACK_UNPACKED_BYTES = 1024 * 1024 * 1024; // 1 GB
 export const MAX_GIT_PACK_OBJECTS = 500_000;
 

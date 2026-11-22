@@ -1,4 +1,5 @@
 import { API_URL } from "../../lib/config.ts";
+import { projectFileUrl, projectFilesUrl } from "../../lib/project-file-url.ts";
 import type { DeckFile } from "../../lib/types.ts";
 import type { RenameResult } from "./file-reconciliation.ts";
 
@@ -29,7 +30,7 @@ export interface ProjectFilesClient {
 export function createProjectFilesClient(fetcher: FetchLike = fetch): ProjectFilesClient {
 	return {
 		async list(projectId) {
-			const response = await fetcher(`${API_URL}/projects/${projectId}/files`, {});
+			const response = await fetcher(projectFilesUrl(projectId), {});
 			if (!response.ok) {
 				throw new Error(await readErrorMessage(response, "Could not load files"));
 			}
@@ -39,7 +40,7 @@ export function createProjectFilesClient(fetcher: FetchLike = fetch): ProjectFil
 		},
 
 		async createFile(projectId, name) {
-			const response = await fetcher(`${API_URL}/projects/${projectId}/files`, {
+			const response = await fetcher(projectFilesUrl(projectId), {
 				method: "POST",
 				headers: { "Content-Type": "application/json" },
 				body: JSON.stringify({ name }),
@@ -69,7 +70,7 @@ export function createProjectFilesClient(fetcher: FetchLike = fetch): ProjectFil
 						formData.append("destination", destination);
 					}
 
-					const response = await fetcher(`${API_URL}/projects/${projectId}/files/upload`, {
+					const response = await fetcher(`${projectFilesUrl(projectId)}/upload`, {
 						method: "POST",
 						body: formData,
 					});
@@ -96,7 +97,7 @@ export function createProjectFilesClient(fetcher: FetchLike = fetch): ProjectFil
 			const endpoint =
 				file.type === "folder"
 					? `${API_URL}/projects/${projectId}/folders/${encodeURIComponent(file.id)}`
-					: `${API_URL}/projects/${projectId}/files/${encodeURIComponent(file.id)}`;
+					: `${projectFilesUrl(projectId)}/${encodeURIComponent(file.id)}`;
 			const response = await fetcher(endpoint, { method: "DELETE" });
 			await ensureSuccessful(response, "Failed to delete file");
 		},
@@ -105,7 +106,7 @@ export function createProjectFilesClient(fetcher: FetchLike = fetch): ProjectFil
 			const endpoint =
 				file.type === "folder"
 					? `${API_URL}/projects/${projectId}/folders/${encodeURIComponent(file.id)}/rename`
-					: `${API_URL}/projects/${projectId}/files/rename/${encodeURIComponent(file.id)}`;
+					: `${projectFilesUrl(projectId)}/rename/${encodeURIComponent(file.id)}`;
 			const response = await fetcher(endpoint, {
 				method: "PATCH",
 				headers: { "Content-Type": "application/json" },
@@ -137,7 +138,7 @@ export function createProjectFilesClient(fetcher: FetchLike = fetch): ProjectFil
 
 		async move(projectId, fileId, destination) {
 			const response = await fetcher(
-				`${API_URL}/projects/${projectId}/files/${encodeURIComponent(fileId)}`,
+				`${projectFilesUrl(projectId)}/${encodeURIComponent(fileId)}`,
 				{
 					method: "PATCH",
 					headers: { "Content-Type": "application/json" },
@@ -148,12 +149,7 @@ export function createProjectFilesClient(fetcher: FetchLike = fetch): ProjectFil
 			return (await response.json()) as { newFileId: string };
 		},
 
-		fileUrl(projectId, fileId) {
-			return `${API_URL}/projects/${projectId}/files/${fileId
-				.split("/")
-				.map(encodeURIComponent)
-				.join("/")}`;
-		},
+		fileUrl: projectFileUrl,
 
 		exportUrl(projectId) {
 			return `${API_URL}/projects/${projectId}/export.zip`;

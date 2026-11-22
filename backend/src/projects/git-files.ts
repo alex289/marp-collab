@@ -2,17 +2,17 @@ import { copyFile, lstat, mkdir, readdir, rm, rmdir, stat } from "node:fs/promis
 import { dirname, join, relative } from "node:path";
 import { getFileType, isEditableExtension } from "../helpers/file-allowlist.ts";
 import {
-	MAX_IMPORT_ENTRY_COUNT,
-	MAX_IMPORT_FILE_UNCOMPRESSED_BYTES,
-	MAX_IMPORT_TOTAL_UNCOMPRESSED_BYTES,
-} from "./project-import.ts";
+	MAX_PROJECT_CONTENT_BYTES,
+	MAX_PROJECT_FILE_BYTES,
+	MAX_PROJECT_FILE_COUNT,
+} from "./content-limits.ts";
+import { documentStatePath } from "./document-state-path.ts";
 
 export class ProjectGitContentError extends Error {}
 
 /** Pulled documents are loaded into memory to update their collaboration state. */
 export const MAX_GIT_DOCUMENT_BYTES = 10 * 1024 * 1024; // 10 MB
 export const MAX_GIT_DOCUMENTS_TOTAL_BYTES = 100 * 1024 * 1024; // 100 MB
-const STATE_SUFFIX = ".yjs";
 
 /** Hidden files, Git metadata, collaboration state and unsupported types stay private. */
 async function supportedFiles(dir: string, prefix = ""): Promise<string[]> {
@@ -40,9 +40,9 @@ async function assertWithinLimits(
 	files: string[],
 	intoProject: boolean,
 ): Promise<void> {
-	if (files.length > MAX_IMPORT_ENTRY_COUNT) {
+	if (files.length > MAX_PROJECT_FILE_COUNT) {
 		throw new ProjectGitContentError(
-			`Git sync supports at most ${MAX_IMPORT_ENTRY_COUNT} files per project`,
+			`Git sync supports at most ${MAX_PROJECT_FILE_COUNT} files per project`,
 		);
 	}
 	const folders = new Set<string>();
@@ -55,11 +55,11 @@ async function assertWithinLimits(
 	let documentsTotal = 0;
 	for (const path of files) {
 		const { size } = await stat(join(dir, path));
-		if (size > MAX_IMPORT_FILE_UNCOMPRESSED_BYTES) {
+		if (size > MAX_PROJECT_FILE_BYTES) {
 			throw new ProjectGitContentError(`File exceeds the size limit: ${path}`);
 		}
 		total += size;
-		if (total > MAX_IMPORT_TOTAL_UNCOMPRESSED_BYTES) {
+		if (total > MAX_PROJECT_CONTENT_BYTES) {
 			throw new ProjectGitContentError("Project files exceed the total size limit");
 		}
 		if (intoProject && isEditableExtension(path)) {
@@ -70,9 +70,10 @@ async function assertWithinLimits(
 			if (documentsTotal > MAX_GIT_DOCUMENTS_TOTAL_BYTES) {
 				throw new ProjectGitContentError("Documents exceed the total size limit");
 			}
-			if (folders.has(`${path}${STATE_SUFFIX}`)) {
+			const statePath = documentStatePath(path);
+			if (folders.has(statePath)) {
 				throw new ProjectGitContentError(
-					`A folder takes the place of collaboration state: ${path}${STATE_SUFFIX}`,
+					`A folder takes the place of collaboration state: ${statePath}`,
 				);
 			}
 		}
@@ -156,8 +157,9 @@ export async function syncSupportedFiles(
 	const removed = new Set(removedFiles);
 	if (intoProject) {
 		for (const path of removedFiles) {
-			if ((await lstat(join(destination, `${path}${STATE_SUFFIX}`)).catch(() => null))?.isFile()) {
-				removed.add(`${path}${STATE_SUFFIX}`);
+			const statePath = documentStatePath(path);
+			if ((await lstat(join(destination, statePath)).catch(() => null))?.isFile()) {
+				removed.add(statePath);
 			}
 		}
 	}
@@ -165,7 +167,7 @@ export async function syncSupportedFiles(
 	for (const path of removedFiles) {
 		await rm(join(destination, path));
 		if (intoProject) {
-			await removeFile(join(destination, `${path}${STATE_SUFFIX}`));
+			await removeFile(join(destination, documentStatePath(path)));
 		}
 		await removeEmptiedParents(destination, path);
 	}

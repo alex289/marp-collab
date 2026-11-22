@@ -1,4 +1,10 @@
-export type ProjectDocumentIdentity = {
+export const PROJECT_PRESENCE_DOCUMENT_ID = "__presence";
+export const DOCUMENT_CONTENT_KEY = "content";
+export const FILES_CHANGED = "files-changed";
+export const GIT_SYNC_FINISHED = "git-sync-finished";
+export const GIT_SYNC_REJECTION_REASON = "Project is syncing with Git";
+
+type ProjectDocumentIdentity = {
 	projectId: string;
 	fileId: string;
 };
@@ -22,6 +28,6 @@ export function parseProjectDocumentName(documentName: string): ProjectDocumentI
 export function documentBelongsToProject(documentName: string, projectId: string): boolean {
 	return (
 		parseProjectDocumentName(documentName)?.projectId === projectId &&
-		documentName.startsWith(`project/${projectId}/`)
+		documentName.startsWith(toDocumentName(projectId, ""))
 	);
 }

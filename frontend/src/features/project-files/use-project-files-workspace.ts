@@ -2,7 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import type { Awareness } from "y-protocols/awareness.js";
 import type { DeckFile } from "../../lib/types";
-import { buildFileTree, getParentFolderPath, type FileTreeNode } from "./file-tree";
+import { getParentFolderPath } from "../../lib/project-file-path";
+import { buildFileTree, type FileTreeNode } from "./file-tree";
 import {
 	expandOpenFoldersForSelection,
 	reconcileOpenFoldersAfterRename,

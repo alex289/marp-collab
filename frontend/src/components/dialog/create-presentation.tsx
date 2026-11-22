@@ -21,8 +21,11 @@ import { useNavigate } from "@tanstack/react-router";
 import { FolderUpIcon, PlusIcon } from "lucide-react";
 import { useState } from "react";
 import { useSWRConfig } from "swr";
-
-type ProjectTemplateId = "default" | "whs";
+import {
+	DEFAULT_PROJECT_TEMPLATE,
+	PROJECT_TEMPLATE_IDS,
+	type ProjectTemplateId,
+} from "../../../../shared/project-templates.ts";
 
 function WhsMarkIcon({ className }: { className?: string }) {
 	return (
@@ -35,9 +38,8 @@ function WhsMarkIcon({ className }: { className?: string }) {
 	);
 }
 
-const TEMPLATE_OPTIONS: { id: ProjectTemplateId; label: string; preview: React.ReactNode }[] = [
-	{
-		id: "default",
+const TEMPLATE_OPTIONS: Record<ProjectTemplateId, { label: string; preview: React.ReactNode }> = {
+	default: {
 		label: "Default",
 		preview: (
 			<div className="flex aspect-video w-full flex-col gap-1 rounded-sm bg-muted p-2">
@@ -47,8 +49,7 @@ const TEMPLATE_OPTIONS: { id: ProjectTemplateId; label: string; preview: React.R
 			</div>
 		),
 	},
-	{
-		id: "whs",
+	whs: {
 		label: "Westfälische Hochschule",
 		preview: (
 			<div className="flex aspect-video w-full items-center justify-center rounded-sm bg-muted p-2">
@@ -56,7 +57,7 @@ const TEMPLATE_OPTIONS: { id: ProjectTemplateId; label: string; preview: React.R
 			</div>
 		),
 	},
-];
+};
 
 export function CreatePresentationDialog() {
 	const { mutate } = useSWRConfig();
@@ -64,7 +65,7 @@ export function CreatePresentationDialog() {
 	const [open, setOpen] = useState(false);
 	const [step, setStep] = useState<"name" | "template" | "import">("name");
 	const [name, setName] = useState("");
-	const [template, setTemplate] = useState<ProjectTemplateId>("default");
+	const [template, setTemplate] = useState<ProjectTemplateId>(DEFAULT_PROJECT_TEMPLATE);
 	const [zipFile, setZipFile] = useState<File | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [isSubmitting, setIsSubmitting] = useState(false);
@@ -74,7 +75,7 @@ export function CreatePresentationDialog() {
 		if (!next) {
 			setStep("name");
 			setName("");
-			setTemplate("default");
+			setTemplate(DEFAULT_PROJECT_TEMPLATE);
 			setZipFile(null);
 			setError(null);
 			setIsSubmitting(false);
@@ -209,27 +210,27 @@ export function CreatePresentationDialog() {
 							<DialogDescription>Pick a starting theme for "{name}".</DialogDescription>
 						</DialogHeader>
 						<div className="grid grid-cols-2 gap-3">
-							{TEMPLATE_OPTIONS.map((option) => (
+							{PROJECT_TEMPLATE_IDS.map((id) => (
 								<Card
-									key={option.id}
+									key={id}
 									role="button"
 									tabIndex={0}
-									onClick={() => setTemplate(option.id)}
+									onClick={() => setTemplate(id)}
 									onKeyDown={(e) => {
 										if (e.key === "Enter" || e.key === " ") {
 											e.preventDefault();
-											setTemplate(option.id);
+											setTemplate(id);
 										}
 									}}
 									className={cn(
 										"cursor-pointer items-center gap-2 px-3 py-3 text-center ring-1 transition-colors",
-										template === option.id
+										template === id
 											? "ring-2 ring-primary"
 											: "ring-foreground/10 hover:ring-foreground/20",
 									)}
 								>
-									{option.preview}
-									<span className="text-xs font-medium">{option.label}</span>
+									{TEMPLATE_OPTIONS[id].preview}
+									<span className="text-xs font-medium">{TEMPLATE_OPTIONS[id].label}</span>
 								</Card>
 							))}
 						</div>

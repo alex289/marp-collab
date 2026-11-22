@@ -1,4 +1,4 @@
-import { API_URL } from "./config.ts";
+import { projectFileUrl } from "./project-file-url.ts";
 import { expandMarkdownIncludes } from "../../../shared/markdown-include.ts";
 export { hasMarkdownIncludes } from "../../../shared/markdown-include.ts";
 
@@ -16,11 +16,10 @@ export async function resolveMarkdownIncludes(
 		markdown,
 		currentFileId ?? "",
 		async (fileId) => {
-			const encodedId = fileId.split("/").map(encodeURIComponent).join("/");
-			const response = await fetch(
-				`${API_URL}/projects/${encodeURIComponent(projectId)}/files/${encodedId}`,
-				{ signal, cache: "no-store" },
-			);
+			const response = await fetch(projectFileUrl(projectId, fileId), {
+				signal,
+				cache: "no-store",
+			});
 			if (response.status === 404) {
 				return undefined;
 			}

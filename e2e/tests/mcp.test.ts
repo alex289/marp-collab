@@ -1,8 +1,8 @@
 import { createHash, randomBytes } from "node:crypto";
 import { expect, test, type APIRequestContext } from "@playwright/test";
+import { APP_URL } from "../test-environment.ts";
 
-const baseURL = "http://127.0.0.1:8090";
-const redirectUri = `${baseURL}/mcp-test-callback`;
+const redirectUri = `${APP_URL}/mcp-test-callback`;
 
 // The main suite signs out the shared setup session. Use a fresh session per test.
 test.use({ storageState: { cookies: [], origins: [] } });
@@ -13,7 +13,7 @@ test.beforeEach(async ({ page }) => {
 
 async function authorization(request: APIRequestContext) {
 	const registration = await request.post("/api/v1/auth/oauth2/register", {
-		headers: { origin: baseURL },
+		headers: { origin: APP_URL },
 		data: {
 			client_name: "Presentation assistant",
 			redirect_uris: [redirectUri],
@@ -31,12 +31,12 @@ async function authorization(request: APIRequestContext) {
 		redirect_uri: redirectUri,
 		response_type: "code",
 		scope: "presentations:read presentations:write",
-		resource: `${baseURL}/mcp`,
+		resource: `${APP_URL}/mcp`,
 		code_challenge: createHash("sha256").update(verifier).digest("base64url"),
 		code_challenge_method: "S256",
 		state: "mcp-browser-test",
 	});
-	return { url: `${baseURL}/api/v1/auth/oauth2/authorize?${params}`, verifier, clientId };
+	return { url: `${APP_URL}/api/v1/auth/oauth2/authorize?${params}`, verifier, clientId };
 }
 
 test("authorizes an AI client through existing login and consent", async ({ page, context }) => {
@@ -57,14 +57,14 @@ test("authorizes an AI client through existing login and consent", async ({ page
 	expect(callback.searchParams.get("error"), callback.href).toBeNull();
 	expect(callback.searchParams.get("state")).toBe("mcp-browser-test");
 	const token = await page.request.post("/api/v1/auth/oauth2/token", {
-		headers: { origin: baseURL },
+		headers: { origin: APP_URL },
 		form: {
 			grant_type: "authorization_code",
 			code: callback.searchParams.get("code")!,
 			client_id: flow.clientId,
 			redirect_uri: redirectUri,
 			code_verifier: flow.verifier,
-			resource: `${baseURL}/mcp`,
+			resource: `${APP_URL}/mcp`,
 		},
 	});
 	expect(token.ok(), await token.text()).toBeTruthy();

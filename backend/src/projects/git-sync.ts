@@ -10,11 +10,11 @@ import { logger } from "../helpers/logger.ts";
 import { reconcileProjectDocumentState } from "./git-document-state.ts";
 import { ProjectGitContentError, syncSupportedFiles } from "./git-files.ts";
 import { ProjectGitProcessError, runGitTask } from "./git-process.ts";
+import { configureBranchTracking, PROJECT_GIT_REMOTE, type GitAuthor } from "./git-repository.ts";
 import {
 	ProjectGitRejectedError,
 	ProjectGitRemoteError,
 	ProjectGitTransportError,
-	type GitAuthor,
 	type GitCredentials,
 } from "./git-tasks.ts";
 
@@ -26,7 +26,6 @@ export {
 	ProjectGitTransportError,
 };
 
-const REMOTE = "origin";
 const CREDENTIALS_FILE = "marp-collab-credentials";
 /** Holds the commit to reset to while a rollback has not finished. */
 const RESET_FILE = "marp-collab-reset";
@@ -72,18 +71,16 @@ async function saveCredentials(
 	dir: string,
 	credentials: GitCredentials,
 ): Promise<void> {
-	const existing = await readCredentials(projectId, dir);
-	const token = credentials.token || existing.token;
-	if (!token) {
+	const path = credentialsPath(dir);
+	if (!credentials.token) {
+		await rm(path, { force: true });
 		return;
 	}
 
-	const plaintext = JSON.stringify({ username: credentials.username ?? existing.username, token });
-	await writeFile(
-		credentialsPath(dir),
-		encryptSecret(plaintext, "marp-collab-git-credentials", projectId),
-		{ mode: 0o600 },
-	);
+	const plaintext = JSON.stringify(credentials);
+	await writeFile(path, encryptSecret(plaintext, "marp-collab-git-credentials", projectId), {
+		mode: 0o600,
+	});
 }
 
 /** Reading settings must not create directories: it also runs outside the lock that deletion holds. */
@@ -104,10 +101,10 @@ export function isProjectGitConfigured(projectId: string): Promise<boolean> {
 	return hasGitDirectory(repositoryDirectory(projectId));
 }
 
-async function getConfiguredProject(projectId: string) {
+async function readConfiguredProject(projectId: string) {
 	const dir = repositoryDirectory(projectId);
 	if (!(await hasGitDirectory(dir))) {
-		throw new ProjectGitNotConfiguredError("Git sync is not configured");
+		return null;
 	}
 
 	const [storedBranch, currentBranch, remotes, credentials] = await Promise.all([
@@ -116,9 +113,9 @@ async function getConfiguredProject(projectId: string) {
 		git.listRemotes({ fs, dir }),
 		readCredentials(projectId, dir),
 	]);
-	const origin = remotes.find((remote) => remote.remote === REMOTE);
+	const origin = remotes.find((remote) => remote.remote === PROJECT_GIT_REMOTE);
 	if (!origin) {
-		throw new ProjectGitNotConfiguredError("Git sync is not configured");
+		return null;
 	}
 
 	const folder = (await git.getConfig({ fs, dir, path: "marp.folder" })) ?? "";
@@ -126,22 +123,17 @@ async function getConfiguredProject(projectId: string) {
 	return { dir, branch, remoteUrl: origin.url, credentials, folder };
 }
 
-export async function getProjectGitConfig(projectId: string): Promise<ProjectGitConfig> {
-	try {
-		const { remoteUrl, branch, credentials, folder } = await getConfiguredProject(projectId);
-		return {
-			configured: true,
-			folder,
-			remoteUrl,
-			branch,
-			hasCredentials: Boolean(credentials.token),
-			username: credentials.username ?? null,
-		};
-	} catch (error) {
-		if (!(error instanceof ProjectGitNotConfiguredError)) {
-			throw error;
-		}
+async function getConfiguredProject(projectId: string) {
+	const config = await readConfiguredProject(projectId);
+	if (!config) {
+		throw new ProjectGitNotConfiguredError("Git sync is not configured");
+	}
+	return config;
+}
 
+export async function getProjectGitConfig(projectId: string): Promise<ProjectGitConfig> {
+	const config = await readConfiguredProject(projectId);
+	if (!config) {
 		return {
 			configured: false,
 			folder: "",
@@ -151,9 +143,18 @@ export async function getProjectGitConfig(projectId: string): Promise<ProjectGit
 			username: null,
 		};
 	}
+	const { remoteUrl, branch, credentials, folder } = config;
+	return {
+		configured: true,
+		folder,
+		remoteUrl,
+		branch,
+		hasCredentials: Boolean(credentials.token),
+		username: credentials.username ?? null,
+	};
 }
 
-type ProjectGitSettings = {
+export type ProjectGitSettings = {
 	projectId: string;
 	remoteUrl: string;
 	branch: string;
@@ -161,37 +162,36 @@ type ProjectGitSettings = {
 	folder?: string;
 };
 
-/** A token is kept only while the remote URL stays the same, so it is never sent to another host. */
-async function resolveCredentials(
-	projectId: string,
-	remoteUrl: string,
-	credentials: GitCredentials,
-): Promise<GitCredentials> {
-	const existingConfig = await getProjectGitConfig(projectId);
-	const existing =
-		existingConfig.remoteUrl === remoteUrl
-			? await readCredentials(projectId, repositoryDirectory(projectId))
-			: {};
+type ResolvedProjectGitSettings = Omit<ProjectGitSettings, "credentials"> & {
+	credentials: { username: string | undefined; token: string | undefined };
+};
+
+/** Read remote metadata and its saved credentials while the repository is reserved. */
+export async function resolveProjectGitSettings(
+	settings: ProjectGitSettings,
+): Promise<ResolvedProjectGitSettings> {
+	const current = await readConfiguredProject(settings.projectId);
+	const retainedCredentials = current?.remoteUrl === settings.remoteUrl ? current.credentials : {};
 	return {
-		username: credentials.username ?? existing.username,
-		token: credentials.token || existing.token,
+		...settings,
+		credentials: {
+			username: settings.credentials.username ?? retainedCredentials.username,
+			token: settings.credentials.token || retainedCredentials.token,
+		},
 	};
 }
 
-export async function verifyProjectGitRemote({
-	projectId,
-	remoteUrl,
-	credentials,
-}: Pick<ProjectGitSettings, "projectId" | "remoteUrl" | "credentials">): Promise<void> {
+/** Verify outside the repository lock. The returned write uses the verified credentials. */
+export async function prepareProjectGitConfig(settings: ResolvedProjectGitSettings) {
 	await runGitTask({
 		type: "verify",
-		remoteUrl,
-		credentials: await resolveCredentials(projectId, remoteUrl, credentials),
+		remoteUrl: settings.remoteUrl,
+		credentials: settings.credentials,
 	});
+	return () => saveProjectGitConfig(settings);
 }
 
-/** Stores verified settings. Run while the project's Git sync lock is held. */
-export async function saveProjectGitConfig({
+async function saveProjectGitConfig({
 	projectId,
 	remoteUrl,
 	branch,
@@ -199,10 +199,9 @@ export async function saveProjectGitConfig({
 	folder = "",
 }: ProjectGitSettings): Promise<ProjectGitConfig> {
 	const dir = repositoryDirectory(projectId);
-	const existingConfig = await getProjectGitConfig(projectId);
-	const effectiveCredentials = await resolveCredentials(projectId, remoteUrl, credentials);
+	const existingConfig = await readConfiguredProject(projectId);
 	if (
-		existingConfig.configured &&
+		existingConfig &&
 		(existingConfig.remoteUrl !== remoteUrl ||
 			existingConfig.branch !== branch ||
 			existingConfig.folder !== folder)
@@ -220,19 +219,13 @@ export async function saveProjectGitConfig({
 		await git.renameBranch({ fs, dir, oldref: currentBranch, ref: branch, checkout: true });
 	}
 
-	await git.addRemote({ fs, dir, remote: REMOTE, url: remoteUrl, force: true });
-	await git.setConfig({ fs, dir, path: `branch.${branch}.remote`, value: REMOTE });
-	await git.setConfig({ fs, dir, path: `branch.${branch}.merge`, value: `refs/heads/${branch}` });
+	await git.addRemote({ fs, dir, remote: PROJECT_GIT_REMOTE, url: remoteUrl, force: true });
+	await configureBranchTracking(dir, branch);
 	await git.setConfig({ fs, dir, path: "marp.branch", value: branch });
 	await git.setConfig({ fs, dir, path: "marp.folder", value: folder });
-	await saveCredentials(projectId, dir, effectiveCredentials);
+	await saveCredentials(projectId, dir, credentials);
 
 	return getProjectGitConfig(projectId);
-}
-
-export async function configureProjectGit(settings: ProjectGitSettings): Promise<ProjectGitConfig> {
-	await verifyProjectGitRemote(settings);
-	return saveProjectGitConfig(settings);
 }
 
 /** Finish a pending rollback before committing an incomplete working tree. */
@@ -345,8 +338,8 @@ export async function pushProjectToGit({
 }
 
 /** Removes the repository, settings and stored access token; project files stay untouched. */
-export async function disconnectProjectGit(projectId: string): Promise<void> {
-	await rm(join(await getProjectDirectory(projectId), ".git", "repository"), {
+export async function removeProjectGitRepository(projectId: string): Promise<void> {
+	await rm(repositoryDirectory(projectId), {
 		recursive: true,
 		force: true,
 	});

@@ -1,21 +1,22 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+	dispatchSlideFrameKey,
+	SLIDE_FRAME_BRIDGE_SCRIPT,
+	useSlideFrameBridge,
+} from "@/hooks/use-slide-frame-bridge";
+import { useEffect, useRef, useState } from "react";
 import { Check, Copy, MinusIcon, PlusIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { renderMarp } from "@/lib/marp";
-import { useSlideTailwindReady } from "@/hooks/use-slide-tailwind-ready";
+import type { SlideDisplay } from "@/lib/marp";
 import { useTheme } from "./theme-provider";
 import marpitSvgPolyfillScript from "@marp-team/marpit-svg-polyfill/lib/polyfill.browser.js?raw";
 import { toast } from "sonner";
 
 type PreviewPaneProps = {
-	markdown: string;
+	slides: SlideDisplay;
 	label: string | null;
 	projectId: string;
 	selectedFileId: string | null;
-	themeRevision: number;
-	assetRevision: number;
-	assetToken?: string;
 	// Null when the editor is on another file. This scroll target stays local.
 	followSlideIndex: number | null;
 	// Receives the zero-based slide index on double-click.
@@ -103,26 +104,12 @@ const staticSrcDoc = `<!doctype html>
       });
 
       // Forward keys because events inside the iframe never reach page-level shortcuts.
-      function forwardKey(type) {
-        return function (e) {
-          if (!port) {
-            return;
-          }
-          port.postMessage({
-            type: 'presentation-key',
-            eventType: type,
-            key: e.key,
-            code: e.code,
-            ctrlKey: e.ctrlKey,
-            shiftKey: e.shiftKey,
-            altKey: e.altKey,
-            metaKey: e.metaKey,
-          });
-        };
+      function forwardKey(event) {
+        if (port) port.postMessage(slideFrameKeyMessage(event, false));
       }
 
-      window.addEventListener('keydown', forwardKey('keydown'));
-      window.addEventListener('keyup', forwardKey('keyup'));
+      window.addEventListener('keydown', forwardKey);
+      window.addEventListener('keyup', forwardKey);
 
       var port = null;
       var lastHtml = null;
@@ -161,46 +148,41 @@ const staticSrcDoc = `<!doctype html>
         applyZoom();
       }
 
-      window.addEventListener('message', function (e) {
-        if (e.source !== window.parent) return;
-        if (e.data && e.data.type === 'init-port' && e.ports && e.ports[0]) {
-          port = e.ports[0];
-          port.onmessage = handlePortMessage;
-        }
-      });
+      ${SLIDE_FRAME_BRIDGE_SCRIPT}
+      listenForSlideFramePort(handlePortMessage);
     </script>
   </head>
   <body></body>
 </html>`;
 
 export const PreviewPane = ({
-	markdown,
+	slides,
 	label,
 	projectId,
 	selectedFileId,
-	themeRevision,
-	assetRevision,
-	assetToken,
 	followSlideIndex,
 	onSlideDoubleClick,
 }: PreviewPaneProps) => {
 	const { resolvedTheme } = useTheme();
-	const iframeRef = useRef<HTMLIFrameElement>(null);
-	// Send updates through a MessagePort tied to the document that received it.
-	const portRef = useRef<MessagePort | null>(null);
-	const [iframeReady, setIframeReady] = useState(false);
 	const prevFileKeyRef = useRef<string | null>(null);
 	const [zoomPercent, setZoomPercent] = useState(100);
-	const onSlideDoubleClickRef = useRef(onSlideDoubleClick);
 	const [copiedLabel, setCopiedLabel] = useState(false);
+	const { port, load, connect } = useSlideFrameBridge((event) => {
+		const payload = event.data;
+		if (payload?.type === "marp-zoom-changed" && typeof payload.zoom === "number") {
+			setZoomPercent(Math.round(payload.zoom * 100));
+			return;
+		}
+		if (payload?.type === "marp-slide-doubleclick" && typeof payload.index === "number") {
+			onSlideDoubleClick?.(payload.index);
+			return;
+		}
+		dispatchSlideFrameKey(payload);
+	});
 
-	useEffect(() => {
-		onSlideDoubleClickRef.current = onSlideDoubleClick;
-	}, [onSlideDoubleClick]);
-
-	const sendZoom = useCallback((action: "in" | "out" | "reset") => {
-		portRef.current?.postMessage({ type: "marp-zoom", action });
-	}, []);
+	const sendZoom = (action: "in" | "out" | "reset") => {
+		port.current?.postMessage({ type: "marp-zoom", action });
+	};
 
 	const copyLabel = async () => {
 		if (!label) {
@@ -216,69 +198,8 @@ export const PreviewPane = ({
 		}
 	};
 
-	const slideTailwindReady = useSlideTailwindReady();
-	const rendered = useMemo(() => {
-		// Re-render when project themes change or the lazy Tailwind compiler becomes ready.
-		void themeRevision;
-		void slideTailwindReady;
-		try {
-			return renderMarp(markdown, projectId, selectedFileId, assetRevision, assetToken);
-		} catch (error) {
-			return {
-				html: `<section><h1>Marp Render Error</h1><p>${error instanceof Error ? error.message : "Unknown error"}</p></section>`,
-				css: "",
-			};
-		}
-	}, [
-		markdown,
-		projectId,
-		selectedFileId,
-		themeRevision,
-		slideTailwindReady,
-		assetRevision,
-		assetToken,
-	]);
-
-	const handlePortMessage = useCallback((event: MessageEvent) => {
-		const payload = event.data;
-		if (payload?.type === "marp-zoom-changed" && typeof payload.zoom === "number") {
-			setZoomPercent(Math.round(payload.zoom * 100));
-			return;
-		}
-
-		if (payload?.type === "marp-slide-doubleclick" && typeof payload.index === "number") {
-			onSlideDoubleClickRef.current?.(payload.index);
-			return;
-		}
-
-		if (!payload || payload.type !== "presentation-key") {
-			return;
-		}
-
-		document.dispatchEvent(
-			new KeyboardEvent(payload.eventType, {
-				key: payload.key,
-				code: payload.code,
-				ctrlKey: payload.ctrlKey,
-				shiftKey: payload.shiftKey,
-				altKey: payload.altKey,
-				metaKey: payload.metaKey,
-				bubbles: true,
-				cancelable: true,
-			}),
-		);
-	}, []);
-
-	const handleIframeLoad = useCallback(() => {
-		const channel = new MessageChannel();
-		portRef.current = channel.port1;
-		channel.port1.onmessage = handlePortMessage;
-		iframeRef.current?.contentWindow?.postMessage({ type: "init-port" }, "*", [channel.port2]);
-		setIframeReady(true);
-	}, [handlePortMessage]);
-
 	useEffect(() => {
-		if (!iframeReady || !portRef.current) {
+		if (!load || !port.current) {
 			return;
 		}
 
@@ -291,7 +212,7 @@ export const PreviewPane = ({
 		const pageShadow =
 			resolvedTheme === "dark" ? "0 2px 12px rgb(0 0 0 / 0.55)" : "0 1px 6px rgb(0 0 0 / 0.18)";
 
-		portRef.current.postMessage({
+		port.current.postMessage({
 			type: "marp-update",
 			scrollToTop,
 			css: `
@@ -305,7 +226,7 @@ export const PreviewPane = ({
       *, *::before, *::after {
         box-sizing: inherit;
       }
-      ${rendered.css}
+      ${slides.css}
       div.marpit {
         display: flex;
         flex-direction: column;
@@ -326,17 +247,17 @@ export const PreviewPane = ({
         width: 100% !important;
       }
     `,
-			html: rendered.html,
+			html: slides.html,
 		});
-	}, [iframeReady, rendered, resolvedTheme, projectId, selectedFileId]);
+	}, [load, slides, resolvedTheme, projectId, selectedFileId, port]);
 
 	useEffect(() => {
-		if (!iframeReady || followSlideIndex === null || !portRef.current) {
+		if (!load || followSlideIndex === null || !port.current) {
 			return;
 		}
 
-		portRef.current.postMessage({ type: "marp-scroll-to-slide", index: followSlideIndex });
-	}, [iframeReady, followSlideIndex]);
+		port.current.postMessage({ type: "marp-scroll-to-slide", index: followSlideIndex });
+	}, [load, followSlideIndex, port]);
 
 	return (
 		<div className="relative flex h-full min-h-0 flex-col overflow-hidden border-l border-border bg-canvas">
@@ -414,12 +335,11 @@ export const PreviewPane = ({
 			</div>
 
 			<iframe
-				ref={iframeRef}
 				title="Marp preview"
 				srcDoc={staticSrcDoc}
 				className="min-h-0 w-full flex-1"
 				sandbox="allow-scripts"
-				onLoad={handleIframeLoad}
+				onLoad={connect}
 			/>
 		</div>
 	);

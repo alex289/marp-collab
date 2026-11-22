@@ -1,6 +1,6 @@
-import { db } from "../db.ts";
+import type { Database } from "better-sqlite3";
 
-function up() {
+function up(db: Database) {
 	db.exec(`
 create table if not exists "user" ("id" text not null primary key, "name" text not null, "email" text not null unique, "emailVerified" integer not null, "image" text, "createdAt" date not null, "updatedAt" date not null);
 create table if not exists "session" ("id" text not null primary key, "expiresAt" date not null, "token" text not null unique, "createdAt" date not null, "updatedAt" date not null, "ipAddress" text, "userAgent" text, "userId" text not null references "user" ("id") on delete cascade);

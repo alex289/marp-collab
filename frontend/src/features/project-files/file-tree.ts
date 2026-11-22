@@ -1,3 +1,4 @@
+import { normalizeProjectFilePath } from "../../lib/project-file-path.ts";
 import type { DeckFile } from "../../lib/types.ts";
 
 export type FileTreeNode = {
@@ -13,10 +14,6 @@ type MutableFileTreeNode = {
 	file: DeckFile | null;
 	children: Map<string, MutableFileTreeNode>;
 };
-
-export function normalizeProjectFilePath(path: string): string {
-	return path.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
-}
 
 function toFileTreeNodes(nodeMap: Map<string, MutableFileTreeNode>): FileTreeNode[] {
 	const nodes = Array.from(nodeMap.values()).map((node) => ({
@@ -85,24 +82,4 @@ export function buildFileTree(files: DeckFile[]): FileTreeNode[] {
 	}
 
 	return toFileTreeNodes(root);
-}
-
-export function getAncestorFolderPaths(fileId: string): string[] {
-	const normalizedId = normalizeProjectFilePath(fileId);
-	const segments = normalizedId.split("/").filter(Boolean);
-	const ancestors: string[] = [];
-	let currentPath = "";
-
-	for (const segment of segments.slice(0, -1)) {
-		currentPath = currentPath ? `${currentPath}/${segment}` : segment;
-		ancestors.push(currentPath);
-	}
-
-	return ancestors;
-}
-
-export function getParentFolderPath(fileId: string): string {
-	const normalized = normalizeProjectFilePath(fileId);
-	const lastSlash = normalized.lastIndexOf("/");
-	return lastSlash === -1 ? "" : normalized.slice(0, lastSlash);
 }

@@ -7,7 +7,7 @@ import { isMarkdownFileId } from "../projects/storage.ts";
 import { logger } from "../helpers/logger.ts";
 import { MCP_WRITE_SCOPE } from "./config.ts";
 import { syncPresentationProject } from "./git.ts";
-import { projectGitResolutionsSchema } from "../projects/git-actions.ts";
+import { projectGitResolutionsSchema } from "../projects/git-input.ts";
 import {
 	PresentationToolError,
 	readPresentation,
@@ -37,6 +37,12 @@ const fileId = z
 const content = z.string().max(1_000_000);
 const identity = { projectId, fileId };
 const gitTool = { readOnlyHint: false, openWorldHint: true };
+export const WRITE_TOOL_NAMES = {
+	createPresentation: "create_presentation",
+	editPresentation: "edit_presentation",
+	pullFromGit: "pull_from_git",
+	pushToGit: "push_to_git",
+} as const;
 // One line without control, format (bidirectional or zero-width) or separator characters, so a
 // message cannot add trailers or hide text in the user's commit.
 const commitMessage = z
@@ -132,7 +138,7 @@ export function createPresentationServer(userId: string, scopes: ReadonlySet<str
 	);
 	if (scopes.has(MCP_WRITE_SCOPE)) {
 		server.registerTool(
-			"create_presentation",
+			WRITE_TOOL_NAMES.createPresentation,
 			{
 				description:
 					"Create a new Markdown presentation in an existing project. Never overwrites an existing file.",
@@ -143,7 +149,7 @@ export function createPresentationServer(userId: string, scopes: ReadonlySet<str
 				runTool(() => writePresentation(projectId, fileId, userId, content)),
 		);
 		server.registerTool(
-			"edit_presentation",
+			WRITE_TOOL_NAMES.editPresentation,
 			{
 				description:
 					"Update an existing presentation and synchronize open editors. Requires the revision from read_presentation; rejects stale edits.",
@@ -158,7 +164,7 @@ export function createPresentationServer(userId: string, scopes: ReadonlySet<str
 				runTool(() => writePresentation(projectId, fileId, userId, content, expectedRevision)),
 		);
 		server.registerTool(
-			"pull_from_git",
+			WRITE_TOOL_NAMES.pullFromGit,
 			{
 				description:
 					"Merge changes from the project's connected Git repository into the project. Paths in overlapping kept both versions of lines changed on both sides; review them.",
@@ -183,7 +189,7 @@ export function createPresentationServer(userId: string, scopes: ReadonlySet<str
 				),
 		);
 		server.registerTool(
-			"push_to_git",
+			WRITE_TOOL_NAMES.pushToGit,
 			{
 				description:
 					"Commit the project's current files, including open edits, and push them to its connected Git repository. Rejected when the remote has newer changes; pull first.",

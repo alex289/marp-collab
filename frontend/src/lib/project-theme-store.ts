@@ -7,7 +7,7 @@ export type ProjectThemeSnapshot = {
 	revision: number;
 };
 
-/** Update the global Marp registry alongside store state to avoid extra renders per keystroke. */
+/** Update the renderer’s theme registry alongside store state to avoid extra renders per keystroke. */
 export function createProjectThemeStore(
 	register: (themes: ProjectTheme[]) => string[],
 	initialNames: string[],

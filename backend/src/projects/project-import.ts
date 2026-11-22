@@ -1,16 +1,17 @@
 import { buffer as readEntryStreamToBuffer } from "node:stream/consumers";
 import { fromBufferPromise } from "yauzl";
 import { getFileType, isEditableExtension } from "../helpers/file-allowlist.ts";
-import { toDocumentName } from "./document-identity.ts";
+import { toDocumentName } from "../../../shared/collaboration.ts";
+import {
+	MAX_PROJECT_CONTENT_BYTES,
+	MAX_PROJECT_FILE_BYTES,
+	MAX_PROJECT_FILE_COUNT,
+} from "./content-limits.ts";
 import { isValidProjectFileLocation, saveDocumentContent, saveProjectFile } from "./storage.ts";
 
 export type ImportResult = {
 	fileCount: number;
 };
-
-export const MAX_IMPORT_ENTRY_COUNT = 5000;
-export const MAX_IMPORT_FILE_UNCOMPRESSED_BYTES = 300 * 1024 * 1024; // 300 MB
-export const MAX_IMPORT_TOTAL_UNCOMPRESSED_BYTES = 1024 * 1024 * 1024; // 1 GB
 
 function isJunkEntryPath(fileName: string): boolean {
 	if (fileName.startsWith("__MACOSX/")) {
@@ -48,20 +49,20 @@ export async function importProjectFromZip(
 
 	for await (const entry of validationZip.eachEntry()) {
 		entryCount++;
-		if (entryCount > MAX_IMPORT_ENTRY_COUNT) {
-			throw new Error(`Zip file contains too many entries (limit: ${MAX_IMPORT_ENTRY_COUNT})`);
+		if (entryCount > MAX_PROJECT_FILE_COUNT) {
+			throw new Error(`Zip file contains too many entries (limit: ${MAX_PROJECT_FILE_COUNT})`);
 		}
 
 		if (entry.fileName.endsWith("/") || isJunkEntryPath(entry.fileName)) {
 			continue;
 		}
 
-		if (entry.uncompressedSize > MAX_IMPORT_FILE_UNCOMPRESSED_BYTES) {
+		if (entry.uncompressedSize > MAX_PROJECT_FILE_BYTES) {
 			throw new Error(`File is too large: ${entry.fileName}`);
 		}
 
 		totalUncompressedBytes += entry.uncompressedSize;
-		if (totalUncompressedBytes > MAX_IMPORT_TOTAL_UNCOMPRESSED_BYTES) {
+		if (totalUncompressedBytes > MAX_PROJECT_CONTENT_BYTES) {
 			throw new Error("Zip file is too large when decompressed");
 		}
 

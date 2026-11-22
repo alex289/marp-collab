@@ -3,7 +3,7 @@ import {
 	getAncestorFolderPaths,
 	getParentFolderPath,
 	normalizeProjectFilePath,
-} from "./file-tree.ts";
+} from "../../lib/project-file-path.ts";
 
 const IMAGE_FOLDER_NAMES = ["images", "assets"];
 
@@ -47,24 +47,4 @@ export function getImageUploadDestination(files: DeckFile[], markdownFileId: str
 	}
 
 	return deckFolder;
-}
-
-/** Returns a project file path relative to the folder containing the Markdown deck. */
-export function getMarkdownRelativeFilePath(markdownFileId: string, projectFileId: string): string {
-	const deckFolderSegments = getParentFolderPath(markdownFileId).split("/").filter(Boolean);
-	const fileSegments = normalizeProjectFilePath(projectFileId).split("/").filter(Boolean);
-	let sharedSegments = 0;
-
-	while (
-		sharedSegments < deckFolderSegments.length &&
-		sharedSegments < fileSegments.length &&
-		deckFolderSegments[sharedSegments] === fileSegments[sharedSegments]
-	) {
-		sharedSegments += 1;
-	}
-
-	return [
-		...deckFolderSegments.slice(sharedSegments).map(() => ".."),
-		...fileSegments.slice(sharedSegments),
-	].join("/");
 }

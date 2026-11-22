@@ -2,8 +2,6 @@ import { escapeHtml, escapeYaml, escapeYamlValue } from "./escape.ts";
 import type { ProjectTemplate } from "./types.ts";
 
 export const whsTemplate: ProjectTemplate = {
-	id: "whs",
-	label: "WHS",
 	themeFiles: ["theme.css", "whs-logo.svg", "inter.woff2", "jetbrains-mono.woff2"],
 	createMarkdown: (title, author) => `---
 marp: true

@@ -13,6 +13,13 @@ describe("project Git sync", () => {
 	let getProjectGitConfig: typeof import("./git-sync.ts").getProjectGitConfig;
 	let gitSync: typeof import("./git-sync.ts");
 	let GIT_TREE_LIMITS: typeof import("./git-tasks.ts").GIT_TREE_LIMITS;
+	async function configureProjectGit(
+		settings: Parameters<typeof gitSync.resolveProjectGitSettings>[0],
+	) {
+		const resolved = await gitSync.resolveProjectGitSettings(settings);
+		const save = await gitSync.prepareProjectGitConfig(resolved);
+		return save();
+	}
 
 	before(async () => {
 		mock.method(git, "listServerRefs", () => Promise.resolve([]));
@@ -67,7 +74,7 @@ describe("project Git sync", () => {
 	});
 
 	test("persists encrypted credentials with the project", async () => {
-		await gitSync.configureProjectGit({
+		await configureProjectGit({
 			projectId: "credential-project",
 			remoteUrl: "https://example.com/slides.git",
 			branch: "main",
@@ -92,7 +99,7 @@ describe("project Git sync", () => {
 		const dir = await storage.getProjectDirectory("symlink-project");
 		await writeFile(join(dir, "slides.md"), "# Slides");
 		await symlink("slides.md", join(dir, "linked.md"));
-		await gitSync.configureProjectGit({
+		await configureProjectGit({
 			projectId: "symlink-project",
 			remoteUrl: "https://example.com/repo.git",
 			branch: "main",
@@ -126,7 +133,7 @@ describe("project Git sync", () => {
 			branch: "main",
 			credentials: { token: "valid" },
 		};
-		await gitSync.configureProjectGit(options);
+		await configureProjectGit(options);
 		const prior = await getProjectGitConfig(options.projectId);
 		t.mock.method(git, "listServerRefs", (args: Parameters<typeof git.listServerRefs>[0]) => {
 			deepEqual(args.onAuth!("https://example.com/repo.git", {}), {
@@ -136,7 +143,7 @@ describe("project Git sync", () => {
 			return Promise.reject(new Error("401"));
 		});
 		await rejects(
-			gitSync.configureProjectGit({ ...options, credentials: { token: "invalid" } }),
+			configureProjectGit({ ...options, credentials: { token: "invalid" } }),
 			gitSync.ProjectGitRemoteError,
 		);
 		deepEqual(await getProjectGitConfig(options.projectId), prior);
@@ -178,7 +185,7 @@ describe("project Git sync", () => {
 		const projectId = "folder-project";
 		const dir = await storage.getProjectDirectory(projectId);
 		const author = { name: "Test", email: "test@example.com" };
-		await gitSync.configureProjectGit({
+		await configureProjectGit({
 			projectId,
 			remoteUrl: "https://example.com/repo.git",
 			branch: "main",
@@ -242,7 +249,7 @@ describe("project Git sync", () => {
 			const projectId = "slides-branch-project";
 			const dir = await storage.getProjectDirectory(projectId);
 			const repository = join(dir, ".git", "repository");
-			await gitSync.configureProjectGit({
+			await configureProjectGit({
 				projectId,
 				remoteUrl: "https://example.com/repo.git",
 				branch: "slides",
@@ -275,7 +282,7 @@ describe("project Git sync", () => {
 			mockRemote(t);
 			const dir = await storage.getProjectDirectory(projectId);
 			const repository = join(dir, ".git", "repository");
-			await gitSync.configureProjectGit({
+			await configureProjectGit({
 				projectId,
 				remoteUrl: "https://example.com/repo.git",
 				branch: "slides",
@@ -468,7 +475,7 @@ describe("project Git sync", () => {
 			const projectId = "slides-rollback-project";
 			const dir = await storage.getProjectDirectory(projectId);
 			const repository = join(dir, ".git", "repository");
-			await gitSync.configureProjectGit({
+			await configureProjectGit({
 				projectId,
 				remoteUrl: "https://example.com/repo.git",
 				branch: "slides",

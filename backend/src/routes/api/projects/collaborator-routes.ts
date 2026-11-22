@@ -11,7 +11,15 @@ import {
 	requireProjectOwner,
 	type ProjectRouteVariables,
 } from "../../../middleware/project-access-middleware.ts";
-import { addCollaboratorSchema, updateCollaboratorSchema } from "./schemas.ts";
+
+const addCollaboratorSchema = z.object({
+	email: z.string().trim().email(),
+	readOnly: z.boolean().default(false),
+});
+
+const updateCollaboratorSchema = z.object({
+	readOnly: z.boolean(),
+});
 
 const app = new Hono<{ Variables: ProjectRouteVariables }>();
 

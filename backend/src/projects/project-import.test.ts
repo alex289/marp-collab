@@ -6,6 +6,7 @@ import { tmpdir } from "node:os";
 import { crc32 } from "node:zlib";
 import type { Readable } from "node:stream";
 import { ZipArchive } from "archiver";
+import { MAX_PROJECT_FILE_COUNT } from "./content-limits.ts";
 
 async function readAll(stream: Readable): Promise<Buffer> {
 	const chunks: Buffer[] = [];
@@ -152,7 +153,7 @@ describe("project import", () => {
 	});
 
 	test("rejects a zip that exceeds the entry count limit", async () => {
-		const entries = Array.from({ length: projectImport.MAX_IMPORT_ENTRY_COUNT + 1 }, (_, i) => ({
+		const entries = Array.from({ length: MAX_PROJECT_FILE_COUNT + 1 }, (_, i) => ({
 			name: `file-${i}.md`,
 			content: "x",
 		}));
