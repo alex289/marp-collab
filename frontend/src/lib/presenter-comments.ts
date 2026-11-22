@@ -11,11 +11,8 @@ export type PresenterUser = {
 };
 
 /**
- * A `presenter: Name` HTML comment identifies the slide's presenter and a
- * `demo` or `demo: Title` comment marks the slide as a live demo. The demo
- * title is shown to the audience, so only the marker's first line is used;
- * further lines stay private speaker notes.
- * All other comments remain available as speaker notes.
+ * Only the first line of a demo marker is shown to the audience. Any remaining
+ * lines in that comment stay in the speaker notes.
  */
 export function parseSlidePresenterComments(comments: readonly string[]): SlidePresenterComments {
 	let presenter: string | null = null;
@@ -71,7 +68,6 @@ export function getNextPresenterChange(
 		: nextPresenter;
 }
 
-/** Finds the profile image of a known user whose name matches the presenter marker. */
 export function findPresenterImage(
 	presenter: string | null,
 	users: readonly PresenterUser[],

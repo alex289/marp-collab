@@ -20,12 +20,11 @@ type SlideOverviewPanelProps = {
 	markdown: string;
 	isMarkdown: boolean;
 	projectId: string;
-	/** Id of the deck being rendered; drives relative asset resolution. */
 	deckFileId: string | null;
 	themeRevision: number;
 	assetRevision: number;
 	assetToken?: string;
-	/** Caret line in the rendered Markdown, or null when another file is open. */
+	/** Null when another file is open. */
 	activeLine: number | null;
 	canEdit: boolean;
 	editHint: string;
@@ -39,10 +38,8 @@ type SlideOverviewPanelProps = {
 	) => DeckBlocks | null;
 };
 
-// Marpit scopes its theme CSS with child combinators (`div.marpit > svg > ...`),
-// so the slides must stay direct children of the container they were rendered
-// in. The number badges are inserted as siblings and the grid places each
-// badge/slide pair on one row.
+// Marpit's child selectors require slides to stay direct children of the container.
+// The grid pairs each slide with its sibling number badge.
 const staticSrcDoc = `<!doctype html>
 <html>
   <head>
@@ -194,9 +191,7 @@ const staticSrcDoc = `<!doctype html>
         openContextMenu(element, e.clientX, e.clientY, false);
       });
 
-      // Returns the insertion slot (0..count) the pointer currently sits in.
-      // The lifted slide rides along with the cursor, so its own rect says
-      // nothing about where the drop belongs and has to be ignored.
+      // Ignore the dragged slide's rectangle because it moves with the pointer.
       function slotFromPoint(y) {
         for (var i = 0; i < slides.length; i++) {
           if (dragging && i === pressIndex) continue;
@@ -284,8 +279,7 @@ const staticSrcDoc = `<!doctype html>
           if (e.clientY < 48) window.scrollBy(0, -14);
           else if (e.clientY > window.innerHeight - 48) window.scrollBy(0, 14);
 
-          // The slide is offset from where it was picked up, so auto-scrolling
-          // the list has to be folded in or it drifts away from the cursor.
+          // Include auto-scroll in the pointer offset so the lifted slide stays under the cursor.
           liftDragged(e.clientY - pressY + (window.scrollY - pressScrollY));
           paintDropSlot(slotFromPoint(e.clientY));
         },
@@ -319,14 +313,12 @@ const staticSrcDoc = `<!doctype html>
       document.addEventListener('lostpointercapture', cancelPointer);
       window.addEventListener('blur', clearDrag);
 
-      // Images inside a slide are still natively draggable, which would spawn a
-      // ghost image and swallow the reorder gesture.
+      // Native image dragging would intercept the slide reorder gesture.
       document.addEventListener('dragstart', function (e) {
         e.preventDefault();
       });
 
-      // Key events inside an iframe don't reach the parent document, so page
-      // hotkeys would die once a thumbnail has focus. Mirrors the preview pane.
+      // Forward keys because events inside the iframe never reach page-level shortcuts.
       function forwardKey(type) {
         return function (e) {
           if (canReorder && (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10'))) {
@@ -429,8 +421,7 @@ export const SlideOverviewPanel = ({
 
 	const slideTailwindReady = useSlideTailwindReady();
 	const rendered = useMemo(() => {
-		// Project themes live on the shared Marp instance; this invalidates stale renders.
-		// Decks using Tailwind render once more after its lazily loaded compiler is ready.
+		// Re-render when project themes change or the lazy Tailwind compiler becomes ready.
 		void themeRevision;
 		void slideTailwindReady;
 		try {
@@ -465,9 +456,7 @@ export const SlideOverviewPanel = ({
 		}
 	}
 	const editable = canEdit && deck !== null;
-	// Selections, menus and forms hold on to the content of their slides, so
-	// they outlive a collaborator typing elsewhere but never retarget a
-	// different slide after one is moved, added or removed.
+	// Identify slides by content so an open menu or form cannot retarget after a remote edit.
 	const slideKey = (indices: number[], blocks = deck?.blocks) =>
 		JSON.stringify([deckFileId, indices.map((index) => blocks?.[index] ?? null)]);
 	const currentSelection =
@@ -497,7 +486,6 @@ export const SlideOverviewPanel = ({
 		if (!edit || !next) {
 			return;
 		}
-		// The menu has done its job; a later open starts from scratch.
 		setThumbnailMenu(null);
 
 		if (selected && action.type === "move") {
@@ -648,10 +636,8 @@ export const SlideOverviewPanel = ({
 			return;
 		}
 
-		// Must mirror index.css; the srcDoc iframe can't read the parent's
-		// custom properties. Its own background stays transparent so the
-		// thumbnails sit directly on the sidebar; browsers only honour that
-		// when the frame's color-scheme matches the page's.
+		// Match index.css because srcDoc cannot read the parent's custom properties.
+		// The frame needs the page's color scheme for its background to stay transparent.
 		const isDark = resolvedTheme === "dark";
 		const pageShadow = isDark ? "0 1px 6px rgb(0 0 0 / 0.55)" : "0 1px 4px rgb(0 0 0 / 0.18)";
 		const liftShadow = isDark ? "0 10px 24px rgb(0 0 0 / 0.7)" : "0 10px 24px rgb(0 0 0 / 0.35)";

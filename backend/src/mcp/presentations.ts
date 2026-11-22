@@ -56,7 +56,7 @@ export async function writePresentation(
 			} catch (error) {
 				const code = error instanceof Error && "code" in error ? error.code : undefined;
 				if (code === "EEXIST" || code === "ENOTDIR" || code === "EISDIR") {
-					// mkdir also fails this way when a parent path segment is a file.
+					// A parent path that is a file can also make mkdir fail here.
 					throw new PresentationToolError(
 						(await getDocumentContent(documentName)) === undefined
 							? "Path conflicts with an existing file or folder."
@@ -82,7 +82,7 @@ export async function writePresentation(
 							"Presentation changed. Read it again and reapply your edit.",
 						);
 					}
-					// Retain unchanged characters and their CRDT identities.
+					// Keep unchanged text in place to preserve its CRDT identities.
 					let start = 0;
 					while (
 						start < previous.length &&
@@ -99,7 +99,7 @@ export async function writePresentation(
 					) {
 						end++;
 					}
-					// Yjs indexes UTF-16 units; do not split emoji/surrogate pairs.
+					// Yjs uses UTF-16 offsets. Keep surrogate pairs intact.
 					const isLowSurrogate = (code: number) => code >= 0xdc00 && code <= 0xdfff;
 					if (start > 0 && isLowSurrogate(previous.charCodeAt(start))) {
 						start--;
@@ -110,10 +110,8 @@ export async function writePresentation(
 					text.delete(start, previous.length - start - end);
 					text.insert(start, content.slice(start, content.length - end));
 				});
-				// A Git sync can reserve the project while waiting for this admitted write.
-				// Its reservation disables normal store hooks, and disconnecting unloads the
-				// document before the sync can flush it, so flush unconditionally
-				// unless a rename, move or delete removed the file meanwhile.
+				// Git sync can disable store hooks while waiting for this write. Flush before disconnect
+				// unloads the document, provided the backing file still exists.
 				if (!(await documentFileExists(documentName))) {
 					throw new PresentationToolError(
 						"Presentation was renamed, moved or deleted during the edit. List files and try again.",
@@ -121,7 +119,6 @@ export async function writePresentation(
 				}
 				await flushProjectFileDocument(projectId, fileId);
 			} finally {
-				// Store hooks persist Markdown and Yjs state before reporting success.
 				await connection.disconnect();
 			}
 		}

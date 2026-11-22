@@ -66,7 +66,6 @@ export function loadAuthConfig() {
 		}
 	}
 
-	// Validate and convert to final config array
 	providers = [];
 	for (const [providerId, config] of parsedProviders.entries()) {
 		if (!config.clientId) {

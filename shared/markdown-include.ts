@@ -8,7 +8,7 @@ function error(message: string): string {
 	return `> ⚠️ **Include error:** ${message}`;
 }
 
-/** Only standalone comments outside fenced code blocks are executable. */
+/** Include directives must be standalone and outside fenced code blocks. */
 function includeLines(markdown: string): Map<number, string> {
 	const includes = new Map<number, string>();
 	let fence: string | undefined;
@@ -58,7 +58,7 @@ function resolveIncludePath(parent: string, path: string): string | undefined {
 	return parts.join("/");
 }
 
-/** Shared by preview and PDF export. Reads are cached only for this expansion. */
+/** File reads are cached for the lifetime of one expansion. */
 export async function expandMarkdownIncludes(
 	markdown: string,
 	currentFileId: string,

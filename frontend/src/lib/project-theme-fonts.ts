@@ -14,7 +14,7 @@ const fontMimeTypes: Record<string, string> = {
 	otf: "font/otf",
 };
 
-// Font MIME types vary between servers, but an access proxy's login page never matches.
+// Allow common font response types while skipping HTML login pages from access proxies.
 const fontResponseTypeRegex = /^(?:font\/|application\/(?:x-)?font-|application\/octet-stream\b)/i;
 
 function toBase64(bytes: Uint8Array): string {
@@ -42,7 +42,7 @@ async function fetchFont(path: string, mimeType: string): Promise<string | undef
 	if (font.byteLength > MAX_EMBEDDED_FONT_BYTES) {
 		return undefined;
 	}
-	// The MIME type comes from the extension, not the response, so it cannot break out of url().
+	// Use an allowlisted MIME type so the server's header cannot alter the CSS URL.
 	return `data:${mimeType};base64,${toBase64(font)}`;
 }
 
@@ -57,7 +57,6 @@ export async function inlineProjectThemeFonts(
 			if (!reference.startsWith(prefix)) {
 				return null;
 			}
-			// Only the normalized path matters; the base just makes the URL parseable.
 			const path = new URL(reference, "http://localhost").pathname;
 			const extension = /\.(woff2?|ttf|otf)$/i.exec(path)?.[1]?.toLowerCase();
 			const mimeType = extension ? fontMimeTypes[extension] : undefined;
@@ -65,9 +64,8 @@ export async function inlineProjectThemeFonts(
 				return null;
 			}
 
-			// WHY: An opaque-origin iframe cannot authenticate font requests to an access proxy.
-			// Failures stay cached until the file list changes, so an unreachable font
-			// doesn't hold up every later edit until it times out.
+			// Fetch on the parent page because the opaque iframe cannot authenticate to the proxy.
+			// Cache failures until the file list changes so edits do not wait on repeated timeouts.
 			let request = requests.get(path);
 			if (!request) {
 				request = fetchFont(path, mimeType).catch(() => undefined);
@@ -78,7 +76,6 @@ export async function inlineProjectThemeFonts(
 		}),
 	);
 
-	// Keep later fonts as URLs once the theme reaches its budget.
 	let budget = (MAX_EMBEDDED_THEME_FONT_BYTES / 3) * 4;
 	const embedded = fonts.filter((font) => {
 		if (!font || font.dataUrl.length > budget) {

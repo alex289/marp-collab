@@ -33,11 +33,9 @@ test("refuses to load or store project documents while the project syncs with Gi
 
 	lock.startProjectGitSync("syncing");
 	try {
-		await rejects(
-			collab.collabServer.configuration.onLoadDocument!({ documentName } as never),
-			// The reason, not the message, is what reaches the client.
-			{ reason: collab.GIT_SYNC_REJECTION_REASON },
-		);
+		await rejects(collab.collabServer.configuration.onLoadDocument!({ documentName } as never), {
+			reason: collab.GIT_SYNC_REJECTION_REASON,
+		});
 		await collab.collabServer.configuration.onStoreDocument!({ documentName, document } as never);
 		equal(await storage.getDocumentContent(documentName), "pulled");
 	} finally {

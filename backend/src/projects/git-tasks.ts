@@ -20,7 +20,6 @@ import {
 const REMOTE = "origin";
 /**
  * Checking out a tree writes each path, so a blob listed under many paths is written many times.
- * Tests lower these.
  */
 export const GIT_TREE_LIMITS = { entries: 50_000, bytes: MAX_GIT_PACK_UNPACKED_BYTES };
 // Common file system limits; longer names would also reach logs and responses in error messages.
@@ -77,7 +76,6 @@ type GitTaskResults = {
 	commit: string;
 	pull: { commit: string; pulled: boolean; overlapping: string[] };
 	reset: undefined;
-	/** `committed` is false when the project had no changes since the last commit. */
 	push: { commit: string; committed: boolean; pushed: boolean };
 };
 
@@ -221,7 +219,6 @@ async function configureBranch(dir: string, branch: string): Promise<void> {
 	await git.setConfig({ fs, dir, path: `branch.${branch}.merge`, value: branchRef(branch) });
 }
 
-/** Copies the project's files into the repository and commits them if they changed. */
 async function commitProjectFiles({
 	repository: dir,
 	branch,
@@ -257,7 +254,6 @@ async function getRemoteBranch({ remoteUrl, branch, credentials }: Remote) {
 	return refs.find((ref) => ref.ref === branchRef(branch));
 }
 
-/** Checks that the remote accepts the credentials. */
 async function verifyRemote(remoteUrl: string, credentials: GitCredentials): Promise<undefined> {
 	try {
 		// Send supplied credentials on the first request, including for public remotes.
@@ -387,7 +383,6 @@ export function handleGitTask(task: GitTask): Promise<GitTaskResults[keyof GitTa
 	}
 }
 
-/** Messages can quote paths from the remote, which may be very long. */
 function shorten(message: string): string {
 	return message.length > MAX_ERROR_MESSAGE_LENGTH
 		? `${message.slice(0, MAX_ERROR_MESSAGE_LENGTH)}…`

@@ -19,9 +19,7 @@ function isJunkEntryPath(fileName: string): boolean {
 	return fileName.split("/").some((segment) => segment.startsWith("."));
 }
 
-// Detects a single top-level folder shared by every entry
-// Zip files often contain a single top-level folder,
-// which we can strip to avoid creating an unnecessary folder in the projec
+// Strip a common archive wrapper so its contents land at the project root.
 function detectCommonTopLevelFolder(fileNames: string[]): string {
 	if (fileNames.length === 0) {
 		return "";
@@ -42,7 +40,7 @@ export async function importProjectFromZip(
 ): Promise<ImportResult> {
 	const buffer = Buffer.from(zipData);
 
-	// Pass 1: validate every entry.
+	// Check entry limits and file types before writing any files.
 	const validationZip = await fromBufferPromise(buffer, { lazyEntries: true, autoClose: true });
 	let entryCount = 0;
 	let totalUncompressedBytes = 0;
@@ -80,7 +78,6 @@ export async function importProjectFromZip(
 
 	const stripPrefix = detectCommonTopLevelFolder(importableFileNames);
 
-	// Pass 2: re-open the zip and actually extract
 	const extractionZip = await fromBufferPromise(buffer, { lazyEntries: true, autoClose: true });
 	let fileCount = 0;
 

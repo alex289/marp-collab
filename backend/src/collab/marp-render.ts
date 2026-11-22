@@ -16,7 +16,7 @@ function dirOf(fileId: string): string {
 	return dir === "." ? "" : `${dir}/`;
 }
 
-// 1x1 transparent GIF. Replaced for any asset reference that looks like a URL or absolute path, to avoid SSRF attacks.
+// Substitute a transparent pixel for HTTP(S) URLs and absolute paths in PDF assets.
 const INERT_ASSET_DATA_URI =
 	"data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///ywAAAAAAQABAAACAUwAOw==";
 
@@ -39,21 +39,19 @@ function marpScriptContent(): string | undefined {
 }
 
 const marpScript = marpScriptContent();
-// Without a hash the script is blocked: PDFs still render, only heading fitting is lost.
+// If the script cannot be isolated, export PDFs with scripting disabled.
 export const MARP_SCRIPT_CSP_SOURCE = marpScript
 	? `'sha256-${createHash("sha256").update(marpScript).digest("base64")}'`
 	: "'none'";
 
 const themeMarkerRegex = /\/\*[\s\S]*?@theme\s+([\w-]+)/;
 
-// Marpit's `@import "name";` is meant for inheriting from another registered theme by
-// name (e.g. `@import "default";`), but Marpit does not validate the import target
-// This prevents loading arbitrary CSS files from the filesystem or network
-// The target excludes `@` so each match attempt stops at the next rule (no backtracking blowup).
+// Excluding `@` keeps a failed match from scanning into later at-rules.
 const importRuleRegex = /@import\s+(?:url\(\s*)?(['"]?)([^'");@]+)\1\s*\)?\s*;/gi;
 
 function sanitizeThemeImports(css: string): string {
 	return css.replace(importRuleRegex, (match, _quote: string, target: string) => {
+		// Keep named theme imports and strip targets that look like URLs or paths.
 		const looksLikeUrlOrPath =
 			/:\/\//.test(target) ||
 			target.startsWith("/") ||
@@ -169,17 +167,16 @@ export async function renderMarkdownForPdf(
 
 	const marp = new Marp({
 		html: {
-			...Marp.html, // Use Marp's own safe default allowlist
+			...Marp.html,
 			img: {
 				...(Marp.html.img as Record<string, boolean>),
-				src: (value: string) => rewriteAssetRef(markdownDir, value), // Rewrite <img src>
+				src: (value: string) => rewriteAssetRef(markdownDir, value),
 			},
 		},
 		inlineSVG: true,
 		printable: true,
 	});
 
-	// Rewrite markdown image urls
 	marp.use((md) => {
 		md.inline.ruler2.after(
 			"marpit_background_image",

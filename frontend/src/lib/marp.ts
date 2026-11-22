@@ -35,9 +35,7 @@ function resolvePosixPath(dir: string, src: string): string {
 	return stack.join("/");
 }
 
-// A leading "/" is treated as relative to the project's file root, not the
-// app's own origin — users have no reason to reference application files, only
-// their own project assets.
+// Resolve leading slashes from the project root instead of the app origin.
 function resolveAssetPath(dir: string, src: string): string {
 	return src.startsWith("/") ? resolvePosixPath("", src.slice(1)) : resolvePosixPath(dir, src);
 }
@@ -105,16 +103,15 @@ class SourceMappedMarp extends Marp {
 
 const marp = new SourceMappedMarp({
 	html: {
-		...Marp.html, // Use Marps built-in HTML allowlist
+		...Marp.html,
 		img: {
 			...(Marp.html.img as Record<string, boolean>),
-			src: (value: string) => rewriteImageSrc(value), // Rewrite <img src> to load from backend API
+			src: (value: string) => rewriteImageSrc(value),
 		},
 	},
 });
 
 marp.use((md) => {
-	// Plugin to rewrite markdown ![]() image URLs to point to the backend API
 	md.inline.ruler2.after(
 		"marpit_background_image",
 		"rewrite_image_urls",
@@ -187,7 +184,6 @@ async function importTailwindCatalog() {
 	}
 }
 
-/** Tailwind classes and variants for editor completions, loaded once on demand. */
 export const loadTailwindCatalog = () => (tailwindCatalog ??= importTailwindCatalog());
 
 export const renderMarp = (
@@ -246,10 +242,6 @@ function prepareThemeCss(css: string, fallbackName: string): { css: string; name
 	return { css: `/* @theme ${fallbackName} */\n${css}`, name: fallbackName };
 }
 
-/**
- * Rewrites relative url(...) references in a CSS string to absolute backend API URLs.
- * Mirrors the image URL rewriting done for Markdown — background-image, @font-face src, etc.
- */
 export function rewriteCssUrls(
 	css: string,
 	projectId: string,
@@ -270,15 +262,10 @@ export function rewriteCssUrls(
 	);
 }
 
-/** Returns every registered theme name (built-ins plus project CSS themes). */
 export const listThemeNames = (): string[] =>
 	Array.from(marp.themeSet.themes(), (theme) => theme.name);
 
-/**
- * Registers project CSS files as Marpit themes. A file becomes a theme named
- * after its own `@theme` marker, or after its file name when the marker is
- * missing. Replaces any previously registered project themes.
- */
+/** Replace the previous project themes. A CSS file without a theme marker uses its filename. */
 export const setProjectThemes = (themes: Array<{ id: string; css: string }>): string[] => {
 	for (const name of customThemeNames) {
 		marp.themeSet.delete(name);

@@ -11,7 +11,6 @@ const { version: appVersion } = JSON.parse(
 	readFileSync(new URL("../package.json", import.meta.url), "utf8"),
 ) as { version: string };
 
-// https://vite.dev/config/
 export default defineConfig(({ mode }) => ({
 	plugins: [
 		tanstackRouter({

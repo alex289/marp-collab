@@ -195,9 +195,8 @@ type FileSidebarProps = {
 	workspace: ProjectFilesWorkspace;
 	sidebarOpen: boolean;
 	setSidebarOpen: (open: boolean) => void;
-	/** Expanded sidebar width in pixels. */
 	width?: number;
-	/** True while the user drags the resize handle; disables width transitions. */
+	/** Disable width transitions during a drag. */
 	isResizing?: boolean;
 	searchPanel?: React.ReactNode;
 	outlinePanel?: React.ReactNode;

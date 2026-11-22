@@ -131,11 +131,8 @@ function FileTreeAction({
 		<Tooltip>
 			<TooltipTrigger
 				render={
-					// Nested menu items share the group/menu-item scope, so showOnHover
-					// would reveal the actions of every row in a hovered folder subtree.
-					// Scope the reveal to the row's own group/row wrapper instead. Use
-					// :focus-visible rather than focus-within so a mouse click on the row
-					// (which leaves focus on its button) doesn't pin the actions visible.
+					// Scope the reveal to this row so hovering a folder does not reveal its children's actions.
+					// Use focus-visible so mouse clicks do not leave the actions visible.
 					<SidebarMenuAction
 						onClick={onClick}
 						aria-label={label}

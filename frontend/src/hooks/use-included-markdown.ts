@@ -32,8 +32,7 @@ export function useIncludedMarkdown(markdown: string, projectId: string, fileId:
 				}
 			} catch {
 				if (!controller.signal.aborted) {
-					// A failed background refresh must not remove slides or reset the
-					// presentation position. Keep the last expansion until retry succeeds.
+					// Keep the last expansion on a failed refresh so the deck retains its current slide.
 					setResolved((current) =>
 						current?.projectId === projectId && current.fileId === fileId
 							? current

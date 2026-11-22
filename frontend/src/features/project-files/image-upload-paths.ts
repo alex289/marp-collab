@@ -26,10 +26,7 @@ function getProjectFolderPaths(files: DeckFile[]): Map<string, string> {
 	return folders;
 }
 
-/**
- * Picks a conventional image folder near the Markdown deck without creating one.
- * If none exists, images stay beside the deck as before.
- */
+/** Use an existing image folder near the deck, or fall back to the deck's folder. */
 export function getImageUploadDestination(files: DeckFile[], markdownFileId: string): string {
 	const deckFolder = getParentFolderPath(markdownFileId);
 	const folders = getProjectFolderPaths(files);

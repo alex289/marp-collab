@@ -43,7 +43,7 @@ function ConsentRoute() {
 			if (response.error) {
 				throw new Error(response.error.message ?? "Authorization failed.");
 			}
-			// Keep both buttons disabled while the client redirects back to the AI app.
+			// Keep the form locked until the OAuth redirect navigates away.
 		} catch (error) {
 			setSubmitError(error instanceof Error ? error.message : "Authorization failed.");
 			setPending(false);

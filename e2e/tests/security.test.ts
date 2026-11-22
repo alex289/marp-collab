@@ -1,7 +1,6 @@
 import { test, expect } from "@playwright/test";
 import { APP_URL } from "./const.ts";
 
-// Run all tests in this file without authentication
 test.use({ storageState: { cookies: [], origins: [] } });
 
 test.describe("security headers", () => {

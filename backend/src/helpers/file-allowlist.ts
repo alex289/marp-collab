@@ -66,9 +66,7 @@ const EXTENSION_TO_MIME: Record<string, string> = {
 export function isAllowedUpload(filename: string, mimeType: string): boolean {
 	const ext = extname(filename).toLowerCase();
 	if (FONT_EXTENSIONS.has(ext)) {
-		// Font MIME types are unreliable across browsers and operating systems
-		// Some report a generic "application/octet-stream" MIME type, while others report
-		// font/* or application/font-* or application/x-font-* MIME types.
+		// Some browsers upload fonts as application/octet-stream or legacy font MIME types.
 		return true;
 	}
 	if (MARKDOWN_EXTENSIONS.has(ext)) {

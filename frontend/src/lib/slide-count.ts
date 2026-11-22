@@ -1,4 +1,3 @@
-// Tracks fenced code blocks so slide dividers inside code are ignored.
 type Fence = {
 	marker: "`" | "~";
 	length: number;
@@ -35,13 +34,11 @@ const isDivider = (line: string) => /^\s*-{3,}\s*$/.test(line);
 
 type ScannedLine = {
 	text: string;
-	/** Character offset of the first character of the line. */
 	start: number;
-	/** Character offset just past the line's terminator (end of input for the last line). */
+	/** Exclusive end offset, including the line terminator if present. */
 	end: number;
 };
 
-/** Splits on the same terminators as `String.split(/\r\n|\n|\r/)`, keeping offsets. */
 export function splitSourceLines(markdown: string): ScannedLine[] {
 	const lines: ScannedLine[] = [];
 	const terminator = /\r\n|\n|\r/g;
@@ -62,9 +59,8 @@ export function splitSourceLines(markdown: string): ScannedLine[] {
 export type DeckDivider = {
 	/** 0-based index of the divider line. */
 	lineIndex: number;
-	/** Offset of the first character of the divider line. */
 	start: number;
-	/** Offset just past the divider's line terminator. */
+	/** Exclusive end offset, including the divider's line terminator. */
 	end: number;
 };
 
@@ -72,22 +68,15 @@ export type DeckScan = {
 	lineCount: number;
 	/** 0-based index of the first line after the YAML front matter. */
 	contentLineIndex: number;
-	/** Character offset of the first line after the YAML front matter. */
 	contentOffset: number;
 	dividers: DeckDivider[];
 };
 
-/**
- * Single pass over the Markdown that locates the slide dividers — the `---`
- * lines outside code fences and outside the leading YAML front matter. Every
- * other slide helper is derived from this so they can never disagree.
- */
+/** Scans hyphen dividers outside fenced code and leading YAML front matter. */
 export function scanDeck(markdown: string): DeckScan {
 	const lines = splitSourceLines(markdown);
 	let contentLineIndex = 0;
 
-	// YAML front matter is delimited by `---` (closed by `---` or `...`) at
-	// the very start of the document; those lines are not slide dividers.
 	if (lines[0]?.text.trim() === "---") {
 		for (let index = 1; index < lines.length; index += 1) {
 			const trimmed = lines[index].text.trim();
@@ -131,20 +120,12 @@ export function scanDeck(markdown: string): DeckScan {
 	};
 }
 
-/**
- * Counts Marp slides directly from the Markdown source, by counting `---`
- * dividers outside of code fences (Marp's own frontmatter delimiters are
- * skipped, not counted as dividers). Slide count is `dividers + 1`.
- */
+/** Estimates slide count without rendering the deck. */
 export function countMarpSlides(markdown: string): number {
 	return scanDeck(markdown).dividers.length + 1;
 }
 
-/**
- * Returns the 0-based index of the slide containing the given 1-based line
- * number, using the same divider/fence/front-matter rules as
- * `countMarpSlides`.
- */
+/** Maps a one-based source line to a zero-based slide index. */
 export function getSlideIndexForLine(markdown: string, line: number): number {
 	const targetIndex = Math.max(0, line - 1);
 	const { dividers } = scanDeck(markdown);
@@ -161,11 +142,7 @@ export function getSlideIndexForLine(markdown: string, line: number): number {
 	return slideIndex;
 }
 
-/**
- * Returns the 1-based line number where the given 0-based slide index
- * starts, using the same divider/fence/front-matter rules as
- * `countMarpSlides`. Out-of-range indexes fall back to the closest bound.
- */
+/** Maps a zero-based slide index to a one-based source line, clamped to the deck. */
 export function getLineForSlideIndex(markdown: string, slideIndex: number): number {
 	const { contentLineIndex, dividers, lineCount } = scanDeck(markdown);
 

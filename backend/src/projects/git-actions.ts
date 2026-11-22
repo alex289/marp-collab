@@ -37,9 +37,7 @@ import { MAX_REPORTED_CONFLICTS } from "./git-tasks.ts";
 export class ProjectDeletedError extends Error {}
 /** The user may not change the project, or lost write access while the sync waited. */
 export class ProjectGitAccessError extends Error {}
-/** Another sync or settings change holds the project's repository. */
 export class ProjectGitBusyError extends Error {}
-/** The server already runs as many Git operations as it allows. */
 export class ProjectGitServerBusyError extends Error {}
 
 /** A pull reports at most this many conflicts, so it never needs more resolutions. */
@@ -118,7 +116,6 @@ function assertWriteAccess(projectId: string, userId: string): void {
 	}
 }
 
-/** Holds a server-wide Git operation slot while `run` executes. */
 export async function withGitOperation<T>(run: () => Promise<T>): Promise<T> {
 	const release = beginGitOperation();
 	if (!release) {
@@ -131,7 +128,6 @@ export async function withGitOperation<T>(run: () => Promise<T>): Promise<T> {
 	}
 }
 
-/** Holds the project's Git repository for a settings change; editors keep working meanwhile. */
 export async function withProjectConfigureLock<T>(
 	projectId: string,
 	run: () => Promise<T>,
@@ -168,7 +164,6 @@ async function assertGitConfigured(projectId: string): Promise<void> {
 	}
 }
 
-/** Pulls or pushes a project as the given user after saving and closing open documents. */
 export async function syncProjectWithGit(
 	projectId: string,
 	userId: string,

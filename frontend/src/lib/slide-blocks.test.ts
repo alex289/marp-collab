@@ -114,8 +114,6 @@ test("keeps the slide count stable across a move", () => {
 });
 
 test("inserts the blank line a divider needs so text stays a paragraph", () => {
-	// Without the blank line, `---` below "Trailing text" would parse as a
-	// setext H2 underline instead of a slide divider.
 	const tight = "# One\n\n---\n\nTrailing text";
 	const moved = moveSlide(tight, 1, 0);
 
@@ -177,7 +175,6 @@ test("keeps section labels in source and moves the whole section", () => {
 	assert.match(moved.markdown, /# Two[\s\S]+# Three[\s\S]+# One/);
 	assert.match(moved.markdown, /\n<!-- section: Findings -->\n\n# Two/);
 	const rendered = new Marp().render(moved.markdown);
-	// The presenter view drops these; see getSectionMarkerSlides.
 	assert.deepEqual(rendered.comments, [["section: Findings"], [], ['section: Intro "quoted"']]);
 	assert.doesNotMatch(rendered.html, /Findings|quoted/);
 });

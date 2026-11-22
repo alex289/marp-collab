@@ -27,12 +27,8 @@ function sign(payload: string): string {
 }
 
 /**
- * Rounds the expiry up onto a fixed grid so every request within the same
- * window signs a byte-identical token. Asset URLs embed the token, so an
- * expiry taken straight from the clock would hand out a different URL for the
- * same image on every refresh — busting the browser cache and making images
- * visibly reload. The trade-off is that a token stays valid for between one
- * and two TTLs.
+ * Keep tokenized asset URLs stable within a TTL window so browsers can reuse cached assets.
+ * Rounding up gives each token a lifetime of one to two TTLs.
  */
 function quantizedExpiry(ttlSeconds: number): number {
 	const now = Date.now();

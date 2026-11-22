@@ -13,11 +13,7 @@ type PaneResizeHandleProps = {
 
 const NUDGE_STEP = 16;
 
-/**
- * Draggable divider between panes. Rendered inside a zero-width grid track so
- * it doesn't shift the layout; the interactive area overlaps the neighboring
- * panes by a few pixels on each side.
- */
+/** The hit area overlaps both panes so the divider can occupy a zero-width grid track. */
 export const PaneResizeHandle = ({
 	label,
 	onResize,

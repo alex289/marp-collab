@@ -83,7 +83,6 @@ function RootComponent() {
 	const isUserOffline = useIsUserOffline();
 	const { isBackendUnreachable, isBackendUnhealthy } = useHealthCheck();
 
-	// Sync auth across tabs
 	useAuthSync();
 
 	if (isUserOffline) {

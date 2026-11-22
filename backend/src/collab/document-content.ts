@@ -2,16 +2,13 @@ import * as Y from "yjs";
 import { collabServer } from "./hocuspocus.ts";
 import { getDocumentBinary, getDocumentContent } from "../projects/storage.ts";
 
-/** Read active edits before falling back to the persisted document. */
+/** Live edits take precedence over the saved text file. */
 export async function getCurrentDocumentContent(documentName: string): Promise<string | undefined> {
 	const live = collabServer.documents.get(documentName);
 	return live ? live.getText("content").toJSON() : await getDocumentContent(documentName);
 }
 
-/**
- * Read the content a collab load would produce. Like onLoadDocument, persisted
- * CRDT state wins over the plain-text file, which can be newer after an upload.
- */
+/** Use the same CRDT-first order as a collab load, even when an upload made the text file newer. */
 export async function getCollabDocumentContent(documentName: string): Promise<string | undefined> {
 	const live = collabServer.documents.get(documentName);
 	if (live) {

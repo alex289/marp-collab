@@ -12,11 +12,7 @@ type CollabState = {
 	status: "connecting" | "connected" | "disconnected" | "syncing";
 	readOnly: boolean;
 	synced: boolean;
-	/**
-	 * Name of the document this state belongs to. The state lags one render
-	 * behind a document switch; consumers must compare this against the
-	 * document they expect instead of assuming yText is the current file's.
-	 */
+	/** Compare with the requested document name. State can lag a file switch by one render. */
 	documentName: string | null;
 };
 
@@ -32,9 +28,7 @@ const defaultState: CollabState = {
 
 const palette = ["#f97316", "#16a34a", "#0ea5e9", "#e11d48", "#0891b2", "#ca8a04"];
 const PROJECT_PRESENCE_DOCUMENT_ID = "__presence";
-// Matches GIT_SYNC_REJECTION_REASON in backend/src/collab/hocuspocus.ts, sent while
-// the project is syncing with Git, so we can surface it distinctly from a generic
-// connection failure instead of leaving already-connected users guessing.
+// Keep this in sync with GIT_SYNC_REJECTION_REASON in backend/src/collab/hocuspocus.ts.
 const GIT_SYNC_AUTH_FAILURE_REASON = "Project is syncing with Git";
 
 const hashString = (value: string): number => {
@@ -84,9 +78,6 @@ export const useCollabDocument = (
 		const yDoc = new Y.Doc();
 		const yText = yDoc.getText("content");
 		const undoManager = new Y.UndoManager(yText);
-		// Tracks whether the last authentication failure was caused by a Git sync
-		// in progress, so a subsequent status change can be reported as "syncing"
-		// instead of a plain disconnect until the provider reconnects.
 		let gitSyncing = false;
 		let retryTimer: ReturnType<typeof setTimeout> | undefined;
 		const retryDocument = () => {
@@ -152,7 +143,6 @@ export const useCollabDocument = (
 			image: user.image,
 		});
 
-		// Publishes the objects of the connection this effect just opened.
 		// oxlint-disable-next-line react/set-state-in-effect
 		setState({
 			yText,
@@ -206,7 +196,6 @@ export const useProjectPresence = (
 		});
 
 		providerRef.current = provider;
-		// Publishes the awareness of the connection this effect just opened.
 		// oxlint-disable-next-line react/set-state-in-effect
 		setAwareness(provider.awareness);
 

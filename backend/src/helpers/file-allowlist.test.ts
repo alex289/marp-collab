@@ -56,7 +56,6 @@ describe("file-allowlist", () => {
 	});
 
 	test("isAllowedUpload allows font files regardless of MIME type", () => {
-		// Browsers report inconsistent MIME types for fonts
 		equal(isAllowedUpload("icon.woff", "font/woff"), true);
 		equal(isAllowedUpload("icon.woff", "application/octet-stream"), true);
 		equal(isAllowedUpload("icon.woff2", "application/x-font-woff"), true);

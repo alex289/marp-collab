@@ -31,7 +31,6 @@ app.post("/", async (c) => {
 	}
 
 	const stagingId = `importing-${randomUUID()}`;
-	// Tracks which dir to delete on failure
 	let importedDirectoryId = stagingId;
 
 	try {

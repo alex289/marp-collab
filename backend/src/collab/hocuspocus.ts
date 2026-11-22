@@ -24,7 +24,7 @@ type CollabContext = {
 
 const fallbackColors = ["#f97316", "#16a34a", "#0ea5e9", "#e11d48", "#7c3aed", "#db2777"];
 const PROJECT_PRESENCE_DOCUMENT_ID = "__presence";
-/** Sent to clients as the rejection reason, so they can wait for the sync instead of giving up. */
+/** The client recognizes this rejection reason and retries after Git sync. */
 export const GIT_SYNC_REJECTION_REASON = "Project is syncing with Git";
 
 const hashString = (value: string): number => {
@@ -66,9 +66,7 @@ export const collabServer = new Hocuspocus({
 		documentName: string;
 		connectionConfig: ConnectionConfiguration;
 	}) {
-		// Hocuspocus swallows exceptions thrown from this hook without logging
-		// them anywhere, so genuine bugs (not just expected auth rejections)
-		// would otherwise be completely invisible.
+		// Hocuspocus does not log exceptions from this hook.
 		try {
 			const session = await auth.api.getSession({ headers: requestHeaders });
 			if (!session) {
@@ -123,8 +121,6 @@ export const collabServer = new Hocuspocus({
 		if (isSyncingProjectDocument(documentName)) {
 			throw gitSyncRejection();
 		}
-		// See the comment in onAuthenticate: Hocuspocus does not log exceptions
-		// thrown from this hook, so we log them ourselves before rethrowing.
 		try {
 			if (isProjectPresenceDocument(documentName)) {
 				return new Y.Doc();
@@ -139,9 +135,7 @@ export const collabServer = new Hocuspocus({
 
 			const initialContent = await getDocumentContent(documentName);
 			if (initialContent === undefined) {
-				// Files are always created through the REST API before they are opened
-				// for collaboration. A missing file means it was renamed, moved, or
-				// deleted — refuse to load so a reconnecting client can't recreate it.
+				// Refuse to reopen a renamed or deleted file from a stale client connection.
 				throw new Error(`Document not found: ${documentName}`);
 			}
 
@@ -161,8 +155,7 @@ export const collabServer = new Hocuspocus({
 			}
 
 			if (!(await documentFileExists(documentName))) {
-				// The backing file was renamed, moved, or deleted while this document
-				// was still loaded — don't resurrect it at the old location.
+				// A pending store must not recreate a renamed or deleted file.
 				return;
 			}
 

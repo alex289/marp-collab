@@ -167,7 +167,6 @@ export function mergeTextFiles(
 
 const RESOLVED_REF = "refs/marp-collab/resolved";
 
-/** The entry at `path` in a tree, or null where nothing is. */
 async function findEntry(dir: string, tree: string, path: string[]): Promise<GitTreeEntry | null> {
 	const [name, ...rest] = path;
 	const { tree: entries } = await git.readTree({ fs, dir, oid: tree });
@@ -178,7 +177,7 @@ async function findEntry(dir: string, tree: string, path: string[]): Promise<Git
 	return entry.type === "tree" ? findEntry(dir, entry.oid, rest) : null;
 }
 
-/** Writes a copy of `tree` with `entry` at `path`, or without anything there. Returns null for an empty tree. */
+/** Returns null when removing an entry leaves the tree empty. */
 async function replaceEntry(
 	dir: string,
 	tree: string | null,

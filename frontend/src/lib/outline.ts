@@ -4,7 +4,6 @@ export type OutlineItem = {
 	line: number;
 };
 
-// Tracks fenced code blocks so headings and slide separators inside code are ignored.
 type Fence = {
 	marker: "`" | "~";
 	length: number;

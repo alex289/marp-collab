@@ -31,7 +31,6 @@ export type ThumbnailMenu = {
 };
 
 type SlideOverviewActionsProps = {
-	/** Identifies a slide by its content, so an open form never retargets another slide. */
 	slideKey: (index: number) => string;
 	slideCount: number;
 	activeIndex: number;
