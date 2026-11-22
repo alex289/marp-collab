@@ -1,6 +1,6 @@
 import { betterAuth } from "better-auth";
 import { db } from "./db/db.ts";
-import { genericOAuth, jwt } from "better-auth/plugins";
+import { genericOAuth, jwt, lastLoginMethod } from "better-auth/plugins";
 import { mcp } from "@better-auth/mcp";
 import { cimd } from "@better-auth/cimd";
 import { fetchClientMetadataResource } from "@better-auth/cimd/node";
@@ -59,6 +59,10 @@ export const auth = betterAuth({
 		cimd({ fetchClientMetadataResource, metadataProfile: "mcp-2026-07-28" }),
 		genericOAuth({
 			config: getAuthProviders(),
+		}),
+		lastLoginMethod({
+			cookieName: "marp-collab.last_used_login_method",
+			storeInDatabase: false,
 		}),
 	],
 });

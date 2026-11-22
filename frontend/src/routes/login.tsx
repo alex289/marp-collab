@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { createFileRoute, useLocation } from "@tanstack/react-router";
 import { LogIn } from "lucide-react";
 import { authClient } from "@/lib/auth-client";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { API_URL } from "@/lib/config";
@@ -66,6 +67,8 @@ function LoginRoute() {
 		return <LoadingScreen />;
 	}
 
+	const lastLoginMethod = authClient.getLastUsedLoginMethod();
+
 	return (
 		<div className="flex min-h-screen items-center justify-center bg-background">
 			<Card className="w-full max-w-sm p-8">
@@ -93,12 +96,15 @@ function LoginRoute() {
 						providers.map((provider) => (
 							<Button
 								key={provider.id}
-								className="w-full"
+								className="h-auto min-h-8 w-full py-1"
 								size="lg"
 								onClick={() => handleSignIn(provider.id)}
 							>
-								<LogIn />
-								Sign in with {provider.name}
+								<LogIn data-icon="inline-start" />
+								<span className="wrap-anywhere whitespace-normal">
+									Sign in with {provider.name}
+								</span>
+								{provider.id === lastLoginMethod && <Badge variant="secondary">Last used</Badge>}
 							</Button>
 						))
 					)}
