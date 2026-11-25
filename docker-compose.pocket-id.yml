@@ -1,4 +1,0 @@
-services:
-  marp-collab:
-    depends_on:
-      - pocket-id
