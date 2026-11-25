@@ -29,4 +29,4 @@ USER node
 
 EXPOSE 8787
 
-CMD ["node", "./bin/app.js"]
+CMD ["node", "--no-experimental-webstorage", "./bin/app.js"]

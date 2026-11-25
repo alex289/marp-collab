@@ -6,7 +6,7 @@
 	"type": "module",
 	"scripts": {
 		"start": "node dist/bin/app.js",
-		"dev": "node --watch --env-file=.env src/app.ts",
+		"dev": "node --no-experimental-webstorage --watch --env-file=.env src/app.ts",
 		"build": "rolldown --config",
 		"typecheck": "tsc --noEmit",
 		"test": "node --test 'src/**/*.test.ts'"
