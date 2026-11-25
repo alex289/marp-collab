@@ -28,7 +28,8 @@ import { PresentationTimer } from "@/components/presentation-timer";
 import { HelpDialog } from "@/components/dialog/help-dialog";
 import type { EditorPaneHandle, MarkdownImageUploadResult } from "@/components/editor-pane";
 import { SearchPanel } from "@/components/search-panel";
-import { useActiveFileSearch } from "@/hooks/use-active-file-search";
+import { useProjectSearch } from "@/hooks/use-project-search";
+import type { TextSearchMatch } from "@/lib/text-search";
 import { OutlinePanel } from "@/components/outline-panel";
 import { SlideOverviewPanel } from "@/components/slide-overview-panel";
 import { parseMarkdownOutline } from "@/lib/outline";
@@ -561,11 +562,47 @@ function PresentationWorkspace({ id }: { id: string }) {
 		[themeText],
 	);
 
-	const activeFileSearch = useActiveFileSearch(
-		isEditableDeckFile(selectedFile) ? selectedFile.id : null,
-		syncedYText,
-		collab.readOnly,
+	const [pendingSearchJump, setPendingSearchJump] = useState<{
+		fileId: string;
+		offset: number;
+	} | null>(null);
+
+	const handleSelectSearchMatch = useCallback(
+		(fileId: string, match: TextSearchMatch) => {
+			if (fileId === selectedFile?.id) {
+				editorPaneRef.current?.jumpToOffset(match.startOffset);
+				return;
+			}
+
+			const targetFile = files.find((file) => file.id === fileId);
+			if (targetFile && isEditableDeckFile(targetFile)) {
+				setSelectedFile(targetFile);
+				setPendingSearchJump({ fileId, offset: match.startOffset });
+			}
+		},
+		[files, selectedFile?.id],
 	);
+
+	useEffect(() => {
+		if (!pendingSearchJump || selectedFile?.id !== pendingSearchJump.fileId || !syncedYText) {
+			return;
+		}
+
+		const offset = pendingSearchJump.offset;
+		const frame = window.requestAnimationFrame(() => {
+			editorPaneRef.current?.jumpToOffset(offset);
+			setPendingSearchJump(null);
+		});
+		return () => window.cancelAnimationFrame(frame);
+	}, [pendingSearchJump, selectedFile?.id, syncedYText]);
+
+	const projectSearch = useProjectSearch({
+		projectId: id,
+		activeFileId: isEditableDeckFile(selectedFile) ? selectedFile.id : null,
+		activeYText: syncedYText,
+		readOnly: collab.readOnly,
+		onSelectMatch: handleSelectSearchMatch,
+	});
 
 	const jumpToUserCursor = useCallback(
 		(userId: string) => {
@@ -1453,7 +1490,7 @@ function PresentationWorkspace({ id }: { id: string }) {
 					onProjectDeleted={() => {
 						void navigate({ to: "/", replace: true });
 					}}
-					searchPanel={<SearchPanel {...activeFileSearch} />}
+					searchPanel={<SearchPanel {...projectSearch} />}
 					outlinePanel={
 						<OutlinePanel
 							items={outlineItems}

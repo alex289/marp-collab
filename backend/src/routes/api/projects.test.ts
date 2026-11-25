@@ -863,4 +863,56 @@ describe("projects routes", () => {
 			document.destroy();
 		}
 	});
+
+	test("enforces read and write permissions for global project search and replace", async () => {
+		await files.saveDocumentContent("project/upload-proj/search-a.md", "# Global Needle");
+		await files.saveDocumentContent("project/upload-proj/search-b.css", "/* needle style */");
+
+		for (const userId of ["user-1", "route-writer", "route-reader"]) {
+			const response = await app.request("/upload-proj/search", {
+				method: "POST",
+				headers: { "content-type": "application/json", "x-test-user-id": userId },
+				body: JSON.stringify({ query: "needle" }),
+			});
+			equal(response.status, 200);
+			const body = (await response.json()) as {
+				totalMatches: number;
+				files: Array<{ fileId: string }>;
+			};
+			equal(body.totalMatches, 2);
+			deepEqual(
+				body.files.map((file) => file.fileId),
+				["search-a.md", "search-b.css"],
+			);
+		}
+
+		for (const userId of ["route-outsider", ""]) {
+			const response = await app.request("/upload-proj/search", {
+				method: "POST",
+				headers: { "content-type": "application/json", "x-test-user-id": userId },
+				body: JSON.stringify({ query: "needle" }),
+			});
+			ok(response.status === 401 || response.status === 403);
+		}
+
+		const readerReplace = await app.request("/upload-proj/search/replace", {
+			method: "POST",
+			headers: { "content-type": "application/json", "x-test-user-id": "route-reader" },
+			body: JSON.stringify({ mode: "all", query: "needle", replacement: "pin" }),
+		});
+		equal(readerReplace.status, 403);
+
+		const writerReplace = await app.request("/upload-proj/search/replace", {
+			method: "POST",
+			headers: { "content-type": "application/json", "x-test-user-id": "route-writer" },
+			body: JSON.stringify({ mode: "all", query: "needle", replacement: "pin" }),
+		});
+		equal(writerReplace.status, 200);
+		deepEqual(await writerReplace.json(), {
+			replacedMatches: 2,
+			updatedFiles: ["search-a.md", "search-b.css"],
+		});
+		equal(await files.getDocumentContent("project/upload-proj/search-a.md"), "# Global pin");
+		equal(await files.getDocumentContent("project/upload-proj/search-b.css"), "/* pin style */");
+	});
 });

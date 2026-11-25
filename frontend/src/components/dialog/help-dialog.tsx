@@ -37,7 +37,7 @@ function shortcutGroups(isMac: boolean): { title: string; shortcuts: Shortcut[] 
 			title: "Workspace",
 			shortcuts: [
 				{ keys: [[alt, "1"]], label: "Files" },
-				{ keys: [[alt, "2"]], label: "Search" },
+				{ keys: [[alt, "2"]], label: "Search across files" },
 				{ keys: [[alt, "3"]], label: "Outline" },
 				{ keys: [[alt, "4"]], label: "Slide overview" },
 				{ keys: [["Shift", "F10"]], label: "Slide actions (on a thumbnail)" },
