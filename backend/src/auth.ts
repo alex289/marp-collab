@@ -5,7 +5,7 @@ import { mcp } from "@better-auth/mcp";
 import { cimd } from "@better-auth/cimd";
 import { fetchClientMetadataResource } from "@better-auth/cimd/node";
 import { MCP_SCOPES, mcpResource } from "./mcp/config.ts";
-import { getAuthProviders } from "./auth/config.ts";
+import { getAuthProviders, loadAuthIpAddressConfig } from "./auth/config.ts";
 
 export const auth = betterAuth({
 	baseURL: process.env.URL ?? "http://localhost:5173",
@@ -26,6 +26,7 @@ export const auth = betterAuth({
 		enabled: process.env.AUTH_RATE_LIMIT_ENABLED !== "false",
 	},
 	advanced: {
+		ipAddress: loadAuthIpAddressConfig(),
 		database: {
 			generateId: "uuid",
 		},
