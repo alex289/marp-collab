@@ -18,6 +18,11 @@ export type ProjectCollaborator = ProjectMembership & {
 	userImage: string | null;
 };
 
+type CollaboratorCandidate = {
+	name: string;
+	email: string;
+};
+
 export type SharedProject = ProjectCollaborator & {
 	projectName: string;
 	projectCreatedAt: Date;
@@ -73,7 +78,31 @@ function rowToSharedProject(row: SharedProjectRow): SharedProject {
 	};
 }
 
+function normalizeSearchText(text: string): string {
+	return text.toLowerCase().normalize("NFD").replace(/\p{M}/gu, "");
+}
+
+db.function("normalize_collaborator_search", { deterministic: true }, normalizeSearchText);
+
 const preparedStatements = {
+	searchCollaboratorCandidates: db.prepare(`
+		select u.name, u.email
+		from user u
+		join project p on p.id = @projectId
+		where u.id <> p.ownerId
+			and not exists (
+				select 1 from project_collaborator pc
+				where pc.projectId = p.id and pc.userId = u.id
+			)
+			and (
+				instr(normalize_collaborator_search(u.name), @query) > 0
+				or instr(lower(u.email), @query) > 0
+			)
+		order by instr(normalize_collaborator_search(u.name), @query) = 1 desc,
+			instr(normalize_collaborator_search(u.name), @query) > 0 desc,
+			normalize_collaborator_search(u.name), u.email
+		limit 8
+	`),
 	getProjectOwnerByProjectId: db.prepare(`
 		select owner.id as userId, owner.name as userName, owner.image as userImage
 		from project p
@@ -116,6 +145,21 @@ const preparedStatements = {
         where projectId = ? and userId = ?
     `),
 };
+
+export function searchCollaboratorCandidates(
+	projectId: string,
+	query: string,
+): CollaboratorCandidate[] {
+	const normalizedQuery = normalizeSearchText(query).trim();
+	if (normalizedQuery.length < 2) {
+		return [];
+	}
+
+	return preparedStatements.searchCollaboratorCandidates.all({
+		projectId,
+		query: normalizedQuery,
+	}) as CollaboratorCandidate[];
+}
 
 export function getProjectOwnerByProjectId(projectId: string): ProjectOwner | undefined {
 	return preparedStatements.getProjectOwnerByProjectId.get(projectId) as
