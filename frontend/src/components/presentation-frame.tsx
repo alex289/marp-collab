@@ -1,7 +1,11 @@
-import { renderMarp } from "@/lib/marp";
+import {
+	dispatchSlideFrameKey,
+	SLIDE_FRAME_BRIDGE_SCRIPT,
+	useSlideFrameBridge,
+} from "@/hooks/use-slide-frame-bridge";
+import type { SlideDisplay } from "@/lib/marp";
 import { getSectionMarkerSlides } from "@/lib/slide-blocks";
-import { useSlideTailwindReady } from "@/hooks/use-slide-tailwind-ready";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, type SyntheticEvent } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import marpitSvgPolyfillScript from "@marp-team/marpit-svg-polyfill/lib/polyfill.browser.js?raw";
@@ -17,12 +21,8 @@ import {
 
 type PresentationFrameProps = {
 	markdown: string;
+	slides: SlideDisplay;
 	slideIndex: number;
-	projectId?: string;
-	selectedFileId?: string | null;
-	themeRevision: number;
-	assetRevision?: number;
-	assetToken?: string;
 	onMetaChange?: (meta: { active: number; total: number }) => void;
 	zoomState?: ZoomState;
 	onZoomChange?: (state: ZoomState) => void;
@@ -251,27 +251,12 @@ const staticSrcDoc = `<!doctype html>
         });
 
         // Forward keys because events inside the iframe never reach presentation shortcuts.
-        function forwardKey(type) {
-          return function (e) {
-            if (!interactive || !port) {
-              return;
-            }
-            port.postMessage({
-              type: 'presentation-key',
-              eventType: type,
-              key: e.key,
-              code: e.code,
-              ctrlKey: e.ctrlKey,
-              shiftKey: e.shiftKey,
-              altKey: e.altKey,
-              metaKey: e.metaKey,
-              repeat: e.repeat,
-            });
-          };
+        function forwardKey(event) {
+          if (interactive && port) port.postMessage(slideFrameKeyMessage(event, true));
         }
 
-        window.addEventListener('keydown', forwardKey('keydown'));
-        window.addEventListener('keyup', forwardKey('keyup'));
+        window.addEventListener('keydown', forwardKey);
+        window.addEventListener('keyup', forwardKey);
 
         // Use local pixels for immediate feedback and slide-relative percentages across windows.
         var laser = document.createElement('div');
@@ -393,15 +378,8 @@ const staticSrcDoc = `<!doctype html>
           apply(desired);
         }
 
-        window.addEventListener('message', function (event) {
-          var data = event.data;
-          if (!data || data.type !== 'init-port' || !event.ports || !event.ports[0]) {
-            return;
-          }
-          port = event.ports[0];
-          port.onmessage = handlePortMessage;
-          report();
-        });
+        ${SLIDE_FRAME_BRIDGE_SCRIPT}
+        listenForSlideFramePort(handlePortMessage, report);
       })();
     </script>
   </body>
@@ -441,54 +419,14 @@ function SlideFrame({
 	onMetaChange,
 	className,
 }: SlideFrameProps) {
-	const iframeRef = useRef<HTMLIFrameElement | null>(null);
-	// Send updates through a MessagePort tied to the document that received it.
-	const portRef = useRef<MessagePort | null>(null);
-	const [iframeReady, setIframeReady] = useState(false);
-	const slideIndexRef = useRef(slideIndex);
-	const zoomStateRef = useRef(zoomState);
-	const laserStateRef = useRef(laserState);
-	const interactiveRef = useRef(interactive);
-	const onMetaChangeRef = useRef(onMetaChange);
-	const onZoomChangeRef = useRef(onZoomChange);
-	const onLaserChangeRef = useRef(onLaserChange);
-
-	useEffect(() => {
-		slideIndexRef.current = slideIndex;
-	}, [slideIndex]);
-
-	useEffect(() => {
-		zoomStateRef.current = zoomState;
-	}, [zoomState]);
-
-	useEffect(() => {
-		laserStateRef.current = laserState;
-	}, [laserState]);
-
-	useEffect(() => {
-		interactiveRef.current = interactive;
-	}, [interactive]);
-
-	useEffect(() => {
-		onMetaChangeRef.current = onMetaChange;
-	}, [onMetaChange]);
-
-	useEffect(() => {
-		onZoomChangeRef.current = onZoomChange;
-	}, [onZoomChange]);
-
-	useEffect(() => {
-		onLaserChangeRef.current = onLaserChange;
-	}, [onLaserChange]);
-
-	const handlePortMessage = useCallback((event: MessageEvent) => {
+	const { port, load, connect } = useSlideFrameBridge((event) => {
 		const payload = event.data;
 		if (!payload) {
 			return;
 		}
 
 		if (payload.type === "presentation-meta") {
-			onMetaChangeRef.current?.({
+			onMetaChange?.({
 				active: Number(payload.active) || 0,
 				total: Number(payload.total) || 1,
 			});
@@ -498,7 +436,7 @@ function SlideFrame({
 		if (payload.type === "presentation-zoom-report") {
 			const originX = Number(payload.originX);
 			const originY = Number(payload.originY);
-			onZoomChangeRef.current?.({
+			onZoomChange?.({
 				zoom: Number(payload.zoom) || 1,
 				originX: Number.isFinite(originX) ? originX : 50,
 				originY: Number.isFinite(originY) ? originY : 50,
@@ -507,7 +445,7 @@ function SlideFrame({
 		}
 
 		if (payload.type === "presentation-laser-report") {
-			onLaserChangeRef.current?.({
+			onLaserChange?.({
 				active: !!payload.active,
 				xPercent: Number(payload.xPercent),
 				yPercent: Number(payload.yPercent),
@@ -515,110 +453,61 @@ function SlideFrame({
 			return;
 		}
 
-		if (payload.type === "presentation-key") {
-			document.dispatchEvent(
-				new KeyboardEvent(payload.eventType, {
-					key: payload.key,
-					code: payload.code,
-					ctrlKey: payload.ctrlKey,
-					shiftKey: payload.shiftKey,
-					altKey: payload.altKey,
-					metaKey: payload.metaKey,
-					repeat: payload.repeat,
-					bubbles: true,
-					cancelable: true,
-				}),
-			);
-		}
-	}, []);
+		dispatchSlideFrameKey(payload);
+	});
 
-	const handleIframeLoad = useCallback(() => {
-		const channel = new MessageChannel();
-		portRef.current = channel.port1;
-		channel.port1.onmessage = handlePortMessage;
-		iframeRef.current?.contentWindow?.postMessage({ type: "init-port" }, "*", [channel.port2]);
-		// The fresh document has no content yet; resync it with the presenter's
-		// current slide/zoom/laser state once the first marp-update arrives.
-		portRef.current.postMessage({
-			type: "presentation-config",
-			interactive: interactiveRef.current,
-		});
-		portRef.current.postMessage({
-			type: "presentation-set-slide",
-			index: slideIndexRef.current,
-		});
-		portRef.current.postMessage({
-			type: "presentation-zoom",
-			zoom: zoomStateRef.current.zoom,
-			originX: zoomStateRef.current.originX,
-			originY: zoomStateRef.current.originY,
-		});
-		portRef.current.postMessage({
-			type: "presentation-laser",
-			active: laserStateRef.current.active,
-			xPercent: laserStateRef.current.xPercent,
-			yPercent: laserStateRef.current.yPercent,
-		});
-		setIframeReady(true);
-	}, [handlePortMessage]);
+	const frameConfig = { type: "presentation-config", interactive } as const;
+	const frameSlide = { type: "presentation-set-slide", index: slideIndex } as const;
+	const frameZoom = { type: "presentation-zoom", ...zoomState } as const;
+	const frameLaser = { type: "presentation-laser", ...laserState } as const;
 
-	useEffect(() => {
-		if (!iframeReady) {
+	const handleFrameLoad = (event: SyntheticEvent<HTMLIFrameElement>) => {
+		const connection = connect(event);
+		if (!connection) {
 			return;
 		}
-
-		portRef.current?.postMessage({
-			type: "marp-update",
-			html,
-			css,
-		});
-	}, [iframeReady, html, css]);
-
-	useEffect(() => {
-		portRef.current?.postMessage({
-			type: "presentation-set-slide",
-			index: slideIndex,
-		});
-	}, [slideIndex]);
+		// The document needs the requested slide and view state before the first content update.
+		connection.postMessage(frameConfig);
+		connection.postMessage(frameSlide);
+		connection.postMessage(frameZoom);
+		connection.postMessage(frameLaser);
+	};
 
 	useEffect(() => {
-		portRef.current?.postMessage({
-			type: "presentation-zoom",
-			zoom: zoomState.zoom,
-			originX: zoomState.originX,
-			originY: zoomState.originY,
-		});
-	}, [zoomState]);
+		port.current?.postMessage({ type: "marp-update", html, css });
+	}, [load, port, html, css]);
 
 	useEffect(() => {
-		portRef.current?.postMessage({
-			type: "presentation-laser",
-			active: laserState.active,
-			xPercent: laserState.xPercent,
-			yPercent: laserState.yPercent,
-		});
-	}, [laserState]);
+		port.current?.postMessage({ type: "presentation-config", interactive });
+	}, [port, interactive]);
+
+	useEffect(() => {
+		port.current?.postMessage({ type: "presentation-set-slide", index: slideIndex });
+	}, [port, slideIndex]);
+
+	useEffect(() => {
+		port.current?.postMessage({ type: "presentation-zoom", ...zoomState });
+	}, [port, zoomState]);
+
+	useEffect(() => {
+		port.current?.postMessage({ type: "presentation-laser", ...laserState });
+	}, [port, laserState]);
 
 	return (
 		<iframe
-			ref={iframeRef}
 			title={title}
 			srcDoc={staticSrcDoc}
 			className={className ?? "h-full w-full border-0"}
 			sandbox="allow-scripts"
-			onLoad={handleIframeLoad}
+			onLoad={handleFrameLoad}
 		/>
 	);
 }
 
 export function PresentationFrame({
 	markdown,
+	slides,
 	slideIndex,
-	projectId,
-	selectedFileId,
-	themeRevision,
-	assetRevision = 0,
-	assetToken,
 	onMetaChange,
 	zoomState,
 	onZoomChange,
@@ -634,39 +523,15 @@ export function PresentationFrame({
 	onHasSpeakerNotesChange,
 	className,
 }: PresentationFrameProps) {
-	const slideTailwindReady = useSlideTailwindReady();
-	const rendered = useMemo(() => {
-		// Re-render when project themes change or the lazy Tailwind compiler becomes ready.
-		void themeRevision;
-		void slideTailwindReady;
-		try {
-			return renderMarp(markdown, projectId, selectedFileId, assetRevision, assetToken);
-		} catch (error) {
-			return {
-				html: `<section><h1>Marp Render Error</h1><p>${error instanceof Error ? error.message : "Unknown error"}</p></section>`,
-				css: "",
-				comments: [[]],
-			};
-		}
-	}, [
-		markdown,
-		projectId,
-		selectedFileId,
-		themeRevision,
-		slideTailwindReady,
-		assetRevision,
-		assetToken,
-	]);
-
 	const sectionMarkerSlides = useMemo(
 		() =>
-			"slideSource" in rendered
-				? getSectionMarkerSlides(markdown, rendered.slideSource)
+			"slideSource" in slides
+				? getSectionMarkerSlides(markdown, slides.slideSource)
 				: new Set<number>(),
-		[markdown, rendered],
+		[markdown, slides],
 	);
 	const slideComments = (index: number) =>
-		(rendered.comments[index] ?? []).slice(sectionMarkerSlides.has(index) ? 1 : 0);
+		(slides.comments[index] ?? []).slice(sectionMarkerSlides.has(index) ? 1 : 0);
 	const activeComments = parseSlidePresenterComments(slideComments(slideIndex));
 	const nextComments = parseSlidePresenterComments(slideComments(slideIndex + 1));
 	const nextPresenterChange = getNextPresenterChange(
@@ -679,13 +544,13 @@ export function PresentationFrame({
 		onHasSpeakerNotesChange?.(hasSpeakerNotes);
 	}, [hasSpeakerNotes, onHasSpeakerNotesChange]);
 	// Marp returns one comment bucket per slide, so this doubles as the slide count.
-	const hasNextSlide = slideIndex + 1 < rendered.comments.length;
+	const hasNextSlide = slideIndex + 1 < slides.comments.length;
 
 	const slide = (
 		<SlideFrame
 			title="Presentation"
-			html={rendered.html}
-			css={rendered.css}
+			html={slides.html}
+			css={slides.css}
 			slideIndex={slideIndex}
 			zoomState={zoomState}
 			onZoomChange={onZoomChange}
@@ -810,8 +675,8 @@ export function PresentationFrame({
 							{/* Kept mounted past the last slide so stepping back doesn't reload the iframe. */}
 							<SlideFrame
 								title="Next slide preview"
-								html={rendered.html}
-								css={rendered.css}
+								html={slides.html}
+								css={slides.css}
 								slideIndex={slideIndex + 1}
 								interactive={false}
 								className="pointer-events-none h-full w-full rounded-b-lg border-0 bg-black"
@@ -850,7 +715,7 @@ export function PresentationFrame({
 					container={demoContainer}
 					title={activeComments.demo}
 					speakerNotes={activeComments.speakerNotes}
-					slideLabel={`Slide ${slideIndex + 1} of ${rendered.comments.length}`}
+					slideLabel={`Slide ${slideIndex + 1} of ${slides.comments.length}`}
 					hasNextSlide={hasNextSlide}
 					onEnd={onDemoEnd}
 					onToggleFullscreen={onToggleFullscreen}

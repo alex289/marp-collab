@@ -7,14 +7,14 @@ import { z } from "zod";
 import { auth } from "../auth.ts";
 import { db } from "../db/db.ts";
 import { MCP_READ_SCOPE, MCP_WRITE_SCOPE, MCP_SCOPES, mcpResource, mcpJwksUrl } from "./config.ts";
-import { createPresentationServer } from "./server.ts";
+import { createPresentationServer, WRITE_TOOL_NAMES } from "./server.ts";
 
 export const mcpRouter = new Hono();
 
 const writeToolCallSchema = z.object({
 	method: z.literal("tools/call"),
 	params: z.object({
-		name: z.enum(["create_presentation", "edit_presentation", "pull_from_git", "push_to_git"]),
+		name: z.enum(WRITE_TOOL_NAMES),
 	}),
 });
 

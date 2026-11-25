@@ -26,7 +26,7 @@ import {
 	isValidProjectFileLocation,
 	openProjectFile,
 } from "../../../projects/storage.ts";
-import { toDocumentName } from "../../../projects/document-identity.ts";
+import { toDocumentName } from "../../../../../shared/collaboration.ts";
 import { getCurrentDocumentContent } from "../../../collab/document-content.ts";
 import {
 	requireProjectWriteAccess,
@@ -38,7 +38,7 @@ import {
 	moveFileSchema,
 	renameEntrySchema,
 	uploadDestinationSchema,
-} from "./schemas.ts";
+} from "./content-schemas.ts";
 
 const app = new Hono<{ Variables: ProjectRouteVariables }>();
 

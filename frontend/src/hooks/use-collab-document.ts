@@ -4,6 +4,12 @@ import type { Awareness } from "y-protocols/awareness.js";
 import * as Y from "yjs";
 import { API_URL } from "@/lib/config";
 import type { PresenceUser, SessionUser } from "@/lib/types";
+import {
+	DOCUMENT_CONTENT_KEY,
+	GIT_SYNC_REJECTION_REASON,
+	PROJECT_PRESENCE_DOCUMENT_ID,
+	toDocumentName,
+} from "../../../shared/collaboration.ts";
 
 type CollabState = {
 	yText: Y.Text | null;
@@ -27,9 +33,6 @@ const defaultState: CollabState = {
 };
 
 const palette = ["#f97316", "#16a34a", "#0ea5e9", "#e11d48", "#0891b2", "#ca8a04"];
-const PROJECT_PRESENCE_DOCUMENT_ID = "__presence";
-// Keep this in sync with GIT_SYNC_REJECTION_REASON in backend/src/collab/hocuspocus.ts.
-const GIT_SYNC_AUTH_FAILURE_REASON = "Project is syncing with Git";
 
 const hashString = (value: string): number => {
 	let hash = 0;
@@ -61,13 +64,9 @@ export const useCollabDocument = (
 	sessionUser: SessionUser | null,
 	user: PresenceUser,
 	reloadKey = 0,
-	onStatelessMessage?: (payload: string) => void,
 ): CollabState => {
 	const sessionUserId = sessionUser?.id;
 	const [state, setState] = useState<CollabState>(defaultState);
-	const handleStatelessMessage = useEffectEvent((payload: string) => {
-		onStatelessMessage?.(payload);
-	});
 
 	useEffect(() => {
 		// The cleanup of the previous document already reset the state.
@@ -76,7 +75,7 @@ export const useCollabDocument = (
 		}
 
 		const yDoc = new Y.Doc();
-		const yText = yDoc.getText("content");
+		const yText = yDoc.getText(DOCUMENT_CONTENT_KEY);
 		const undoManager = new Y.UndoManager(yText);
 		let gitSyncing = false;
 		let retryTimer: ReturnType<typeof setTimeout> | undefined;
@@ -110,14 +109,11 @@ export const useCollabDocument = (
 				}
 			},
 			onAuthenticationFailed: ({ reason }) => {
-				gitSyncing = reason === GIT_SYNC_AUTH_FAILURE_REASON;
+				gitSyncing = reason === GIT_SYNC_REJECTION_REASON;
 				if (gitSyncing) {
 					retryDocument();
 					setState((current) => ({ ...current, status: "syncing", synced: false, readOnly: true }));
 				}
-			},
-			onStateless: ({ payload }: { payload: string }) => {
-				handleStatelessMessage(payload);
 			},
 			onSynced: () => {
 				setState((current) => ({
@@ -188,7 +184,7 @@ export const useProjectPresence = (
 		const yDoc = new Y.Doc();
 		const provider = new HocuspocusProvider({
 			url: `${API_URL}/collab`,
-			name: `project/${projectId}/${PROJECT_PRESENCE_DOCUMENT_ID}`,
+			name: toDocumentName(projectId, PROJECT_PRESENCE_DOCUMENT_ID),
 			document: yDoc,
 			onStateless: ({ payload }: { payload: string }) => {
 				handleStatelessMessage(payload);

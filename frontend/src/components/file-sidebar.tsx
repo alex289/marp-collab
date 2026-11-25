@@ -11,8 +11,6 @@ import {
 	Trash2,
 } from "lucide-react";
 import { useHotkeys } from "@tanstack/react-hotkeys";
-import useSWR from "swr";
-import type { Project } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import {
 	Sidebar,
@@ -26,7 +24,7 @@ import {
 import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
 import { Kbd, KbdGroup } from "@/components/ui/kbd";
 import { DeleteProjectDialog } from "@/components/dialog/delete-project";
-import { API_URL } from "@/lib/config";
+import { useProject } from "@/lib/project";
 import {
 	Select,
 	SelectContent,
@@ -44,12 +42,6 @@ import type { ProjectFilesWorkspace } from "@/features/project-files/use-project
 
 type WorkspacePanel = "files" | "search" | "outline" | "slides" | "settings";
 
-type ProjectSettingsResponse = {
-	project: Project;
-	isOwner: boolean;
-	readOnly: boolean;
-};
-
 const WORKSPACE_PANEL_HOTKEYS = {
 	files: "Alt+1",
 	search: "Alt+2",
@@ -57,14 +49,6 @@ const WORKSPACE_PANEL_HOTKEYS = {
 	slides: "Alt+4",
 	settings: "Alt+5",
 } as const;
-
-const projectSettingsFetcher = async (url: string): Promise<ProjectSettingsResponse> => {
-	const res = await fetch(url);
-	if (!res.ok) {
-		throw new Error(`Request failed: ${res.status} ${res.statusText}`);
-	}
-	return res.json() as Promise<ProjectSettingsResponse>;
-};
 
 const WorkspaceRailButton = ({
 	active,
@@ -272,11 +256,7 @@ export const FileSidebar = ({
 		</SidebarGroup>
 	);
 	const themeOptions = Array.from(new Set([...themeNames, currentTheme]));
-	const projectSettingsKey = `${API_URL}/projects/${projectId}`;
-	const { data: projectSettings } = useSWR<ProjectSettingsResponse>(
-		projectSettingsKey,
-		projectSettingsFetcher,
-	);
+	const { project, isProjectOwner, readOnly } = useProject(projectId);
 	const settingsPanel = (
 		<SidebarGroup>
 			<SidebarGroupLabel className="flex items-center gap-2 pb-2 pl-0">
@@ -288,8 +268,8 @@ export const FileSidebar = ({
 				<ProjectGitSetting
 					key={`git-${projectId}`}
 					projectId={projectId}
-					canWrite={projectSettings ? !projectSettings.readOnly : false}
-					isOwner={projectSettings?.isOwner ?? false}
+					canWrite={!readOnly}
+					isOwner={isProjectOwner}
 				/>
 
 				<div className="space-y-1.5">
@@ -322,7 +302,7 @@ export const FileSidebar = ({
 				<div className="space-y-1.5">
 					<Label className="px-1 text-xs font-medium">AI assistant</Label>
 					<ConnectAiAssistantDialog
-						projectName={projectSettings?.project.name}
+						projectName={project?.name}
 						trigger={
 							<Button type="button" variant="outline" className="w-full justify-start">
 								<Sparkles />
@@ -354,16 +334,16 @@ export const FileSidebar = ({
 
 				<div className="space-y-1.5">
 					<Label className="px-1 text-xs font-medium">Danger zone</Label>
-					{projectSettings?.project ? (
+					{project ? (
 						<DeleteProjectDialog
-							project={projectSettings.project}
+							project={project}
 							onDeleted={onProjectDeleted}
 							trigger={
 								<Button
 									type="button"
 									variant="destructive"
 									className="w-full justify-start"
-									disabled={!projectSettings.isOwner}
+									disabled={!isProjectOwner}
 								>
 									<Trash2 />
 									Delete presentation
@@ -377,7 +357,7 @@ export const FileSidebar = ({
 						</Button>
 					)}
 					<p className="px-1 text-xs text-muted-foreground">
-						{projectSettings?.isOwner
+						{isProjectOwner
 							? "Permanently delete this presentation and its files."
 							: "Only the project owner can delete this presentation."}
 					</p>

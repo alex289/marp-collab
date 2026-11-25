@@ -1,10 +1,15 @@
 import { expandMarkdownIncludes } from "../../../shared/markdown-include.ts";
+import {
+	MARP_IMAGE_RULE,
+	prepareMarpTheme,
+	rewriteMarpImages,
+} from "../../../shared/marp-dialect.ts";
 import { TAILWIND_DIRECTIVE } from "../../../shared/slide-tailwind.ts";
 import { Marp } from "@marp-team/marp-core";
 import { createHash } from "node:crypto";
 import { posix } from "node:path";
 import { getDeckFiles, getDocumentContent } from "../projects/storage.ts";
-import { toDocumentName } from "../projects/document-identity.ts";
+import { toDocumentName } from "../../../shared/collaboration.ts";
 import { createSlideTailwind } from "./slide-tailwind.ts";
 
 function resolvePosixPath(dir: string, src: string): string {
@@ -43,8 +48,6 @@ const marpScript = marpScriptContent();
 export const MARP_SCRIPT_CSP_SOURCE = marpScript
 	? `'sha256-${createHash("sha256").update(marpScript).digest("base64")}'`
 	: "'none'";
-
-const themeMarkerRegex = /\/\*[\s\S]*?@theme\s+([\w-]+)/;
 
 // Excluding `@` keeps a failed match from scanning into later at-rules.
 const importRuleRegex = /@import\s+(?:url\(\s*)?(['"]?)([^'");@]+)\1\s*\)?\s*;/gi;
@@ -87,24 +90,6 @@ function basenameWithoutExt(fileId: string): string {
 	const base = posix.basename(fileId);
 	const dotIndex = base.lastIndexOf(".");
 	return dotIndex > 0 ? base.slice(0, dotIndex) : base;
-}
-
-function sanitizeThemeName(fileId: string): string {
-	const base = fileId.split("/").pop() ?? fileId;
-	const name = base
-		.replace(/\.css$/i, "")
-		.toLowerCase()
-		.replace(/[^\w-]+/g, "-")
-		.replace(/^-+|-+$/g, "");
-	return name || "theme";
-}
-
-function prepareThemeCss(css: string, fallbackName: string): { css: string; name: string } {
-	const marker = themeMarkerRegex.exec(css);
-	if (marker?.[1]) {
-		return { css, name: marker[1] };
-	}
-	return { css: `/* @theme ${fallbackName} */\n${css}`, name: fallbackName };
 }
 
 export type RenderedPdfInput = {
@@ -179,24 +164,9 @@ export async function renderMarkdownForPdf(
 
 	marp.use((md) => {
 		md.inline.ruler2.after(
-			"marpit_background_image",
+			MARP_IMAGE_RULE,
 			"rewrite_image_urls_flat",
-			({ tokens }: { tokens: any[] }) => {
-				for (const token of tokens) {
-					if (token.type !== "image") {
-						continue;
-					}
-					const src = token.attrGet("src");
-					if (!src) {
-						continue;
-					}
-					const rewritten = rewriteAssetRef(markdownDir, src);
-					token.attrSet("src", rewritten);
-					if (token.meta?.marpitImage) {
-						token.meta.marpitImage.url = rewritten;
-					}
-				}
-			},
+			rewriteMarpImages((src) => rewriteAssetRef(markdownDir, src)),
 		);
 	});
 
@@ -214,8 +184,7 @@ export async function renderMarkdownForPdf(
 		const rewrittenCss = rewriteCssUrls(sanitizeThemeImports(css), dirOf(file.id));
 
 		try {
-			const { css: prepared } = prepareThemeCss(rewrittenCss, sanitizeThemeName(file.id));
-			marp.themeSet.add(prepared);
+			marp.themeSet.add(prepareMarpTheme(file.id, rewrittenCss));
 		} catch {
 			// Skip CSS that Marpit cannot parse as a theme
 		}

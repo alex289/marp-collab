@@ -1,4 +1,3 @@
-import { z } from "zod";
 import {
 	broadcastFilesChanged,
 	broadcastGitSyncFinished,
@@ -13,16 +12,11 @@ import {
 	type ProjectGitConflict,
 	type ProjectGitResolution,
 } from "./git-merge.ts";
+import { beginGitOperation } from "./git-operation-limit.ts";
 import {
-	beginGitOperation,
-	finishProjectGitConfigure,
-	finishProjectGitSync,
-	startProjectGitConfigure,
-	startProjectGitSync,
-	waitForProjectWrites,
-} from "./git-sync-lock.ts";
-import {
+	getProjectGitConfig,
 	isProjectGitConfigured,
+	prepareProjectGitConfig,
 	ProjectGitContentError,
 	ProjectGitNotConfiguredError,
 	ProjectGitProcessError,
@@ -31,21 +25,17 @@ import {
 	ProjectGitTransportError,
 	pullProjectFromGit,
 	pushProjectToGit,
+	removeProjectGitRepository,
+	resolveProjectGitSettings,
+	type ProjectGitSettings,
 } from "./git-sync.ts";
-import { MAX_REPORTED_CONFLICTS } from "./git-tasks.ts";
+import { beginProjectRepositoryOperation, beginProjectSync } from "./project-operations.ts";
 
 export class ProjectDeletedError extends Error {}
 /** The user may not change the project, or lost write access while the sync waited. */
 export class ProjectGitAccessError extends Error {}
 export class ProjectGitBusyError extends Error {}
 export class ProjectGitServerBusyError extends Error {}
-
-/** A pull reports at most this many conflicts, so it never needs more resolutions. */
-export const projectGitResolutionsSchema = z
-	.record(z.string().max(4096), z.enum(["project", "remote"]))
-	.refine((resolutions) => Object.keys(resolutions).length <= MAX_REPORTED_CONFLICTS, {
-		message: `Resolve at most ${MAX_REPORTED_CONFLICTS} paths at once`,
-	});
 
 export type ProjectGitAction =
 	| { type: "pull"; resolutions?: Record<string, ProjectGitResolution>; message?: string }
@@ -116,7 +106,7 @@ function assertWriteAccess(projectId: string, userId: string): void {
 	}
 }
 
-export async function withGitOperation<T>(run: () => Promise<T>): Promise<T> {
+async function withGitOperation<T>(run: () => Promise<T>): Promise<T> {
 	const release = beginGitOperation();
 	if (!release) {
 		throw new ProjectGitServerBusyError("Too many Git syncs are running. Try again shortly.");
@@ -128,31 +118,59 @@ export async function withGitOperation<T>(run: () => Promise<T>): Promise<T> {
 	}
 }
 
-export async function withProjectConfigureLock<T>(
-	projectId: string,
-	run: () => Promise<T>,
-): Promise<T> {
-	if (!startProjectGitConfigure(projectId)) {
+async function withProjectRepository<T>(projectId: string, run: () => Promise<T>): Promise<T> {
+	const release = beginProjectRepositoryOperation(projectId);
+	if (!release) {
 		throw new ProjectGitBusyError("This project is already syncing");
 	}
 	try {
 		assertProjectExists(projectId);
 		return await run();
 	} finally {
-		finishProjectGitConfigure(projectId);
+		release();
 	}
+}
+
+export function configureProjectGit(settings: ProjectGitSettings) {
+	return withGitOperation(async () => {
+		const resolved = await withProjectRepository(settings.projectId, () =>
+			resolveProjectGitSettings(settings),
+		);
+		const save = await prepareProjectGitConfig(resolved);
+		return withProjectRepository(settings.projectId, async () => {
+			const current = await resolveProjectGitSettings(settings);
+			if (
+				current.credentials.username !== resolved.credentials.username ||
+				current.credentials.token !== resolved.credentials.token
+			) {
+				throw new ProjectGitBusyError(
+					"Git credentials changed while checking the repository. Try again.",
+				);
+			}
+			return save();
+		});
+	});
+}
+
+export function disconnectProjectGit(projectId: string) {
+	return withProjectRepository(projectId, async () => {
+		await removeProjectGitRepository(projectId);
+		return getProjectGitConfig(projectId);
+	});
 }
 
 /** Holds the project's sync lock, which makes editors wait and reconnect once it is released. */
 async function withProjectSyncLock<T>(projectId: string, run: () => Promise<T>): Promise<T> {
-	if (!startProjectGitSync(projectId)) {
+	const sync = beginProjectSync(projectId);
+	if (!sync) {
 		throw new ProjectGitBusyError("This project is already syncing");
 	}
 	try {
 		assertProjectExists(projectId);
+		await sync.writesDrained;
 		return await run();
 	} finally {
-		finishProjectGitSync(projectId);
+		sync.release();
 		broadcastFilesChanged(projectId);
 		broadcastGitSyncFinished(projectId);
 	}
@@ -179,7 +197,6 @@ export async function syncProjectWithGit(
 	const author = { name: user.name || user.email, email: user.email };
 	return withGitOperation(() =>
 		withProjectSyncLock(projectId, async () => {
-			await waitForProjectWrites(projectId);
 			// Access or settings may have changed while earlier writes finished; check again before
 			// closing everyone's documents.
 			assertWriteAccess(projectId, userId);

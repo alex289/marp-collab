@@ -483,8 +483,11 @@ test("persists an admitted edit when Git sync reserves the project during the tr
 	const name = "project/training/sync-race.md";
 	await storage.saveDocumentContent(name, "# Before");
 	const connection = await collab.openDirectConnection(name);
-	const lock = await import("../projects/git-sync-lock.ts");
-	const reserveSync = () => lock.startProjectGitSync("training");
+	const operations = await import("../projects/project-operations.ts");
+	let releaseSync: (() => void) | undefined;
+	const reserveSync = () => {
+		releaseSync ??= operations.beginProjectSync("training")?.release;
+	};
 	collab.documents.get(name)!.on("update", reserveSync);
 	try {
 		const args = { projectId: "training", fileId: "sync-race.md" };
@@ -495,7 +498,7 @@ test("persists an admitted edit when Git sync reserves the project during the tr
 			content: "# After",
 		});
 		ok(!edited.isError);
-		ok(lock.isProjectGitSyncing("training"));
+		ok(operations.isProjectSyncing("training"));
 		equal(await storage.getDocumentContent(name), "# After");
 		const binary = await storage.getDocumentBinary(name);
 		ok(binary);
@@ -505,7 +508,7 @@ test("persists an admitted edit when Git sync reserves the project during the tr
 		persisted.destroy();
 	} finally {
 		collab.documents.get(name)?.off("update", reserveSync);
-		lock.finishProjectGitSync("training");
+		releaseSync?.();
 		await connection.disconnect();
 	}
 });
@@ -538,8 +541,9 @@ test("rechecks collaborator permissions and excludes writes during Git synchroni
 	match(await response.text(), /access denied/);
 	db.prepare("delete from project_collaborator where userId = 'reader'").run();
 	match(await (await reader.fetch(request())).text(), /access denied/);
-	const lock = await import("../projects/git-sync-lock.ts");
-	lock.startProjectGitSync("training");
+	const { beginProjectSync } = await import("../projects/project-operations.ts");
+	const sync = beginProjectSync("training");
+	ok(sync);
 	try {
 		const denied = await call("create_presentation", {
 			projectId: "training",
@@ -549,7 +553,7 @@ test("rechecks collaborator permissions and excludes writes during Git synchroni
 		equal(denied.isError, true);
 		match(denied.content[0].text, /syncing with Git/);
 	} finally {
-		lock.finishProjectGitSync("training");
+		sync.release();
 	}
 });
 
@@ -588,9 +592,8 @@ test("pulls from and pushes to the project's Git repository with a commit messag
 		run(dir, "push", remote, "main");
 		return Promise.resolve();
 	});
-	await (
-		await import("../projects/git-sync.ts")
-	).configureProjectGit({
+	const { configureProjectGit, syncProjectWithGit } = await import("../projects/git-actions.ts");
+	await configureProjectGit({
 		projectId: "training",
 		remoteUrl: "https://example.com/slides.git",
 		branch: "main",
@@ -651,11 +654,10 @@ test("pulls from and pushes to the project's Git repository with a commit messag
 	);
 	equal((await call("pull_from_git", { projectId: "training", resolutions })).isError, true);
 
-	const { syncProjectWithGit } = await import("../projects/git-actions.ts");
-	const lock = await import("../projects/git-sync-lock.ts");
-	const gitSync = await import("../projects/git-sync.ts");
+	const operations = await import("../projects/project-operations.ts");
+	const { removeProjectGitRepository } = await import("../projects/git-sync.ts");
 	async function syncAfterChange(userId: string, change: () => void | Promise<void>) {
-		const release = lock.beginProjectWrite("training")!;
+		const release = operations.beginProjectWrite("training")!;
 		let settled = false;
 		const sync = (async () => {
 			try {
@@ -664,7 +666,7 @@ test("pulls from and pushes to the project's Git repository with a commit messag
 				settled = true;
 			}
 		})();
-		while (!lock.isProjectGitSyncing("training") && !settled) {
+		while (!operations.isProjectSyncing("training") && !settled) {
 			await new Promise((resolve) => setImmediate(resolve));
 		}
 		ok(!settled, "the sync stopped before taking the lock");
@@ -686,7 +688,7 @@ test("pulls from and pushes to the project's Git repository with a commit messag
 			/write access/,
 		);
 		await rejects(
-			syncAfterChange("owner", () => gitSync.disconnectProjectGit("training")),
+			syncAfterChange("owner", () => removeProjectGitRepository("training")),
 			/not configured/,
 		);
 		equal(closeConnections.mock.callCount(), 0);

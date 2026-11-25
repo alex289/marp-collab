@@ -1,4 +1,4 @@
-import { parseProjectDocumentName } from "../projects/document-identity.ts";
+import { parseProjectDocumentName } from "../../../shared/collaboration.ts";
 
 type ClosableConnection = {
 	close(): void;

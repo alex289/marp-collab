@@ -1,40 +1,18 @@
 import { type ConnectionConfiguration, Hocuspocus } from "@hocuspocus/server";
 import * as Y from "yjs";
 import {
-	documentFileExists,
-	getDocumentBinary,
-	getDocumentContent,
-	saveDocumentBinary,
-	saveDocumentContent,
-} from "../projects/storage.ts";
+	GIT_SYNC_REJECTION_REASON,
+	PROJECT_PRESENCE_DOCUMENT_ID,
+	parseProjectDocumentName,
+} from "../../../shared/collaboration.ts";
+import { documentFileExists } from "../projects/storage.ts";
+import { loadProjectDocument, persistDocument } from "./document-state.ts";
 import { isEditableExtension } from "../helpers/file-allowlist.ts";
 import { auth } from "../auth.ts";
 import { getProjectAuthorization } from "../projects/access-policy.ts";
 import { registerProjectConnection, unregisterProjectConnection } from "./connections.ts";
-import { parseProjectDocumentName } from "../projects/document-identity.ts";
 import { logger } from "../helpers/logger.ts";
-import { isProjectGitSyncing } from "../projects/git-sync-lock.ts";
-
-type CollabContext = {
-	userId: string;
-	userName: string;
-	color: string;
-	readOnly: boolean;
-};
-
-const fallbackColors = ["#f97316", "#16a34a", "#0ea5e9", "#e11d48", "#7c3aed", "#db2777"];
-const PROJECT_PRESENCE_DOCUMENT_ID = "__presence";
-/** The client recognizes this rejection reason and retries after Git sync. */
-export const GIT_SYNC_REJECTION_REASON = "Project is syncing with Git";
-
-const hashString = (value: string): number => {
-	let hash = 0;
-	for (let i = 0; i < value.length; i++) {
-		hash = (hash << 5) - hash + value.charCodeAt(i);
-		hash |= 0;
-	}
-	return Math.abs(hash);
-};
+import { isProjectSyncing } from "../projects/project-operations.ts";
 
 function isProjectPresenceDocument(documentName: string): boolean {
 	const parsed = parseProjectDocumentName(documentName);
@@ -46,7 +24,7 @@ function isSyncingProjectDocument(documentName: string): boolean {
 	return (
 		parsed !== null &&
 		parsed.fileId !== PROJECT_PRESENCE_DOCUMENT_ID &&
-		isProjectGitSyncing(parsed.projectId)
+		isProjectSyncing(parsed.projectId)
 	);
 }
 
@@ -92,12 +70,7 @@ export const collabServer = new Hocuspocus({
 
 			connectionConfig.readOnly = authorization.access.readOnly;
 
-			return {
-				userId: session.user.id,
-				userName: session.user.name || session.user.email,
-				color: fallbackColors[hashString(session.user.id) % fallbackColors.length] ?? "#0ea5e9",
-				readOnly: authorization.access.readOnly,
-			} satisfies CollabContext;
+			return { userId: session.user.id };
 		} catch (error) {
 			logger.error({ err: error, documentName }, "collab onAuthenticate failed");
 			throw error;
@@ -126,22 +99,13 @@ export const collabServer = new Hocuspocus({
 				return new Y.Doc();
 			}
 
-			const binary = await getDocumentBinary(documentName);
-			if (binary) {
-				const doc = new Y.Doc();
-				Y.applyUpdate(doc, binary);
-				return doc;
-			}
-
-			const initialContent = await getDocumentContent(documentName);
-			if (initialContent === undefined) {
+			const document = await loadProjectDocument(documentName);
+			if (!document) {
 				// Refuse to reopen a renamed or deleted file from a stale client connection.
 				throw new Error(`Document not found: ${documentName}`);
 			}
 
-			const doc = new Y.Doc();
-			doc.getText("content").insert(0, initialContent);
-			return doc;
+			return document;
 		} catch (error) {
 			logger.error({ err: error, documentName }, "collab onLoadDocument failed");
 			throw error;
@@ -159,11 +123,7 @@ export const collabServer = new Hocuspocus({
 				return;
 			}
 
-			const binary = Y.encodeStateAsUpdate(document);
-			await Promise.all([
-				saveDocumentBinary(documentName, binary),
-				saveDocumentContent(documentName, document.getText("content").toJSON()),
-			]);
+			await persistDocument(documentName, document);
 		} catch (error) {
 			logger.error({ err: error, documentName }, "collab onStoreDocument failed");
 			throw error;

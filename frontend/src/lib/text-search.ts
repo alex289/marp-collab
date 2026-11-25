@@ -1,12 +1,10 @@
 export type TextSearchMatch = {
-	fileId: string;
 	line: number;
 	column: number;
 	startOffset: number;
 	endOffset: number;
 	matchedText: string;
 	linePreview: string;
-	source: "active" | "backend";
 };
 
 type LineSpan = {
@@ -42,78 +40,44 @@ function getLineSpans(content: string): LineSpan[] {
 	return lines;
 }
 
-export function findTextMatches(
-	fileId: string,
-	content: string,
-	query: string,
-	source: TextSearchMatch["source"],
-): TextSearchMatch[] {
+export function findTextMatches(content: string, query: string): TextSearchMatch[] {
 	if (query === "") {
 		return [];
 	}
 
 	const matches: TextSearchMatch[] = [];
 	const lines = getLineSpans(content);
-	const searchableContent = content.toLocaleLowerCase();
-	const searchableQuery = query.toLocaleLowerCase();
-	let searchOffset = 0;
+	const pattern = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "giu");
 	let lineIndex = 0;
 
-	while (searchOffset <= content.length) {
-		const startOffset = searchableContent.indexOf(searchableQuery, searchOffset);
-
-		if (startOffset === -1) {
-			break;
-		}
-
+	for (const { 0: matchedText, index: startOffset } of content.matchAll(pattern)) {
 		while (lineIndex < lines.length - 1 && startOffset >= lines[lineIndex + 1].startOffset) {
 			lineIndex += 1;
 		}
 
 		const line = lines[lineIndex];
-		const endOffset = startOffset + query.length;
-
 		matches.push({
-			fileId,
 			line: lineIndex + 1,
 			column: startOffset - line.startOffset + 1,
 			startOffset,
-			endOffset,
-			matchedText: content.slice(startOffset, endOffset),
+			endOffset: startOffset + matchedText.length,
+			matchedText,
 			linePreview: content.slice(line.startOffset, line.endOffset),
-			source,
 		});
-
-		searchOffset = endOffset;
 	}
 
 	return matches;
 }
 
-export function replaceTextRange(
-	content: string,
-	match: { startOffset: number; endOffset: number; expectedText: string },
-	replacement: string,
-): { status: "replaced" | "stale"; content: string } {
-	const { startOffset, endOffset, expectedText } = match;
-	const hasValidOffsets =
+export function isCurrentTextMatch(content: string, match: TextSearchMatch): boolean {
+	const { startOffset, endOffset, matchedText } = match;
+	return (
 		Number.isInteger(startOffset) &&
 		Number.isInteger(endOffset) &&
 		startOffset >= 0 &&
-		endOffset >= startOffset &&
-		endOffset <= content.length;
-
-	if (
-		!hasValidOffsets ||
-		expectedText.length === 0 ||
-		endOffset - startOffset !== expectedText.length ||
-		content.slice(startOffset, endOffset) !== expectedText
-	) {
-		return { status: "stale", content };
-	}
-
-	return {
-		status: "replaced",
-		content: content.slice(0, startOffset) + replacement + content.slice(endOffset),
-	};
+		endOffset <= content.length &&
+		endOffset - startOffset === matchedText.length &&
+		matchedText.length > 0 &&
+		content.slice(startOffset, endOffset) === matchedText
+	);
 }

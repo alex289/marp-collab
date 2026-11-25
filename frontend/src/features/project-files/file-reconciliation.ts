@@ -1,5 +1,6 @@
 import type { DeckFile } from "../../lib/types.ts";
-import { getAncestorFolderPaths } from "./file-tree.ts";
+import { getAncestorFolderPaths } from "../../lib/project-file-path.ts";
+import { toDocumentName } from "../../../../shared/collaboration.ts";
 
 export type RenameResult =
 	| { type: "file"; oldFileId: string; newFileId: string }
@@ -92,6 +93,6 @@ function withFileId(projectId: string, file: DeckFile, fileId: string): DeckFile
 		...file,
 		id: fileId,
 		label: fileId,
-		documentName: file.type === "markdown" ? `project/${projectId}/${fileId}` : file.documentName,
+		documentName: file.type === "markdown" ? toDocumentName(projectId, fileId) : file.documentName,
 	};
 }

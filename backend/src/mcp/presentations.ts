@@ -3,8 +3,8 @@ import { collabServer } from "../collab/hocuspocus.ts";
 import { getCollabDocumentContent } from "../collab/document-content.ts";
 import { broadcastFilesChanged, flushProjectFileDocument } from "../collab/project-events.ts";
 import { getProjectAuthorization } from "../projects/access-policy.ts";
-import { beginProjectWrite } from "../projects/git-sync-lock.ts";
-import { toDocumentName } from "../projects/document-identity.ts";
+import { beginProjectWrite } from "../projects/project-operations.ts";
+import { DOCUMENT_CONTENT_KEY, toDocumentName } from "../../../shared/collaboration.ts";
 import {
 	createDocumentContent,
 	documentFileExists,
@@ -75,7 +75,7 @@ export async function writePresentation(
 			try {
 				await connection.transact((document) => {
 					requirePresentationAccess(projectId, userId, true);
-					const text = document.getText("content");
+					const text = document.getText(DOCUMENT_CONTENT_KEY);
 					const previous = text.toJSON();
 					if (contentRevision(previous) !== expectedRevision) {
 						throw new PresentationToolError(

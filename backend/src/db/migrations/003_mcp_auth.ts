@@ -1,9 +1,8 @@
-import { db } from "../db.ts";
+import type { Database } from "better-sqlite3";
 
 // Generated from the Better Auth 1.7.19 JWT, MCP, and CIMD schemas.
-function up() {
-	db.transaction(() => {
-		db.exec(`create table "jwks" ("id" text not null primary key, "publicKey" text not null, "privateKey" text not null, "createdAt" date not null, "expiresAt" date, "alg" text, "crv" text);
+function up(db: Database) {
+	db.exec(`create table "jwks" ("id" text not null primary key, "publicKey" text not null, "privateKey" text not null, "createdAt" date not null, "expiresAt" date, "alg" text, "crv" text);
 
 create table "oauthClient" ("id" text not null primary key, "clientId" text not null unique, "clientSecret" text, "clientDiscoveryId" text, "disabled" integer, "skipConsent" integer, "enableEndSession" integer, "subjectType" text, "scopes" text, "clientCredentialsScopes" text, "userId" text references "user" ("id") on delete cascade, "createdAt" date, "updatedAt" date, "name" text, "uri" text, "icon" text, "contacts" text, "tos" text, "policy" text, "softwareId" text, "softwareVersion" text, "softwareStatement" text, "redirectUris" text not null, "postLogoutRedirectUris" text, "backchannelLogoutUri" text, "backchannelLogoutSessionRequired" integer, "tokenEndpointAuthMethod" text, "applicationType" text, "jwks" text, "jwksUri" text, "grantTypes" text, "responseTypes" text, "requirePKCE" integer, "dpopBoundAccessTokens" integer, "referenceId" text, "metadata" text);
 
@@ -48,7 +47,6 @@ create index "oauthConsent_clientId_idx" on "oauthConsent" ("clientId");
 create index "oauthConsent_userId_idx" on "oauthConsent" ("userId");
 
 create unique index "oauthClientResource_clientId_resourceId_uidx" on "oauthClientResource" ("clientId", "resourceId");`);
-	})();
 }
 
 export default { name: "003_mcp_auth", up };

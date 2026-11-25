@@ -1,4 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
+import { APP_URL, AUTH_STATE_PATH } from "./test-environment.ts";
 
 export default defineConfig({
 	testDir: "./tests",
@@ -8,7 +9,7 @@ export default defineConfig({
 	workers: 1,
 	reporter: [["html", { open: "never" }]],
 	use: {
-		baseURL: "http://127.0.0.1:8090",
+		baseURL: APP_URL,
 
 		trace: "on-first-retry",
 	},
@@ -16,7 +17,7 @@ export default defineConfig({
 		{ name: "setup", testMatch: /.*\.setup\.ts/ },
 		{
 			name: "chromium",
-			use: { ...devices["Desktop Chrome"], storageState: "playwright/.auth/user.json" },
+			use: { ...devices["Desktop Chrome"], storageState: AUTH_STATE_PATH },
 			dependencies: ["setup"],
 		},
 	],
@@ -26,7 +27,7 @@ export default defineConfig({
 
 	webServer: {
 		command: "docker compose -f docker-compose.e2e.yml up --force-recreate --build",
-		url: "http://127.0.0.1:8090/api/v1/health",
+		url: `${APP_URL}/api/v1/health`,
 		timeout: 5 * 60 * 1000, // 5 minutes
 		reuseExistingServer: false,
 		stdout: "pipe",

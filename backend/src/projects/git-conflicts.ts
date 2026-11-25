@@ -1,0 +1,1 @@
+export const MAX_REPORTED_CONFLICTS = 200;

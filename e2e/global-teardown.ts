@@ -1,8 +1,6 @@
 import { spawnSync } from "node:child_process";
 
-export default async function globalTeardown() {
-	await (globalThis as any).__OIDC__?.stop();
-
+export default function globalTeardown() {
 	const result = spawnSync("docker", ["compose", "-f", "docker-compose.e2e.yml", "down"], {
 		stdio: "inherit",
 	});

@@ -1,4 +1,4 @@
-import { beginProjectWrite } from "../projects/git-sync-lock.ts";
+import { beginProjectWrite } from "../projects/project-operations.ts";
 import { createMiddleware } from "hono/factory";
 import { getProjectAccess, type ProjectAccess } from "../projects/access-policy.ts";
 import type { HonoVariables } from "../types.ts";

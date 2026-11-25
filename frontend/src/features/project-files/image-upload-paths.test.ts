@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { DeckFile } from "../../lib/types.ts";
-import { getImageUploadDestination, getMarkdownRelativeFilePath } from "./image-upload-paths.ts";
+import { getImageUploadDestination } from "./image-upload-paths.ts";
+import { getRelativeProjectFilePath } from "../../lib/project-file-path.ts";
 
 const file = (id: string, type: DeckFile["type"] = "asset"): DeckFile => ({
 	id,
@@ -47,14 +48,14 @@ test("matches conventional folder names case-insensitively and preserves their p
 });
 
 test("builds Markdown paths relative to the deck folder", () => {
-	assert.equal(getMarkdownRelativeFilePath("slides.md", "assets/photo.png"), "assets/photo.png");
+	assert.equal(getRelativeProjectFilePath("slides.md", "assets/photo.png"), "assets/photo.png");
 	assert.equal(
-		getMarkdownRelativeFilePath("decks/slides.md", "decks/images/photo.png"),
+		getRelativeProjectFilePath("decks/slides.md", "decks/images/photo.png"),
 		"images/photo.png",
 	);
 	assert.equal(
-		getMarkdownRelativeFilePath("decks/slides.md", "assets/photo.png"),
+		getRelativeProjectFilePath("decks/slides.md", "assets/photo.png"),
 		"../assets/photo.png",
 	);
-	assert.equal(getMarkdownRelativeFilePath("decks/slides.md", "decks/photo.png"), "photo.png");
+	assert.equal(getRelativeProjectFilePath("decks/slides.md", "decks/photo.png"), "photo.png");
 });

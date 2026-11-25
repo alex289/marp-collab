@@ -2,8 +2,6 @@ import { escapeHtml, escapeYaml, escapeYamlValue } from "./escape.ts";
 import type { ProjectTemplate } from "./types.ts";
 
 export const defaultTemplate: ProjectTemplate = {
-	id: "default",
-	label: "Default",
 	themeFiles: [],
 	createMarkdown: (title, author) => `---
 marp: true

@@ -7,7 +7,7 @@ import * as Y from "yjs";
 
 let tempDir: string;
 let collab: typeof import("./hocuspocus.ts");
-let lock: typeof import("../projects/git-sync-lock.ts");
+let operations: typeof import("../projects/project-operations.ts");
 let storage: typeof import("../projects/storage.ts");
 
 before(async () => {
@@ -15,7 +15,7 @@ before(async () => {
 	process.env.DATA_PATH = tempDir;
 	process.env.AUTH_SECRET = "hocuspocus-test-secret";
 	collab = await import("./hocuspocus.ts");
-	lock = await import("../projects/git-sync-lock.ts");
+	operations = await import("../projects/project-operations.ts");
 	storage = await import("../projects/storage.ts");
 });
 
@@ -31,15 +31,15 @@ test("refuses to load or store project documents while the project syncs with Gi
 	const document = new Y.Doc();
 	document.getText("content").insert(0, "stale");
 
-	lock.startProjectGitSync("syncing");
+	const sync = operations.beginProjectSync("syncing")!;
 	try {
 		await rejects(collab.collabServer.configuration.onLoadDocument!({ documentName } as never), {
-			reason: collab.GIT_SYNC_REJECTION_REASON,
+			reason: "Project is syncing with Git",
 		});
 		await collab.collabServer.configuration.onStoreDocument!({ documentName, document } as never);
 		equal(await storage.getDocumentContent(documentName), "pulled");
 	} finally {
-		lock.finishProjectGitSync("syncing");
+		sync.release();
 		document.destroy();
 	}
 });

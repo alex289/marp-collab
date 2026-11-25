@@ -5,11 +5,9 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { Readable } from "node:stream";
 import {
-	finishProjectGitConfigure,
-	finishProjectGitSync,
-	startProjectGitConfigure,
-	startProjectGitSync,
-} from "../../projects/git-sync-lock.ts";
+	beginProjectRepositoryOperation,
+	beginProjectSync,
+} from "../../projects/project-operations.ts";
 import { Document } from "@hocuspocus/server";
 import git from "isomorphic-git";
 import { Hono } from "hono";
@@ -634,7 +632,8 @@ describe("projects routes", () => {
 	});
 
 	test("rejects project file mutations while Git sync is running", async () => {
-		startProjectGitSync("upload-proj");
+		const sync = beginProjectSync("upload-proj");
+		ok(sync);
 		try {
 			const response = await app.request("/upload-proj/files", {
 				method: "POST",
@@ -643,7 +642,7 @@ describe("projects routes", () => {
 			});
 			equal(response.status, 409);
 		} finally {
-			finishProjectGitSync("upload-proj");
+			sync.release();
 		}
 	});
 
@@ -682,16 +681,58 @@ describe("projects routes", () => {
 			equal((await save()).status, 200);
 			equal(messages.length, 0);
 
-			startProjectGitSync("owner-only-proj");
+			const sync = beginProjectSync("owner-only-proj");
+			ok(sync);
 			try {
 				equal((await save()).status, 409);
 			} finally {
-				finishProjectGitSync("owner-only-proj");
+				sync.release();
 			}
 		} finally {
 			collabServer.documents.delete(document.name);
 			document.destroy();
 		}
+	});
+
+	test("does not restore an inherited Git token rotated during remote verification", async (t) => {
+		const { createProject } = await import("../../db/models/project.ts");
+		const projectId = "git-credential-rotation";
+		createProject({ id: projectId, name: "Git Credential Rotation", ownerId: "user-1" });
+		const save = (token?: string) =>
+			app.request(`/${projectId}/git`, {
+				method: "PUT",
+				headers: { "content-type": "application/json", "x-test-user-id": "user-1" },
+				body: JSON.stringify({
+					remoteUrl: "https://example.com/slides.git",
+					branch: "main",
+					token,
+				}),
+			});
+		equal((await save("original-token")).status, 200);
+
+		const { promise: checking, resolve: startChecking } = Promise.withResolvers<void>();
+		const { promise: checked, resolve: finishChecking } = Promise.withResolvers<void>();
+		t.mock.method(
+			git,
+			"listServerRefs",
+			async (options: Parameters<typeof git.listServerRefs>[0]) => {
+				const auth = await options.onAuth?.("https://example.com/slides.git", {});
+				if (auth?.password === "original-token") {
+					startChecking();
+					await checked;
+				}
+				return [];
+			},
+		);
+		const pending = Promise.resolve(save());
+		try {
+			const paused = await Promise.race([checking.then(() => true), pending.then(() => false)]);
+			ok(paused, "the settings request should verify the saved token");
+			equal((await save("rotated-token")).status, 200);
+		} finally {
+			finishChecking();
+		}
+		equal((await pending).status, 409);
 	});
 
 	test("does not recreate a project deleted while its Git settings were being checked", async (t) => {
@@ -700,12 +741,13 @@ describe("projects routes", () => {
 		const projectDir = await files.getProjectDirectory("deleted-git-proj");
 		const headers = { "content-type": "application/json", "x-test-user-id": "user-1" };
 
-		startProjectGitConfigure("deleted-git-proj");
+		const release = beginProjectRepositoryOperation("deleted-git-proj");
+		ok(release);
 		try {
 			const busy = await app.request("/deleted-git-proj", { method: "DELETE", headers });
 			equal(busy.status, 409);
 		} finally {
-			finishProjectGitConfigure("deleted-git-proj");
+			release();
 		}
 
 		const { promise: checking, resolve: startChecking } = Promise.withResolvers<void>();
@@ -754,7 +796,7 @@ describe("projects routes", () => {
 			messages.push(payload);
 		});
 		collabServer.documents.set(document.name, document);
-		const gitSync = await import("../../projects/git-sync.ts");
+		const gitActions = await import("../../projects/git-actions.ts");
 		const push = () =>
 			app.request("/upload-proj/git/push", {
 				method: "POST",
@@ -765,7 +807,7 @@ describe("projects routes", () => {
 			equal((await push()).status, 409);
 			equal(messages.length, 0);
 
-			await gitSync.configureProjectGit({
+			await gitActions.configureProjectGit({
 				projectId: "upload-proj",
 				remoteUrl: "https://example.com/slides.git",
 				branch: "main",
@@ -775,7 +817,7 @@ describe("projects routes", () => {
 			ok((await push()).status >= 400);
 			ok(messages.includes("git-sync-finished"));
 		} finally {
-			await gitSync.disconnectProjectGit("upload-proj");
+			await gitActions.disconnectProjectGit("upload-proj");
 			collabServer.documents.delete(document.name);
 			document.destroy();
 		}

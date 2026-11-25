@@ -1,13 +1,14 @@
 import { describe, test, before, after } from "node:test";
-import { ok, equal } from "node:assert";
+import { ok, equal, throws } from "node:assert/strict";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import type { Database } from "better-sqlite3";
+import Database, { type Database as DatabaseConnection } from "better-sqlite3";
+import { runMigrations } from "./migrations/index.ts";
 
 describe("database initialization and migrations", () => {
 	let tempDir: string;
-	let db: Database;
+	let db: DatabaseConnection;
 
 	before(async () => {
 		tempDir = await mkdtemp(join(tmpdir(), "marp-test-db-"));
@@ -76,9 +77,25 @@ describe("database initialization and migrations", () => {
 		equal(db.pragma("foreign_keys", { simple: true }), 1);
 	});
 
-	test("runMigrations is idempotent", async () => {
-		const { runMigrations } = await import("./migrations/index.ts");
-		runMigrations();
+	test("runMigrations is idempotent", () => {
+		runMigrations(db);
 		equal(db.pragma("user_version", { simple: true }), 3);
 	});
+});
+
+test("a failed migration rolls back schema changes and leaves the database retryable", () => {
+	const db = new Database(":memory:");
+	try {
+		db.exec('create table "oauthClient" ("id" text)');
+		throws(() => runMigrations(db), /oauthClient.*already exists/);
+		equal(db.pragma("user_version", { simple: true }), 0);
+		equal(db.prepare("select name from sqlite_master where name = 'jwks'").get(), undefined);
+
+		db.exec('drop table "oauthClient"');
+		runMigrations(db);
+		equal(db.pragma("user_version", { simple: true }), 3);
+		ok(db.prepare("select name from sqlite_master where name = 'jwks'").get());
+	} finally {
+		db.close();
+	}
 });

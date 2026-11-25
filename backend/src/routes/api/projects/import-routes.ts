@@ -1,12 +1,9 @@
-import { randomUUID } from "node:crypto";
 import { Hono } from "hono";
 import z from "zod";
-import { createProject } from "../../../db/models/project.ts";
 import { logger } from "../../../helpers/logger.ts";
-import { importProjectFromZip } from "../../../projects/project-import.ts";
-import { commitStagedProjectDirectory, deleteProjectDirectory } from "../../../projects/storage.ts";
+import { provisionProjectFromZip } from "../../../projects/project-provisioning.ts";
 import type { HonoVariables } from "../../../types.ts";
-import { importProjectSchema } from "./schemas.ts";
+import { projectNameInput } from "./project-name-schema.ts";
 
 const app = new Hono<{ Variables: HonoVariables }>();
 
@@ -17,7 +14,7 @@ app.post("/", async (c) => {
 	}
 
 	const body = await c.req.parseBody();
-	const parseResult = importProjectSchema.safeParse({ name: body.name });
+	const parseResult = projectNameInput.safeParse({ name: body.name });
 	if (!parseResult.success) {
 		return c.json({ error: z.prettifyError(parseResult.error) }, 400);
 	}
@@ -30,29 +27,14 @@ app.post("/", async (c) => {
 		return c.json({ error: "File must be a .zip archive" }, 400);
 	}
 
-	const stagingId = `importing-${randomUUID()}`;
-	let importedDirectoryId = stagingId;
-
 	try {
 		const zipData = new Uint8Array(await uploadedFile.arrayBuffer());
-		await importProjectFromZip(stagingId, zipData);
-
-		const projectId = randomUUID();
-		await commitStagedProjectDirectory(stagingId, projectId);
-		importedDirectoryId = projectId;
-		createProject({ id: projectId, name: parseResult.data.name, ownerId: user.id });
-
+		const projectId = await provisionProjectFromZip(
+			{ name: parseResult.data.name, ownerId: user.id },
+			zipData,
+		);
 		return c.json({ projectId });
 	} catch (error) {
-		try {
-			await deleteProjectDirectory(importedDirectoryId);
-		} catch (cleanupError) {
-			logger.error(
-				{ err: cleanupError, directoryId: importedDirectoryId },
-				"Failed to clean up failed project import",
-			);
-		}
-
 		logger.warn({ err: error }, "Project import failed");
 		return c.json(
 			{ error: error instanceof Error ? error.message : "Failed to import project" },

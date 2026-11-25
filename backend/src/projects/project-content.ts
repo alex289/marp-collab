@@ -6,7 +6,7 @@ import {
 	flushProjectFolderDocuments,
 } from "../collab/project-events.ts";
 import { getFileType } from "../helpers/file-allowlist.ts";
-import { toDocumentName } from "./document-identity.ts";
+import { toDocumentName } from "../../../shared/collaboration.ts";
 import {
 	createProjectDir,
 	deleteProjectFile,

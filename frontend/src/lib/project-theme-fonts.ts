@@ -1,5 +1,5 @@
 import { collectCssReferences } from "./asset-diagnostics.ts";
-import { API_URL } from "./config.ts";
+import { projectFilesUrl } from "./project-file-url.ts";
 
 // Embedded fonts are re-sent to the preview with every render, so larger files
 // keep their URL instead of bloating each push.
@@ -51,7 +51,7 @@ export async function inlineProjectThemeFonts(
 	projectId: string,
 	requests: Map<string, Promise<string | undefined>>,
 ): Promise<string> {
-	const prefix = `${API_URL}/projects/${projectId}/files/`;
+	const prefix = `${projectFilesUrl(projectId)}/`;
 	const fonts = await Promise.all(
 		collectCssReferences(css).map(async ({ from, to, reference }) => {
 			if (!reference.startsWith(prefix)) {

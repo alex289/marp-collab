@@ -29,6 +29,7 @@ import { toast } from "sonner";
 import { useHotkey } from "@tanstack/react-hotkeys";
 import { findMissingAssetReferences } from "@/lib/asset-diagnostics";
 import { loadTailwindCatalog } from "@/lib/marp";
+import { isCssFileId } from "@/lib/file-types";
 import { countMarpSlides } from "@/lib/slide-count";
 import { cn } from "@/lib/utils";
 import type { DeckFile } from "@/lib/types";
@@ -309,7 +310,7 @@ export const EditorPane = forwardRef<EditorPaneHandle, EditorPaneProps>(function
 			return "No file";
 		}
 
-		if (label.endsWith(".css")) {
+		if (isCssFileId(label)) {
 			return "CSS";
 		}
 

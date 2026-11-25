@@ -1,8 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+	dispatchSlideFrameKey,
+	SLIDE_FRAME_BRIDGE_SCRIPT,
+	useSlideFrameBridge,
+} from "@/hooks/use-slide-frame-bridge";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { LayoutGrid } from "lucide-react";
 import { SidebarGroup, SidebarGroupContent, SidebarGroupLabel } from "@/components/ui/sidebar";
-import { renderMarp, type SlideChecks } from "@/lib/marp";
-import { useSlideTailwindReady } from "@/hooks/use-slide-tailwind-ready";
+import type { SlideChecks, SlideDisplay } from "@/lib/marp";
 import {
 	editSlideDeck,
 	getEditableSlideDeck,
@@ -18,12 +22,8 @@ import marpitSvgPolyfillScript from "@marp-team/marpit-svg-polyfill/lib/polyfill
 
 type SlideOverviewPanelProps = {
 	markdown: string;
-	isMarkdown: boolean;
-	projectId: string;
+	slides: SlideDisplay;
 	deckFileId: string | null;
-	themeRevision: number;
-	assetRevision: number;
-	assetToken?: string;
 	/** Null when another file is open. */
 	activeLine: number | null;
 	canEdit: boolean;
@@ -319,35 +319,24 @@ const staticSrcDoc = `<!doctype html>
       });
 
       // Forward keys because events inside the iframe never reach page-level shortcuts.
-      function forwardKey(type) {
-        return function (e) {
-          if (canReorder && (e.key === 'ContextMenu' || (e.shiftKey && e.key === 'F10'))) {
-            var element = elementWithIndex(e.target);
-            if (element) {
-              e.preventDefault();
-              if (type === 'keydown' && !e.repeat) {
-                var rect = element.getBoundingClientRect();
-                openContextMenu(element, rect.right, rect.bottom, true);
-              }
-              return;
+      function forwardKey(event) {
+        if (canReorder && (event.key === 'ContextMenu' || (event.shiftKey && event.key === 'F10'))) {
+          var element = elementWithIndex(event.target);
+          if (element) {
+            event.preventDefault();
+            if (event.type === 'keydown' && !event.repeat) {
+              var rect = element.getBoundingClientRect();
+              openContextMenu(element, rect.right, rect.bottom, true);
             }
+            return;
           }
-          if (e.target instanceof HTMLButtonElement && (e.key === ' ' || e.key === 'Enter')) return;
-          post({
-            type: 'presentation-key',
-            eventType: type,
-            key: e.key,
-            code: e.code,
-            ctrlKey: e.ctrlKey,
-            shiftKey: e.shiftKey,
-            altKey: e.altKey,
-            metaKey: e.metaKey,
-          });
-        };
+        }
+        if (event.target instanceof HTMLButtonElement && (event.key === ' ' || event.key === 'Enter')) return;
+        post(slideFrameKeyMessage(event, false));
       }
 
-      window.addEventListener('keydown', forwardKey('keydown'));
-      window.addEventListener('keyup', forwardKey('keyup'));
+      window.addEventListener('keydown', forwardKey);
+      window.addEventListener('keyup', forwardKey);
 
       function handlePortMessage(e) {
         if (!e.data) return;
@@ -379,13 +368,8 @@ const staticSrcDoc = `<!doctype html>
         }
       }
 
-      window.addEventListener('message', function (e) {
-        if (e.source !== window.parent) return;
-        if (e.data && e.data.type === 'init-port' && e.ports && e.ports[0]) {
-          port = e.ports[0];
-          port.onmessage = handlePortMessage;
-        }
-      });
+      ${SLIDE_FRAME_BRIDGE_SCRIPT}
+      listenForSlideFramePort(handlePortMessage);
     </script>
   </head>
   <body><div id="stage"></div></body>
@@ -393,12 +377,8 @@ const staticSrcDoc = `<!doctype html>
 
 export const SlideOverviewPanel = ({
 	markdown,
-	isMarkdown,
-	projectId,
+	slides,
 	deckFileId,
-	themeRevision,
-	assetRevision,
-	assetToken,
 	activeLine,
 	canEdit,
 	editHint,
@@ -407,9 +387,7 @@ export const SlideOverviewPanel = ({
 }: SlideOverviewPanelProps) => {
 	const { resolvedTheme } = useTheme();
 	const iframeRef = useRef<HTMLIFrameElement>(null);
-	const portRef = useRef<MessagePort | null>(null);
 	const revision = useRef(0);
-	const [iframeLoad, setIframeLoad] = useState(0);
 	const [selection, setSelection] = useState<{
 		key: string;
 		indices: number[];
@@ -419,25 +397,8 @@ export const SlideOverviewPanel = ({
 		null,
 	);
 
-	const slideTailwindReady = useSlideTailwindReady();
-	const rendered = useMemo(() => {
-		// Re-render when project themes change or the lazy Tailwind compiler becomes ready.
-		void themeRevision;
-		void slideTailwindReady;
-		try {
-			return renderMarp(markdown, projectId, deckFileId, assetRevision, assetToken);
-		} catch {
-			return null;
-		}
-	}, [
-		markdown,
-		projectId,
-		deckFileId,
-		themeRevision,
-		slideTailwindReady,
-		assetRevision,
-		assetToken,
-	]);
+	const isMarkdown = deckFileId !== null;
+	const rendered = "slideSource" in slides ? slides : null;
 
 	const deck = useMemo(
 		() => rendered && getEditableSlideDeck(markdown, rendered.slideSource),
@@ -497,142 +458,112 @@ export const SlideOverviewPanel = ({
 	}
 
 	const frameState = useRef({ activeIndex, selected });
-	const messageHandler = useRef<((event: MessageEvent) => void) | null>(null);
 	useEffect(() => {
 		frameState.current = { activeIndex, selected };
-		messageHandler.current = (event) => {
-			const payload = event.data;
-			if (payload?.revision !== revision.current) {
-				return;
-			}
+	}, [activeIndex, selected]);
 
-			if (payload.type === "presentation-key") {
-				if (
-					(payload.eventType !== "keydown" && payload.eventType !== "keyup") ||
-					typeof payload.key !== "string" ||
-					typeof payload.code !== "string"
-				) {
-					return;
-				}
-				document.dispatchEvent(
-					new KeyboardEvent(payload.eventType, {
-						key: payload.key,
-						code: payload.code,
-						ctrlKey: payload.ctrlKey,
-						shiftKey: payload.shiftKey,
-						altKey: payload.altKey,
-						metaKey: payload.metaKey,
-						bubbles: true,
-						cancelable: true,
-					}),
-				);
-				return;
-			}
+	const { port, load, connect } = useSlideFrameBridge((event) => {
+		const payload = event.data;
+		if (payload?.revision !== revision.current) {
+			return;
+		}
 
-			if (
-				payload.type === "overview-slide-move" &&
-				Number.isInteger(payload.from) &&
-				slideLines[payload.from] !== undefined &&
-				Number.isInteger(payload.slot)
-			) {
-				const indices = selected?.includes(payload.from) ? selected : [payload.from];
-				applyAction({ type: "move", indices, slot: payload.slot });
-				return;
-			}
+		if (dispatchSlideFrameKey(payload)) {
+			return;
+		}
 
-			const index: number = payload.index;
-			if (!Number.isInteger(index) || slideLines[index] === undefined) {
-				return;
-			}
+		if (
+			payload.type === "overview-slide-move" &&
+			Number.isInteger(payload.from) &&
+			slideLines[payload.from] !== undefined &&
+			Number.isInteger(payload.slot)
+		) {
+			const indices = selected?.includes(payload.from) ? selected : [payload.from];
+			applyAction({ type: "move", indices, slot: payload.slot });
+			return;
+		}
 
-			if (payload.type === "overview-slide-contextmenu") {
-				const frame = iframeRef.current;
-				const { x, y } = payload;
-				if (
-					!editable ||
-					!frame ||
-					!Number.isFinite(x) ||
-					!Number.isFinite(y) ||
-					x < 0 ||
-					y < 0 ||
-					x > frame.clientWidth ||
-					y > frame.clientHeight
-				) {
-					return;
-				}
-				const rect = frame.getBoundingClientRect();
-				setThumbnailMenu({
-					key: slideKey([index]),
-					index,
-					x: rect.left + x,
-					y: rect.top + y,
-					keyboard: payload.keyboard === true,
-					open: true,
-				});
-				return;
-			}
+		const index: number = payload.index;
+		if (!Number.isInteger(index) || slideLines[index] === undefined) {
+			return;
+		}
 
-			if (payload.type === "overview-slide-click") {
-				onSelectLine(slideLines[index]);
-				return;
-			}
+		if (payload.type === "overview-slide-contextmenu") {
+			const frame = iframeRef.current;
+			const { x, y } = payload;
 			if (
 				!editable ||
-				(payload.type !== "overview-slide-select" && payload.type !== "overview-section-select")
+				!frame ||
+				!Number.isFinite(x) ||
+				!Number.isFinite(y) ||
+				x < 0 ||
+				y < 0 ||
+				x > frame.clientWidth ||
+				y > frame.clientHeight
 			) {
 				return;
 			}
-			setSelection((previous) => {
-				if (!previous || previous.key !== slideKey(previous.indices)) {
+			const rect = frame.getBoundingClientRect();
+			setThumbnailMenu({
+				key: slideKey([index]),
+				index,
+				x: rect.left + x,
+				y: rect.top + y,
+				keyboard: payload.keyboard === true,
+				open: true,
+			});
+			return;
+		}
+
+		if (payload.type === "overview-slide-click") {
+			onSelectLine(slideLines[index]);
+			return;
+		}
+		if (
+			!editable ||
+			(payload.type !== "overview-slide-select" && payload.type !== "overview-section-select")
+		) {
+			return;
+		}
+		setSelection((previous) => {
+			if (!previous || previous.key !== slideKey(previous.indices)) {
+				return previous;
+			}
+			const next = new Set(previous.indices);
+			let anchor = index;
+			if (payload.type === "overview-section-select") {
+				const section = sections.find(({ start }) => start === index);
+				if (!section) {
 					return previous;
 				}
-				const next = new Set(previous.indices);
-				let anchor = index;
-				if (payload.type === "overview-section-select") {
-					const section = sections.find(({ start }) => start === index);
-					if (!section) {
-						return previous;
+				const group = Array.from(
+					{ length: section.end - section.start },
+					(_, offset) => index + offset,
+				);
+				if (group.every((item) => next.has(item))) {
+					for (const item of group) {
+						next.delete(item);
 					}
-					const group = Array.from(
-						{ length: section.end - section.start },
-						(_, offset) => index + offset,
-					);
-					if (group.every((item) => next.has(item))) {
-						for (const item of group) {
-							next.delete(item);
-						}
-					} else {
-						for (const item of group) {
-							next.add(item);
-						}
-					}
-				} else if (payload.range && previous.anchor !== null) {
-					anchor = previous.anchor;
-					for (let item = Math.min(index, anchor); item <= Math.max(index, anchor); item += 1) {
+				} else {
+					for (const item of group) {
 						next.add(item);
 					}
-				} else if (!next.delete(index)) {
-					next.add(index);
 				}
-				const indices = [...next].sort((a, b) => a - b);
-				return { key: slideKey(indices), indices, anchor };
-			});
-		};
+			} else if (payload.range && previous.anchor !== null) {
+				anchor = previous.anchor;
+				for (let item = Math.min(index, anchor); item <= Math.max(index, anchor); item += 1) {
+					next.add(item);
+				}
+			} else if (!next.delete(index)) {
+				next.add(index);
+			}
+			const indices = [...next].sort((a, b) => a - b);
+			return { key: slideKey(indices), indices, anchor };
+		});
 	});
 
-	const handleIframeLoad = useCallback(() => {
-		portRef.current?.close();
-		const channel = new MessageChannel();
-		portRef.current = channel.port1;
-		channel.port1.onmessage = (event) => messageHandler.current?.(event);
-		iframeRef.current?.contentWindow?.postMessage({ type: "init-port" }, "*", [channel.port2]);
-		setIframeLoad((load) => load + 1);
-	}, []);
-
-	useEffect(() => () => portRef.current?.close(), []);
-
 	useEffect(() => {
-		if (!iframeLoad || !rendered || !portRef.current) {
+		if (!load || !rendered || !port.current) {
 			return;
 		}
 
@@ -644,7 +575,7 @@ export const SlideOverviewPanel = ({
 		const accent = isDark ? "oklch(0.72 0.15 250)" : "oklch(0.52 0.18 255)";
 		const muted = isDark ? "oklch(0.65 0 0)" : "oklch(0.45 0 0)";
 
-		portRef.current.postMessage({
+		port.current.postMessage({
 			type: "overview-update",
 			revision: ++revision.current,
 			...frameState.current,
@@ -767,19 +698,19 @@ export const SlideOverviewPanel = ({
       body.is-dragging, body.is-dragging .thumb-label { cursor: grabbing; }
     `,
 		});
-	}, [iframeLoad, rendered, resolvedTheme, editable, sections]);
+	}, [load, rendered, resolvedTheme, editable, sections, port]);
 
 	useEffect(() => {
-		if (!iframeLoad) {
+		if (!load) {
 			return;
 		}
-		portRef.current?.postMessage({
+		port.current?.postMessage({
 			type: "overview-set-state",
 			revision: revision.current,
 			activeIndex,
 			selected,
 		});
-	}, [iframeLoad, activeIndex, selected]);
+	}, [load, activeIndex, selected, port]);
 
 	return (
 		<SidebarGroup className="h-full min-h-0">
@@ -807,7 +738,7 @@ export const SlideOverviewPanel = ({
 							setThumbnailMenu((menu) => (menu?.open ? { ...menu, open: false } : menu))
 						}
 						onFocusThumbnail={(index) =>
-							portRef.current?.postMessage({
+							port.current?.postMessage({
 								type: "overview-focus-slide",
 								revision: revision.current,
 								index,
@@ -836,7 +767,7 @@ export const SlideOverviewPanel = ({
 							srcDoc={staticSrcDoc}
 							className="min-h-0 w-full flex-1"
 							sandbox="allow-scripts"
-							onLoad={handleIframeLoad}
+							onLoad={connect}
 						/>
 						<p className="shrink-0 px-2 pt-2 text-xs text-center text-muted-foreground">
 							{!canEdit

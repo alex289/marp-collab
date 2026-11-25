@@ -1,8 +1,7 @@
 import type { GenericOAuthConfig } from "better-auth/plugins";
 import { logger } from "../helpers/logger.ts";
 
-const publicProviderInfo: { name: string; id: string }[] = [];
-let providers: GenericOAuthConfig[] | undefined = undefined;
+let authConfig: ReturnType<typeof loadAuthConfig> | undefined;
 
 const envBaseName = "AUTH_PROVIDER_";
 
@@ -13,14 +12,13 @@ function parseEnvName(envName: string) {
 	return { providerId, configKey };
 }
 
-export function loadAuthConfig() {
-	publicProviderInfo.length = 0;
-	let parsedProviders = new Map<string, Partial<GenericOAuthConfig>>();
+export function loadAuthConfig(env: NodeJS.ProcessEnv = process.env) {
+	const parsedProviders = new Map<string, Partial<GenericOAuthConfig>>();
 
-	for (const key in process.env) {
+	for (const key in env) {
 		if (key.startsWith(envBaseName)) {
 			const { providerId, configKey } = parseEnvName(key);
-			const value = process.env[key]?.trim();
+			const value = env[key]?.trim();
 
 			if (!value) {
 				continue;
@@ -34,7 +32,6 @@ export function loadAuthConfig() {
 
 			switch (configKey) {
 				case "NAME":
-					publicProviderInfo.push({ name: value, id: providerId });
 					providerConfig.name = value;
 					break;
 				case "CLIENT_ID":
@@ -66,16 +63,17 @@ export function loadAuthConfig() {
 		}
 	}
 
-	providers = [];
+	const providers: (GenericOAuthConfig & { name: string })[] = [];
 	for (const [providerId, config] of parsedProviders.entries()) {
-		if (!config.clientId) {
+		const { clientId, clientSecret, name } = config;
+		if (!clientId) {
 			logger.error(
 				`Missing CLIENT_ID environment variable for provider ${providerId}. Skipping this provider.`,
 			);
 			continue;
 		}
 
-		if (!config.clientSecret) {
+		if (!clientSecret) {
 			logger.error(
 				`Missing CLIENT_SECRET environment variable for provider ${providerId}. Skipping this provider.`,
 			);
@@ -97,32 +95,34 @@ export function loadAuthConfig() {
 			config.accountSubject = ({ profile }) => profile.id || profile.sub || "";
 		}
 
-		if (!publicProviderInfo.some((info) => info.id === providerId)) {
+		if (!name) {
 			logger.warn(
 				`Missing NAME environment variable for provider ${providerId}. Skipping this provider.`,
 			);
 			continue;
 		}
 
-		providers.push(config as GenericOAuthConfig);
+		providers.push({ ...config, providerId, clientId, clientSecret, name });
 	}
 
 	if (providers.length === 0) {
 		logger.warn("No valid OAuth providers configured.");
 	}
+
+	return {
+		providers,
+		publicProviderInfo: providers.map(({ providerId, name }) => ({ id: providerId, name })),
+	};
+}
+
+function getAuthConfig() {
+	return (authConfig ??= loadAuthConfig());
 }
 
 export function getAuthProviders(): GenericOAuthConfig[] {
-	if (!providers) {
-		loadAuthConfig();
-
-		if (!providers) {
-			throw new Error("No OAuth providers configured. Please set required environment variables.");
-		}
-	}
-	return providers;
+	return getAuthConfig().providers;
 }
 
 export function getPublicProviderInfo() {
-	return publicProviderInfo;
+	return getAuthConfig().publicProviderInfo;
 }

@@ -2,11 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { DeckFile } from "../../lib/types.ts";
 import {
-	buildFileTree,
 	getAncestorFolderPaths,
 	getParentFolderPath,
 	normalizeProjectFilePath,
-} from "./file-tree.ts";
+} from "../../lib/project-file-path.ts";
+import { buildFileTree } from "./file-tree.ts";
 
 const file = (id: string, type: DeckFile["type"] = "markdown"): DeckFile => ({
 	id,

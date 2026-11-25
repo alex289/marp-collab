@@ -3,16 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { z } from "zod/v4-mini";
 import * as Y from "yjs";
 import { toast } from "sonner";
-import {
-	lazy,
-	Suspense,
-	useCallback,
-	useEffect,
-	useMemo,
-	useRef,
-	useState,
-	useSyncExternalStore,
-} from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { FileSidebar } from "@/components/file-sidebar";
 import { ProjectGitControls } from "@/components/project-git-setting";
 import {
@@ -37,7 +28,7 @@ import { PresentationTimer } from "@/components/presentation-timer";
 import { HelpDialog } from "@/components/dialog/help-dialog";
 import type { EditorPaneHandle, MarkdownImageUploadResult } from "@/components/editor-pane";
 import { SearchPanel } from "@/components/search-panel";
-import { findTextMatches, replaceTextRange, type TextSearchMatch } from "@/lib/text-search";
+import { useActiveFileSearch } from "@/hooks/use-active-file-search";
 import { OutlinePanel } from "@/components/outline-panel";
 import { SlideOverviewPanel } from "@/components/slide-overview-panel";
 import { parseMarkdownOutline } from "@/lib/outline";
@@ -48,39 +39,24 @@ import {
 	type DeckBlocks,
 	type SlideEdit,
 } from "@/lib/slide-blocks";
-import { isEditableDeckFile, isMarkdownDeckFile } from "@/lib/file-types";
+import { isCssDeckFile, isEditableDeckFile, isMarkdownDeckFile } from "@/lib/file-types";
 import { PaneResizeHandle } from "@/components/pane-resize-handle";
-import {
-	analyzeSlides,
-	listThemeNames,
-	rewriteCssUrls,
-	setProjectThemes,
-	type SlideChecks,
-} from "@/lib/marp";
-import { useAssetToken } from "@/lib/asset-token";
-import { inlineProjectThemeFonts } from "@/lib/project-theme-fonts";
+import type { SlideChecks } from "@/lib/marp";
+import { useProjectRendering } from "@/hooks/use-project-rendering";
 import { fetcher } from "@/lib/fetcher";
 import { applyThemeToYText, getMarkdownTheme } from "@/lib/markdown-theme";
-import { upsertProjectTheme } from "@/lib/project-themes";
-import { createProjectThemeStore } from "@/lib/project-theme-store";
 import { API_URL } from "@/lib/config";
 import { releaseWakeLock, requestWakeLock } from "@/lib/wake-lock";
-import { openDemoWindow, supportsDemoWindow } from "@/lib/demo-window";
+import { useLiveDemo } from "@/hooks/use-live-demo";
 import {
-	hasDemoAudience,
-	publishDemoShare,
-	registerDemoPresenter,
 	stopDemoFromAudience,
-	stopDemoStream,
 	TOGGLE_AUDIENCE_FULLSCREEN,
 	toggleAudienceFullscreen,
 } from "@/lib/demo-share";
 import { DemoAudienceVideo } from "@/components/demo-audience-video";
 import { useProjectFilesWorkspace } from "@/features/project-files/use-project-files-workspace";
-import {
-	getImageUploadDestination,
-	getMarkdownRelativeFilePath,
-} from "@/features/project-files/image-upload-paths";
+import { getImageUploadDestination } from "@/features/project-files/image-upload-paths";
+import { getRelativeProjectFilePath } from "@/lib/project-file-path";
 import {
 	ChevronLeftIcon,
 	ChevronRightIcon,
@@ -92,6 +68,8 @@ import {
 	XIcon,
 } from "lucide-react";
 import useSWR from "swr";
+import { FILES_CHANGED, GIT_SYNC_FINISHED } from "../../../../shared/collaboration.ts";
+import { DEFAULT_DECK_FILE } from "../../../../shared/project-templates.ts";
 
 const EditorPane = lazy(async () => {
 	const m = await import("@/components/editor-pane");
@@ -259,7 +237,7 @@ function resolveSelectedFile(
 
 	return (
 		requestedFile ??
-		files.find((file) => file.id === "presentation.md") ??
+		files.find((file) => file.id === DEFAULT_DECK_FILE) ??
 		files.find((file) => isMarkdownDeckFile(file)) ??
 		files[0] ??
 		null
@@ -283,9 +261,12 @@ function resolvePreviewFile(
 }
 
 function RouteComponent() {
-	const { session } = Route.useRouteContext();
-
 	const { id } = Route.useParams();
+	return <PresentationWorkspace key={id} id={id} />;
+}
+
+function PresentationWorkspace({ id }: { id: string }) {
+	const { session } = Route.useRouteContext();
 	const search = Route.useSearch();
 	const navigate = Route.useNavigate();
 	const presenceUser = usePresenceUser(session?.user ?? null);
@@ -300,10 +281,10 @@ function RouteComponent() {
 		presenceUser,
 		selectedFile?.id ?? null,
 		(payload) => {
-			if (payload === "files-changed") {
+			if (payload === FILES_CHANGED) {
 				setFilesChangedRevision((revision) => revision + 1);
 			}
-			if (payload === "git-sync-finished") {
+			if (payload === GIT_SYNC_FINISHED) {
 				setCollabRevision((revision) => revision + 1);
 			}
 		},
@@ -382,72 +363,22 @@ function RouteComponent() {
 	const [sidebarResizing, setSidebarResizing] = useState(false);
 	const mainRef = useRef<HTMLElement | null>(null);
 	const [markdown, setMarkdown] = useState("");
-	const [projectThemeStore] = useState(() =>
-		createProjectThemeStore(setProjectThemes, listThemeNames()),
-	);
-	const {
-		themes: projectThemes,
-		names: themeNames,
-		revision: themeRevision,
-	} = useSyncExternalStore(projectThemeStore.subscribe, projectThemeStore.getSnapshot);
-	const [assetRevision, setAssetRevision] = useState(0);
-	const assetToken = useAssetToken(id);
 	const [slideIndex, setSlideIndex] = useState(0);
 	const [isBlanked, setIsBlanked] = useState(false);
 	const hasChangedBlankingRef = useRef(false);
 	const lastBlankingUpdateRef = useRef(0);
-	const [isDemo, setIsDemo] = useState(false);
-	const hasChangedDemoRef = useRef(false);
 	const lastDemoUpdateRef = useRef(0);
-	const [isSharingDemo, setIsSharingDemo] = useState(false);
-	// React dev tooling inspects props. Passing the PiP window would expose cross-origin frames.
-	const [demoContainer, setDemoContainer] = useState<HTMLElement | null>(null);
-	const demoWindowRef = useRef<Window | null>(null);
-	const stopDemoShareRef = useRef<(() => void) | null>(null);
-	const demoCapturePendingRef = useRef(false);
-	// A pending picker or floating window may resolve after leaving the deck.
-	const demoRequestRef = useRef(0);
-	const closeDemoOutput = useCallback(() => {
-		demoRequestRef.current += 1;
-		stopDemoShareRef.current?.();
-		stopDemoShareRef.current = null;
-		const current = demoWindowRef.current;
-		demoWindowRef.current = null;
-		current?.close();
-	}, []);
-	const stopDemo = useCallback(() => {
-		closeDemoOutput();
-		setIsDemo(false);
-	}, [closeDemoOutput]);
-	const slideHasSpeakerNotesRef = useRef(false);
-	const handleHasSpeakerNotesChange = useCallback((hasSpeakerNotes: boolean) => {
-		slideHasSpeakerNotesRef.current = hasSpeakerNotes;
-	}, []);
 	const [zoomState, setZoomState] = useState({ zoom: 1, originX: 50, originY: 50 });
 	const [laserState, setLaserState] = useState({ active: false, xPercent: -1, yPercent: -1 });
 	const [cursorLine, setCursorLine] = useState(1);
-	const [searchQuery, setSearchQuery] = useState("");
 	const [pendingCursorJump, setPendingCursorJump] = useState<{
 		userId: string;
 		userName: string;
 	} | null>(null);
-	const [searchMatches, setSearchMatches] = useState<TextSearchMatch[]>([]);
-	const [searchLoading, setSearchLoading] = useState(false);
-	const [searchError, setSearchError] = useState<string | null>(null);
 	const editorPaneRef = useRef<EditorPaneHandle | null>(null);
 	const presentationContainerRef = useRef<HTMLDivElement | null>(null);
-	const selectedCssFileIdRef = useRef<string | null>(null);
-	// Invalidate pending CSS edits each time the project theme list reloads.
-	const themeLoadEpochRef = useRef(0);
 	const suppressNextSlideAwarenessUpdateRef = useRef(false);
 	const lastAppliedPresentationUpdateRef = useRef(0);
-	const selectedCssFileId = selectedFile?.id.toLowerCase().endsWith(".css")
-		? selectedFile.id
-		: null;
-
-	useEffect(() => {
-		selectedCssFileIdRef.current = selectedCssFileId;
-	}, [selectedCssFileId]);
 
 	useEffect(() => {
 		localStorage.setItem(SIDEBAR_WIDTH_STORAGE_KEY, String(sidebarWidth));
@@ -526,7 +457,7 @@ function RouteComponent() {
 			const destination = getImageUploadDestination(files, selectedFile.id);
 			const { uploadedFiles, failures } = await uploadFiles(imageFiles, destination || undefined);
 			const images = uploadedFiles.map((file) => {
-				const relativePath = getMarkdownRelativeFilePath(selectedFile.id, file.id);
+				const relativePath = getRelativeProjectFilePath(selectedFile.id, file.id);
 				const fileName = relativePath.split("/").at(-1) ?? relativePath;
 
 				return {
@@ -573,19 +504,6 @@ function RouteComponent() {
 		setPreviewFile(nextPreviewFile);
 	}
 
-	// Project files are served under stable URLs; bump the asset version when
-	// the file list changes so re-uploaded images bypass the browser cache.
-	const [assetFiles, setAssetFiles] = useState(() => ({
-		id,
-		files,
-		themeFontRequests: new Map<string, Promise<string | undefined>>(),
-	}));
-	if (assetFiles.id !== id || assetFiles.files !== files) {
-		setAssetFiles({ id, files, themeFontRequests: new Map() });
-		setAssetRevision((revision) => revision + 1);
-	}
-	const { themeFontRequests } = assetFiles;
-
 	if (!selectedFile && markdown !== "") {
 		setMarkdown("");
 	}
@@ -597,7 +515,7 @@ function RouteComponent() {
 
 	useEffect(() => {
 		// Keep rendering the last deck while the new document syncs to preserve preview scroll.
-		if (!selectedFile || selectedFile.id.endsWith(".css") || !syncedYText) {
+		if (!isMarkdownDeckFile(selectedFile) || !syncedYText) {
 			return;
 		}
 
@@ -621,116 +539,33 @@ function RouteComponent() {
 		};
 	}, [syncedYText, selectedFile]);
 
-	useEffect(() => {
-		const cssFiles = files.filter((file) => file.id.toLowerCase().endsWith(".css"));
-		const controller = new AbortController();
-		themeLoadEpochRef.current += 1;
-		void (async () => {
-			const themes = await Promise.all(
-				cssFiles.map(async (file) => {
-					try {
-						const encodedId = file.id.split("/").map(encodeURIComponent).join("/");
-						const res = await fetch(`${API_URL}/projects/${id}/files/${encodedId}`, {
-							signal: controller.signal,
-						});
-						if (!res.ok) {
-							return null;
-						}
-						return {
-							id: file.id,
-							css: await inlineProjectThemeFonts(
-								rewriteCssUrls(await res.text(), id, file.id, assetToken),
-								id,
-								themeFontRequests,
-							),
-						};
-					} catch {
-						return null;
-					}
-				}),
-			);
-
-			if (controller.signal.aborted) {
-				return;
-			}
-
-			projectThemeStore.update((current) => {
-				const loadedThemes = themes.filter(
-					(theme): theme is { id: string; css: string } => theme !== null,
-				);
-				const activeCssFileId = selectedCssFileIdRef.current;
-				const activeTheme = activeCssFileId
-					? current.find((theme) => theme.id === activeCssFileId)
-					: undefined;
-
-				return activeTheme ? upsertProjectTheme(loadedThemes, activeTheme) : loadedThemes;
-			});
-		})();
-
-		return () => controller.abort();
-	}, [files, id, assetToken, projectThemeStore, themeFontRequests]);
-
-	useEffect(() => {
-		// Unsynced text could replace a loaded theme with empty CSS.
-		if (!selectedFile?.id.toLowerCase().endsWith(".css") || !syncedYText) {
-			return;
-		}
-
-		let generation = 0;
-		const applyTheme = async () => {
-			const applied = ++generation;
-			const epoch = themeLoadEpochRef.current;
-			// oxlint-disable-next-line no-base-to-string
-			const css = rewriteCssUrls(syncedYText.toString(), id, selectedFile.id, assetToken);
-			// Embed fonts before registering the theme to avoid a flash of fallback fonts.
-			const embeddedCss = await inlineProjectThemeFonts(css, id, themeFontRequests);
-			if (applied !== generation || epoch !== themeLoadEpochRef.current) {
-				return;
-			}
-			projectThemeStore.update((current) =>
-				upsertProjectTheme(current, { id: selectedFile.id, css: embeddedCss }),
-			);
-		};
-
-		let timer: ReturnType<typeof setTimeout> | undefined;
-		const syncTheme = () => {
-			clearTimeout(timer);
-			timer = setTimeout(() => {
-				timer = undefined;
-				void applyTheme();
-			}, 150);
-		};
-
-		syncedYText.observe(syncTheme);
-		syncTheme();
-
-		return () => {
-			syncedYText.unobserve(syncTheme);
-			// Flush a pending update so switching files doesn't drop the last edits.
-			if (timer !== undefined) {
-				clearTimeout(timer);
-				void applyTheme();
-			}
-		};
-	}, [syncedYText, id, selectedFile, assetToken, projectThemeStore, themeFontRequests]);
+	const stylesheetId = selectedFile && isCssDeckFile(selectedFile) ? selectedFile.id : null;
+	const { projectThemes, themeNames, analyzeSlides, slides } = useProjectRendering({
+		projectId: id,
+		files,
+		stylesheetId,
+		stylesheetText: syncedYText,
+		markdown: renderedMarkdown,
+		deckFileId: previewFile?.id ?? null,
+	});
 
 	const currentTheme = useMemo(() => getMarkdownTheme(markdown) ?? "default", [markdown]);
+	const themeText = isMarkdownDeckFile(selectedFile) && !collab.readOnly ? syncedYText : null;
 
 	const handleThemeChange = useCallback(
 		(theme: string) => {
-			if (collab.yText) {
-				applyThemeToYText(collab.yText, theme);
+			if (themeText) {
+				applyThemeToYText(themeText, theme);
 			}
 		},
-		[collab.yText],
+		[themeText],
 	);
 
-	const [searchFileId, setSearchFileId] = useState(selectedFile?.id);
-	if (searchFileId !== selectedFile?.id) {
-		setSearchFileId(selectedFile?.id);
-		setSearchMatches([]);
-		setSearchError(null);
-	}
+	const activeFileSearch = useActiveFileSearch(
+		isEditableDeckFile(selectedFile) ? selectedFile.id : null,
+		syncedYText,
+		collab.readOnly,
+	);
 
 	const jumpToUserCursor = useCallback(
 		(userId: string) => {
@@ -834,110 +669,6 @@ function RouteComponent() {
 		};
 	}, [collab.awareness, collab.synced, jumpToUserCursor, pendingCursorJump]);
 
-	const runActiveFileSearch = (query: string) => {
-		setSearchQuery(query);
-		setSearchLoading(true);
-		setSearchError(null);
-
-		try {
-			if (!query) {
-				setSearchMatches([]);
-				return;
-			}
-
-			if (!isEditableDeckFile(selectedFile) || !collab.yText) {
-				setSearchMatches([]);
-				setSearchError("Open an editable file to search.");
-				return;
-			}
-
-			// oxlint-disable-next-line no-base-to-string
-			setSearchMatches(findTextMatches(selectedFile.id, collab.yText.toString(), query, "active"));
-		} catch (requestError) {
-			setSearchError(requestError instanceof Error ? requestError.message : "Search failed");
-		} finally {
-			setSearchLoading(false);
-		}
-	};
-
-	const replaceActiveMatch = (match: TextSearchMatch, replacement: string) => {
-		if (!collab.yText) {
-			return false;
-		}
-
-		// oxlint-disable-next-line no-base-to-string
-		const current = collab.yText.toString();
-		const result = replaceTextRange(
-			current,
-			{
-				startOffset: match.startOffset,
-				endOffset: match.endOffset,
-				expectedText: match.matchedText,
-			},
-			replacement,
-		);
-		if (result.status === "stale") {
-			setSearchError("Result changed. Search again.");
-			return false;
-		}
-
-		const applyReplacement = () => {
-			collab.yText?.delete(match.startOffset, match.endOffset - match.startOffset);
-			collab.yText?.insert(match.startOffset, replacement);
-		};
-		if (collab.yText.doc) {
-			collab.yText.doc.transact(applyReplacement);
-		} else {
-			applyReplacement();
-		}
-		return true;
-	};
-
-	const handleReplaceOne = (match: TextSearchMatch, replacement: string) => {
-		setSearchError(null);
-
-		if (match.source === "active") {
-			if (replaceActiveMatch(match, replacement)) {
-				runActiveFileSearch(searchQuery);
-			}
-			return;
-		}
-
-		setSearchError("Result changed. Search again.");
-	};
-
-	const handleReplaceAll = (query: string, replacement: string) => {
-		setSearchError(null);
-
-		if (!isEditableDeckFile(selectedFile) || !collab.yText || query.length === 0) {
-			setSearchMatches([]);
-			setSearchError("Open an editable file to replace.");
-			return;
-		}
-
-		// oxlint-disable-next-line no-base-to-string
-		const current = collab.yText.toString();
-		const matches = findTextMatches(selectedFile.id, current, query, "active");
-		const next = [...matches]
-			.reverse()
-			.reduce(
-				(content, match) =>
-					content.slice(0, match.startOffset) + replacement + content.slice(match.endOffset),
-				current,
-			);
-		const applyReplacement = () => {
-			collab.yText?.delete(0, collab.yText.length);
-			collab.yText?.insert(0, next);
-		};
-		if (collab.yText.doc) {
-			collab.yText.doc.transact(applyReplacement);
-		} else {
-			applyReplacement();
-		}
-
-		runActiveFileSearch(query);
-	};
-
 	const canEditSlides =
 		isEditingPreviewFile && syncedYText !== null && !collab.readOnly && !hasIncludes;
 	const slideEditHint = hasIncludes
@@ -1019,6 +750,18 @@ function RouteComponent() {
 		return next;
 	}
 
+	const demoDeck = selectedFile?.type === "markdown" ? `${id}/${selectedFile.id}` : null;
+	const {
+		presenterDemoDeck,
+		isDemo,
+		setIsDemo,
+		isSharingDemo,
+		demoContainer,
+		hasChangedDemoRef,
+		handleHasSpeakerNotesChange,
+		startDemo,
+		endLocalDemo,
+	} = useLiveDemo(demoDeck, search.mode);
 	const [wasPresentation, setWasPresentation] = useState(isPresentation);
 	if (wasPresentation !== isPresentation) {
 		setWasPresentation(isPresentation);
@@ -1028,54 +771,21 @@ function RouteComponent() {
 		}
 	}
 
-	const demoDeck = selectedFile?.type === "markdown" ? `${id}/${selectedFile.id}` : null;
-	const presenterDemoDeck = isPresentation && !isViewer ? demoDeck : null;
 	const toggleBlanked = useCallback(() => {
 		hasChangedBlankingRef.current = true;
 		setIsBlanked((current) => !current);
 	}, []);
-	const [previousDemoDeck, setPreviousDemoDeck] = useState(presenterDemoDeck);
-	if (previousDemoDeck !== presenterDemoDeck) {
-		setPreviousDemoDeck(presenterDemoDeck);
-		setIsDemo(false);
-	}
-	if (!isDemo && isSharingDemo) {
-		setIsSharingDemo(false);
-	}
-	if (!isDemo && demoContainer) {
-		setDemoContainer(null);
-	}
-
-	useEffect(() => {
-		if (!isDemo) {
-			closeDemoOutput();
-		}
-	}, [isDemo, closeDemoOutput]);
 
 	useEffect(() => {
 		if (!isPresentation) {
 			return;
 		}
-
-		const unregisterPresenter = presenterDemoDeck
-			? registerDemoPresenter(presenterDemoDeck, () => {
-					hasChangedDemoRef.current = true;
-					stopDemo();
-				})
-			: undefined;
-		if (!isViewer) {
-			window.addEventListener("pagehide", stopDemo);
-		}
 		return () => {
 			hasChangedBlankingRef.current = false;
-			hasChangedDemoRef.current = false;
 			lastBlankingUpdateRef.current = 0;
 			lastDemoUpdateRef.current = 0;
-			unregisterPresenter?.();
-			window.removeEventListener("pagehide", stopDemo);
-			closeDemoOutput();
 		};
-	}, [isPresentation, isViewer, demoDeck, presenterDemoDeck, closeDemoOutput, stopDemo]);
+	}, [isPresentation, isViewer, demoDeck]);
 
 	useEffect(() => {
 		if (!isPresentation) {
@@ -1125,95 +835,13 @@ function RouteComponent() {
 
 	const endDemo = useCallback(
 		({ advance }: { advance: boolean }) => {
-			hasChangedDemoRef.current = true;
-			if (demoWindowRef.current) {
-				window.focus();
-			}
-			stopDemo();
+			endLocalDemo();
 			if (advance) {
 				setSlideIndex((current) => Math.min(current + 1, maxSlideIndex));
 			}
 		},
-		[stopDemo, maxSlideIndex],
+		[endLocalDemo, maxSlideIndex],
 	);
-
-	const startDemo = useCallback(async () => {
-		if (demoCapturePendingRef.current) {
-			return;
-		}
-		const request = ++demoRequestRef.current;
-		if (
-			presenterDemoDeck &&
-			hasDemoAudience(presenterDemoDeck) &&
-			navigator.mediaDevices?.getDisplayMedia
-		) {
-			demoCapturePendingRef.current = true;
-			let stream: MediaStream;
-			try {
-				const options = {
-					video: true,
-					audio: false,
-					selfBrowserSurface: "exclude",
-					monitorTypeSurfaces: "exclude",
-				} as const;
-				stream = await navigator.mediaDevices.getDisplayMedia(options);
-			} catch (error) {
-				if (
-					request === demoRequestRef.current &&
-					!(error instanceof DOMException && error.name === "NotAllowedError")
-				) {
-					toast.error("Could not share the demo. Try choosing the tab or window again.");
-				}
-				return;
-			} finally {
-				demoCapturePendingRef.current = false;
-			}
-
-			if (request !== demoRequestRef.current) {
-				stopDemoStream(stream);
-				return;
-			}
-			const stop = publishDemoShare(presenterDemoDeck, stream, stopDemo);
-			if (!stop) {
-				toast.info("Demo sharing ended before it reached the audience window.");
-				return;
-			}
-			stopDemoShareRef.current = stop;
-			hasChangedDemoRef.current = true;
-			setIsSharingDemo(true);
-			setIsDemo(true);
-			return;
-		}
-
-		hasChangedDemoRef.current = true;
-		setIsDemo(true);
-		const opened = await openDemoWindow({ compact: !slideHasSpeakerNotesRef.current });
-		if (request !== demoRequestRef.current) {
-			opened?.close();
-			return;
-		}
-		if (!opened) {
-			if (!supportsDemoWindow()) {
-				toast.info("Floating demo controls need Chrome or Edge. Press L to end the demo.");
-			}
-			return;
-		}
-
-		demoWindowRef.current = opened;
-		setDemoContainer(opened.document.body);
-		// Closing the floating controls ends the live demo.
-		opened.addEventListener(
-			"pagehide",
-			() => {
-				if (demoWindowRef.current !== opened) {
-					return;
-				}
-				demoWindowRef.current = null;
-				setIsDemo(false);
-			},
-			{ once: true },
-		);
-	}, [presenterDemoDeck, stopDemo]);
 
 	const toggleDemo = useCallback(() => {
 		if (isDemo) {
@@ -1404,7 +1032,15 @@ function RouteComponent() {
 		return () => {
 			collab.awareness?.off("change", applyNewestPresentationState);
 		};
-	}, [collab.awareness, isPresentation, maxSlideIndex, selectedFile?.id, selectedFile?.type]);
+	}, [
+		collab.awareness,
+		hasChangedDemoRef,
+		isPresentation,
+		maxSlideIndex,
+		selectedFile?.id,
+		selectedFile?.type,
+		setIsDemo,
+	]);
 
 	useEffect(() => {
 		if (!collab.awareness) {
@@ -1450,6 +1086,7 @@ function RouteComponent() {
 		} satisfies PresentationAwarenessState);
 	}, [
 		collab.awareness,
+		hasChangedDemoRef,
 		isBlanked,
 		isDemo,
 		isPresentation,
@@ -1549,12 +1186,8 @@ function RouteComponent() {
 		const frame = (
 			<PresentationFrame
 				markdown={renderedMarkdown}
+				slides={slides}
 				slideIndex={slideIndex}
-				projectId={id}
-				selectedFileId={selectedFile?.id ?? null}
-				themeRevision={themeRevision}
-				assetRevision={assetRevision}
-				assetToken={assetToken}
 				onMetaChange={({ active }) => {
 					setSlideIndex(active);
 				}}
@@ -1816,26 +1449,11 @@ function RouteComponent() {
 					themeNames={themeNames}
 					currentTheme={currentTheme}
 					onThemeChange={handleThemeChange}
-					themeSelectDisabled={!isMarkdownDeckFile(selectedFile) || collab.readOnly}
+					themeSelectDisabled={!themeText}
 					onProjectDeleted={() => {
 						void navigate({ to: "/", replace: true });
 					}}
-					searchPanel={
-						<SearchPanel
-							matches={searchMatches}
-							isLoading={searchLoading}
-							error={searchError}
-							onSearch={(query) => {
-								runActiveFileSearch(query);
-							}}
-							onReplaceOne={(match, replacement) => {
-								handleReplaceOne(match, replacement);
-							}}
-							onReplaceAll={(query, replacement) => {
-								handleReplaceAll(query, replacement);
-							}}
-						/>
-					}
+					searchPanel={<SearchPanel {...activeFileSearch} />}
 					outlinePanel={
 						<OutlinePanel
 							items={outlineItems}
@@ -1846,12 +1464,8 @@ function RouteComponent() {
 					slidesPanel={
 						<SlideOverviewPanel
 							markdown={renderedMarkdown}
-							isMarkdown={previewFile !== null}
-							projectId={id}
+							slides={slides}
 							deckFileId={previewFile?.id ?? null}
-							themeRevision={themeRevision}
-							assetRevision={assetRevision}
-							assetToken={assetToken}
 							activeLine={isEditingPreviewFile ? expandedLine || cursorLine : null}
 							canEdit={canEditSlides}
 							editHint={slideEditHint}
@@ -1901,12 +1515,9 @@ function RouteComponent() {
 
 				<Suspense>
 					<PreviewPane
-						markdown={renderedMarkdown}
+						slides={slides}
 						label={previewFile?.label ?? null}
 						projectId={id}
-						themeRevision={themeRevision}
-						assetRevision={assetRevision}
-						assetToken={assetToken}
 						selectedFileId={previewFile?.id ?? null}
 						followSlideIndex={followSlideIndex}
 						onSlideDoubleClick={(index) => {

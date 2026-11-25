@@ -1,13 +1,18 @@
-import * as Y from "yjs";
 import { collabServer } from "./hocuspocus.ts";
 import {
 	documentBelongsToProject,
+	FILES_CHANGED,
+	GIT_SYNC_FINISHED,
 	parseProjectDocumentName,
+	PROJECT_PRESENCE_DOCUMENT_ID,
 	toDocumentName,
-} from "../projects/document-identity.ts";
-import { saveDocumentBinary, saveDocumentContent } from "../projects/storage.ts";
+} from "../../../shared/collaboration.ts";
+import { persistDocument } from "./document-state.ts";
 
-function broadcastProjectEvent(projectId: string, payload: string): void {
+function broadcastProjectEvent(
+	projectId: string,
+	payload: typeof FILES_CHANGED | typeof GIT_SYNC_FINISHED,
+): void {
 	for (const [documentName, document] of collabServer.documents) {
 		if (documentBelongsToProject(documentName, projectId)) {
 			document.broadcastStateless(payload);
@@ -16,11 +21,11 @@ function broadcastProjectEvent(projectId: string, payload: string): void {
 }
 
 export function broadcastFilesChanged(projectId: string): void {
-	broadcastProjectEvent(projectId, "files-changed");
+	broadcastProjectEvent(projectId, FILES_CHANGED);
 }
 
 export function broadcastGitSyncFinished(projectId: string): void {
-	broadcastProjectEvent(projectId, "git-sync-finished");
+	broadcastProjectEvent(projectId, GIT_SYNC_FINISHED);
 }
 
 async function flushDocument(documentName: string): Promise<void> {
@@ -29,10 +34,7 @@ async function flushDocument(documentName: string): Promise<void> {
 		return;
 	}
 
-	await Promise.all([
-		saveDocumentBinary(documentName, Y.encodeStateAsUpdate(document)),
-		saveDocumentContent(documentName, document.getText("content").toJSON()),
-	]);
+	await persistDocument(documentName, document);
 }
 
 function folderDocumentNames(projectId: string, folderPath: string): string[] {
@@ -61,7 +63,7 @@ export async function flushProjectFolderDocuments(
 
 function isProjectFileDocument(documentName: string, projectId: string): boolean {
 	const parsed = parseProjectDocumentName(documentName);
-	return parsed?.projectId === projectId && parsed.fileId !== "__presence";
+	return parsed?.projectId === projectId && parsed.fileId !== PROJECT_PRESENCE_DOCUMENT_ID;
 }
 
 /** Must run while the project's Git sync lock is held, which makes collab loads and stores no-ops. */

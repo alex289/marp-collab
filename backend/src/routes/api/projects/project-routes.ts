@@ -1,12 +1,7 @@
-import {
-	finishProjectGitConfigure,
-	startProjectGitConfigure,
-} from "../../../projects/git-sync-lock.ts";
-import { randomUUID } from "node:crypto";
+import { beginProjectRepositoryOperation } from "../../../projects/project-operations.ts";
 import { Hono } from "hono";
 import z from "zod";
 import {
-	createProject,
 	deleteProject,
 	getProjectById,
 	getProjectsByOwnerId,
@@ -14,10 +9,18 @@ import {
 } from "../../../db/models/project.ts";
 import { getCollaborationsByUserId } from "../../../db/models/project-collaborator.ts";
 import { getProjectAuthorization } from "../../../projects/access-policy.ts";
-import { seedProjectFromTemplate } from "../../../projects/project-templates.ts";
+import { provisionProjectFromTemplate } from "../../../projects/project-provisioning.ts";
 import type { HonoVariables } from "../../../types.ts";
-import { createProjectSchema, updateProjectSchema } from "./schemas.ts";
+import {
+	DEFAULT_PROJECT_TEMPLATE,
+	PROJECT_TEMPLATE_IDS,
+} from "../../../../../shared/project-templates.ts";
+import { projectNameInput } from "./project-name-schema.ts";
 import { deleteProjectDirectory } from "../../../projects/storage.ts";
+
+const createProjectSchema = projectNameInput.extend({
+	template: z.enum(PROJECT_TEMPLATE_IDS).default(DEFAULT_PROJECT_TEMPLATE),
+});
 
 const app = new Hono<{ Variables: HonoVariables }>();
 
@@ -46,13 +49,12 @@ app.post("/", async (c) => {
 	}
 
 	const { name, template } = parseResult.data;
-	const id = randomUUID();
-
-	createProject({ id, name, ownerId: user.id });
-
-	await seedProjectFromTemplate(id, template, name, user.name ?? "Unknown Author");
-
-	return c.json({ projectId: id });
+	const projectId = await provisionProjectFromTemplate(
+		{ name, ownerId: user.id },
+		template,
+		user.name ?? "Unknown Author",
+	);
+	return c.json({ projectId });
 });
 
 app.get("/:projectId", (c) => {
@@ -94,7 +96,7 @@ app.patch("/:projectId", async (c) => {
 	}
 
 	const body = await c.req.json();
-	const parseResult = updateProjectSchema.safeParse(body);
+	const parseResult = projectNameInput.safeParse(body);
 	if (!parseResult.success) {
 		return c.json({ error: z.prettifyError(parseResult.error) }, 400);
 	}
@@ -117,8 +119,8 @@ app.delete("/:projectId", async (c) => {
 		return c.json({ error: "Project not found or you don't have permission to delete it" }, 404);
 	}
 
-	// Deleting removes the project's Git repository too, so it excludes Git syncs and settings changes.
-	if (!startProjectGitConfigure(projectId)) {
+	const release = beginProjectRepositoryOperation(projectId);
+	if (!release) {
 		return c.json({ error: "This project is syncing with Git" }, 409);
 	}
 
@@ -132,7 +134,7 @@ app.delete("/:projectId", async (c) => {
 
 		return c.json({ success: true });
 	} finally {
-		finishProjectGitConfigure(projectId);
+		release();
 	}
 });
 
