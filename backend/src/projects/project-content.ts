@@ -15,6 +15,7 @@ import {
 	moveProjectFile,
 	renameProjectFile,
 	renameProjectFolder,
+	relocateProjectEntry,
 	saveDocumentContent,
 	saveProjectFile,
 	type DeckFile,
@@ -71,8 +72,9 @@ export async function saveBinaryProjectFile(
 	projectId: string,
 	fileId: string,
 	data: Uint8Array,
+	flag?: "wx",
 ): Promise<ProjectContentEntry> {
-	await saveProjectFile(projectId, fileId, data);
+	await saveProjectFile(projectId, fileId, data, flag);
 	broadcastFilesChanged(projectId);
 	return {
 		id: fileId,
@@ -81,54 +83,54 @@ export async function saveBinaryProjectFile(
 	};
 }
 
-export async function renameProjectContentFile(
+async function relocateContent(
 	projectId: string,
-	fileId: string,
-	name: string,
+	path: string,
+	kind: "file" | "dir",
+	relocate: () => Promise<string | null>,
 ): Promise<RenameProjectContentResult> {
-	await flushProjectFileDocument(projectId, fileId);
-	const id = await renameProjectFile(projectId, fileId, name);
+	const flush = kind === "file" ? flushProjectFileDocument : flushProjectFolderDocuments;
+	const close = kind === "file" ? closeProjectFileDocument : closeProjectFolderDocuments;
+	await flush(projectId, path);
+	const id = await relocate();
 	if (!id) {
 		return { ok: false };
 	}
-
-	// Broadcast before closing so clients still editing the old document
-	// receive "files-changed" and switch away, then force the disconnect.
-	broadcastFilesChanged(projectId);
-	closeProjectFileDocument(projectId, fileId);
+	if (id !== path) {
+		// Let open editors react to the file tree change before closing their connections.
+		broadcastFilesChanged(projectId);
+		close(projectId, path);
+	}
 	return { ok: true, id };
 }
 
-export async function moveProjectContentFile(
+export function renameProjectContentFile(projectId: string, fileId: string, name: string) {
+	return relocateContent(projectId, fileId, "file", () =>
+		renameProjectFile(projectId, fileId, name),
+	);
+}
+
+export function moveProjectContentFile(projectId: string, fileId: string, destination: string) {
+	return relocateContent(projectId, fileId, "file", () =>
+		moveProjectFile(projectId, fileId, destination),
+	);
+}
+
+export function renameProjectContentFolder(projectId: string, folderPath: string, name: string) {
+	return relocateContent(projectId, folderPath, "dir", () =>
+		renameProjectFolder(projectId, folderPath, name),
+	);
+}
+
+export function moveProjectContentEntry(
 	projectId: string,
-	fileId: string,
+	path: string,
 	destination: string,
-): Promise<RenameProjectContentResult> {
-	await flushProjectFileDocument(projectId, fileId);
-	const id = await moveProjectFile(projectId, fileId, destination);
-	if (!id) {
-		return { ok: false };
-	}
-
-	broadcastFilesChanged(projectId);
-	closeProjectFileDocument(projectId, fileId);
-	return { ok: true, id };
-}
-
-export async function renameProjectContentFolder(
-	projectId: string,
-	folderPath: string,
-	name: string,
-): Promise<RenameProjectContentResult> {
-	await flushProjectFolderDocuments(projectId, folderPath);
-	const id = await renameProjectFolder(projectId, folderPath, name);
-	if (!id) {
-		return { ok: false };
-	}
-
-	broadcastFilesChanged(projectId);
-	closeProjectFolderDocuments(projectId, folderPath);
-	return { ok: true, id };
+	kind: "file" | "dir",
+) {
+	return relocateContent(projectId, path, kind, () =>
+		relocateProjectEntry(projectId, path, destination, kind),
+	);
 }
 
 export async function deleteProjectContentFile(
@@ -147,8 +149,9 @@ export async function deleteProjectContentFile(
 export async function deleteProjectContentFolder(
 	projectId: string,
 	folderPath: string,
+	recursive?: boolean,
 ): Promise<DeleteProjectContentResult> {
-	if (!(await deleteProjectFolder(projectId, folderPath))) {
+	if (!(await deleteProjectFolder(projectId, folderPath, recursive))) {
 		return { ok: false };
 	}
 

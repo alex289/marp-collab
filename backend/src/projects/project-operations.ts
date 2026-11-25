@@ -86,3 +86,24 @@ export function beginProjectWrite(projectId: string): (() => void) | null {
 		cleanup(projectId, state);
 	};
 }
+
+// Serialize file tree mutations so destination checks and the corresponding writes stay together.
+const contentMutations = new Map<string, Promise<void>>();
+
+export async function withProjectContentMutation<Result>(
+	projectId: string,
+	mutate: () => Promise<Result>,
+): Promise<Result> {
+	const previous = contentMutations.get(projectId);
+	const { promise, resolve } = Promise.withResolvers<void>();
+	contentMutations.set(projectId, promise);
+	try {
+		await previous;
+		return await mutate();
+	} finally {
+		resolve();
+		if (contentMutations.get(projectId) === promise) {
+			contentMutations.delete(projectId);
+		}
+	}
+}

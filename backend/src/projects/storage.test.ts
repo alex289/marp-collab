@@ -354,6 +354,15 @@ describe("project storage", () => {
 				await files.renameProjectFolder("rename-folder-proj", "source-folder", "existing-folder"),
 				null,
 			);
+			equal(
+				await files.relocateProjectEntry(
+					"rename-folder-proj",
+					"source-folder",
+					"Source-Folder/child",
+					"dir",
+				),
+				null,
+			);
 		});
 	});
 
