@@ -5,6 +5,18 @@ let authConfig: ReturnType<typeof loadAuthConfig> | undefined;
 
 const envBaseName = "AUTH_PROVIDER_";
 
+export function loadAuthIpAddressConfig(env: NodeJS.ProcessEnv = process.env) {
+	const header = env.AUTH_IP_ADDRESS_HEADER?.trim().toLowerCase();
+	const trustedProxies = env.AUTH_TRUSTED_PROXIES?.split(",")
+		.map((proxy) => proxy.trim())
+		.filter(Boolean);
+
+	return {
+		ipAddressHeaders: header ? [header] : undefined,
+		trustedProxies: trustedProxies?.length ? trustedProxies : undefined,
+	};
+}
+
 function parseEnvName(envName: string) {
 	const parts = envName.substring(envBaseName.length).split("_");
 	const providerId = parts[0].toLowerCase();

@@ -77,6 +77,14 @@ At least one OAuth provider must be configured. Each provider is identified by a
 | `AUTH_PROVIDER_<n>_DISCOVERY_URL` | —                      | OIDC discovery URL (`.well-known/openid-configuration`). **Required.** |
 | `AUTH_PROVIDER_<n>_SCOPES`        | `openid,email,profile` | Comma-separated OAuth scopes.                                          |
 
+If Better Auth reports that discovery left no usable authorization endpoint or token exchange, check `AUTH_PROVIDER_<n>_DISCOVERY_URL` from inside the app container. It should return HTTP 200 with the provider's OIDC metadata JSON, including `authorization_endpoint` and `token_endpoint`. Verify that the container can resolve the hostname and reach it over HTTPS, and that the discovery route is accessible without login. The login page can still show the configured provider while discovery is unavailable.
+
+#### Reverse proxy
+
+For per-client auth rate limits, keep the app port behind your reverse proxy and have the proxy overwrite the client IP header with the verified client address. Better Auth reads `X-Forwarded-For` by default and expects a single IP. If your proxy sets a different header, such as `X-Real-IP`, set `AUTH_IP_ADDRESS_HEADER` to that header name.
+
+If the header contains a chain of addresses, set `AUTH_TRUSTED_PROXIES` to a comma-separated list of the trusted proxy IPs or CIDR ranges in that chain. Better Auth walks the chain from right to left and uses the first untrusted address. If it cannot resolve a client IP, requests share a rate-limit bucket per auth path.
+
 #### Advanced
 
 These settings are not required to be set, but can be used to customize the app's behavior.

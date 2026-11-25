@@ -1,6 +1,25 @@
 import { deepStrictEqual, strictEqual } from "node:assert";
 import { describe, test } from "node:test";
-import { loadAuthConfig } from "./config.ts";
+import { loadAuthConfig, loadAuthIpAddressConfig } from "./config.ts";
+
+describe("auth client IP config", () => {
+	test("keeps Better Auth defaults when settings are blank", () => {
+		deepStrictEqual(
+			loadAuthIpAddressConfig({ AUTH_IP_ADDRESS_HEADER: " ", AUTH_TRUSTED_PROXIES: " , " }),
+			{ ipAddressHeaders: undefined, trustedProxies: undefined },
+		);
+	});
+
+	test("configures the proxy header and trusted hops from environment", () => {
+		deepStrictEqual(
+			loadAuthIpAddressConfig({
+				AUTH_IP_ADDRESS_HEADER: " X-Real-IP ",
+				AUTH_TRUSTED_PROXIES: "192.0.2.10, 2001:db8::/64, ",
+			}),
+			{ ipAddressHeaders: ["x-real-ip"], trustedProxies: ["192.0.2.10", "2001:db8::/64"] },
+		);
+	});
+});
 
 describe("auth provider config", () => {
 	const providerCredentials = {
