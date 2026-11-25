@@ -72,11 +72,11 @@ function buildSlideScreenshotHtml(slide: RenderedSlide, css: string): string {
 <head>
 <meta charset="UTF-8" />
 <meta http-equiv="Content-Security-Policy" content="${PDF_CONTENT_SECURITY_POLICY}" />
+<style>${css}</style>
 <style>
-html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; }
-div.marpit { width: 100%; height: 100%; }
-div.marpit > svg[data-marpit-svg] { display: block; width: 100%; height: 100%; }
-${css}
+html, body { margin: 0 !important; padding: 0 !important; width: 100% !important; height: 100% !important; overflow: hidden !important; }
+div.marpit { width: 100% !important; height: 100% !important; }
+div.marpit > svg[data-marpit-svg] { display: block !important; width: 100% !important; height: 100% !important; }
 </style>
 </head>
 <body><div class="marpit">${slide.html}</div>${scriptTag}</body>

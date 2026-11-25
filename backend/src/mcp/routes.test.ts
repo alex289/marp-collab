@@ -811,6 +811,22 @@ test("diagnoses missing project references and renders a deck with includes", as
 		const unavailable = await call("preview_presentation", { ...deck, slides: [1] }, readToken);
 		equal(unavailable.isError, true);
 		match(unavailable.content[0].text, /Visual slide preview service is unavailable/);
+
+		globalThis.fetch = (input, init) => {
+			const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+			if (url.startsWith("http://gotenberg.mcp.test:3000/")) {
+				return Promise.resolve(
+					new Response(new Uint8Array([1, 2, 3]), {
+						status: 200,
+						headers: { "content-length": String(10 * 1024 * 1024) },
+					}),
+				);
+			}
+			return originalFetch(input, init);
+		};
+		const oversized = await call("preview_presentation", { ...deck, slides: [1] }, readToken);
+		equal(oversized.isError, true);
+		match(oversized.content[0].text, /exceeds the size limit/);
 	} finally {
 		globalThis.fetch = originalFetch;
 		if (originalGotenbergUrl === undefined) {

@@ -11,7 +11,7 @@ import {
 import { logger } from "../helpers/logger.ts";
 import { listProjectContent } from "../projects/project-content.ts";
 import { getProjectFileSize, isMarkdownFileId } from "../projects/storage.ts";
-import { toDocumentName } from "../../../shared/collaboration.ts";
+import { parseProjectDocumentName, toDocumentName } from "../../../shared/collaboration.ts";
 import { prepareMarpTheme } from "../../../shared/marp-dialect.ts";
 import {
 	expandMarkdownIncludes,
@@ -209,6 +209,47 @@ export async function checkReferences(projectId: string, userId: string, path?: 
 	return { path, references, skippedFiles: project.skipped, truncated };
 }
 
+async function readResponseBytesWithLimit(
+	response: Response,
+	maxBytes: number,
+): Promise<Buffer | null> {
+	const declaredLength = response.headers.get("content-length");
+	if (declaredLength !== null) {
+		const parsed = Number.parseInt(declaredLength, 10);
+		if (Number.isFinite(parsed) && parsed > maxBytes) {
+			await response.body?.cancel();
+			return null;
+		}
+	}
+
+	if (!response.body) {
+		const buffer = Buffer.from(await response.arrayBuffer());
+		return buffer.byteLength > 0 && buffer.byteLength <= maxBytes ? buffer : null;
+	}
+
+	const reader = response.body.getReader();
+	const chunks: Uint8Array[] = [];
+	let totalBytes = 0;
+	try {
+		for (;;) {
+			const { done, value } = await reader.read();
+			if (done) {
+				break;
+			}
+			totalBytes += value.byteLength;
+			if (totalBytes > maxBytes) {
+				await reader.cancel();
+				return null;
+			}
+			chunks.push(value);
+		}
+	} finally {
+		reader.releaseLock();
+	}
+
+	return totalBytes > 0 ? Buffer.concat(chunks, totalBytes) : null;
+}
+
 export async function previewPresentation(
 	projectId: string,
 	userId: string,
@@ -279,11 +320,13 @@ export async function previewPresentation(
 		}
 
 		const format = options?.format ?? "png";
-		const renderedDeck = await renderMarkdownForSlides(
-			projectId,
-			fileId,
-			getCurrentDocumentContent,
-		);
+		const renderedDeck = await renderMarkdownForSlides(projectId, fileId, (documentName) => {
+			const parsed = parseProjectDocumentName(documentName);
+			if (!parsed || parsed.projectId !== projectId) {
+				return Promise.resolve(undefined);
+			}
+			return project.read(parsed.fileId);
+		});
 		if (!renderedDeck) {
 			throw new PresentationToolError("Presentation not found.");
 		}
@@ -319,8 +362,8 @@ export async function previewPresentation(
 				throw new PresentationToolError("Visual slide preview failed.");
 			}
 
-			const buffer = Buffer.from(await response.arrayBuffer());
-			if (buffer.byteLength === 0 || buffer.byteLength > MAX_SCREENSHOT_BYTES) {
+			const buffer = await readResponseBytesWithLimit(response, MAX_SCREENSHOT_BYTES);
+			if (!buffer) {
 				throw new PresentationToolError("Rendered slide image is empty or exceeds the size limit.");
 			}
 

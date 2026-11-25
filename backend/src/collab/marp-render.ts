@@ -117,7 +117,10 @@ const DEFAULT_SLIDE_HEIGHT = 720;
 const MAX_SLIDE_DIMENSION = 1280;
 
 function parseSlideDimensions(svgHtml: string): { width: number; height: number } {
-	const match = /<svg\b[^>]*\bviewBox="[^"]*?\b([\d.]+)\s+([\d.]+)\s*"/i.exec(svgHtml);
+	const match =
+		/<svg\b[^>]*\bviewBox=["']\s*[-+\d.]+\s*[\s,]\s*[-+\d.]+\s*[\s,]\s*([\d.]+)\s*[\s,]\s*([\d.]+)\s*["']/i.exec(
+			svgHtml,
+		);
 	let width = match ? Number.parseFloat(match[1]!) : DEFAULT_SLIDE_WIDTH;
 	let height = match ? Number.parseFloat(match[2]!) : DEFAULT_SLIDE_HEIGHT;
 	if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {

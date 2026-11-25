@@ -154,6 +154,10 @@ describe("Gotenberg PDF request", () => {
 		ok(indexHtml.includes('<div class="marpit"><svg data-marpit-svg=""'));
 		ok(indexHtml.includes("<script>"));
 		ok(indexHtml.indexOf('http-equiv="Content-Security-Policy"') < indexHtml.indexOf("<style>"));
+		ok(
+			indexHtml.indexOf("section { color: navy; }") <
+				indexHtml.indexOf("margin: 0 !important; padding: 0 !important;"),
+		);
 		equal(form.get("width"), "960");
 		equal(form.get("height"), "720");
 		equal(form.get("clip"), "true");
