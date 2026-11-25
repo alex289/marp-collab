@@ -35,6 +35,8 @@ Place backend unit tests next to the code under test as `*.test.ts`. Keep Playwr
 
 Recent history uses Conventional Commits such as `feat: Add danger zone` and `fix: Formatting`. Keep subjects imperative and scoped to one change. PRs should include a short summary, test results, linked issues when applicable, and screenshots or screen recordings for visible UI changes.
 
+Add a changeset under `.changeset/` for changelog-worthy changes, such as user-facing features, bug fixes, and changes to self-hosting configuration. Target the `marp-collab` package and describe what users or operators will notice.
+
 ## Security & Configuration Tips
 
 Do not commit `.env` files, local databases, Playwright auth state, or generated build output. Treat uploaded file handling and project authorization paths as security-sensitive; update or add tests when changing `backend/src/helpers/file-allowlist.ts`, `backend/src/helpers/project-auth.ts`, or auth-related routes.
