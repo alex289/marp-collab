@@ -3,7 +3,7 @@ import { collabServer } from "../collab/hocuspocus.ts";
 import { getCollabDocumentContent } from "../collab/document-content.ts";
 import { broadcastFilesChanged, flushProjectFileDocument } from "../collab/project-events.ts";
 import { getProjectAuthorization } from "../projects/access-policy.ts";
-import { beginProjectWrite } from "../projects/project-operations.ts";
+import { beginProjectWrite, withProjectContentMutation } from "../projects/project-operations.ts";
 import { DOCUMENT_CONTENT_KEY, toDocumentName } from "../../../shared/collaboration.ts";
 import {
 	createDocumentContent,
@@ -29,18 +29,16 @@ export async function readPresentation(projectId: string, fileId: string, userId
 	const content = await getCollabDocumentContent(toDocumentName(projectId, fileId));
 	requirePresentationAccess(projectId, userId);
 	if (content === undefined) {
-		throw new PresentationToolError("Presentation not found.");
+		throw new PresentationToolError("File not found.");
 	}
 	return { projectId, fileId, content, revision: contentRevision(content) };
 }
 
-export async function writePresentation(
+export async function withProjectToolWrite<Result>(
 	projectId: string,
-	fileId: string,
 	userId: string,
-	content: string,
-	expectedRevision?: string,
-) {
+	write: () => Promise<Result>,
+): Promise<Result> {
 	requirePresentationAccess(projectId, userId, true);
 	const release = beginProjectWrite(projectId);
 	if (!release) {
@@ -49,6 +47,23 @@ export async function writePresentation(
 		);
 	}
 	try {
+		return await withProjectContentMutation(projectId, () => {
+			requirePresentationAccess(projectId, userId, true);
+			return write();
+		});
+	} finally {
+		release();
+	}
+}
+
+export function writePresentation(
+	projectId: string,
+	fileId: string,
+	userId: string,
+	content: string,
+	expectedRevision?: string,
+) {
+	return withProjectToolWrite(projectId, userId, async () => {
 		const documentName = toDocumentName(projectId, fileId);
 		if (expectedRevision === undefined) {
 			try {
@@ -68,7 +83,7 @@ export async function writePresentation(
 			broadcastFilesChanged(projectId);
 		} else {
 			if (!(await documentFileExists(documentName))) {
-				throw new PresentationToolError("Presentation not found.");
+				throw new PresentationToolError("File not found.");
 			}
 			// Loading through Hocuspocus preserves the persisted CRDT and joins any live editors.
 			const connection = await collabServer.openDirectConnection(documentName, { userId });
@@ -78,9 +93,7 @@ export async function writePresentation(
 					const text = document.getText(DOCUMENT_CONTENT_KEY);
 					const previous = text.toJSON();
 					if (contentRevision(previous) !== expectedRevision) {
-						throw new PresentationToolError(
-							"Presentation changed. Read it again and reapply your edit.",
-						);
+						throw new PresentationToolError("File changed. Read it again and reapply your edit.");
 					}
 					// Keep unchanged text in place to preserve its CRDT identities.
 					let start = 0;
@@ -114,7 +127,7 @@ export async function writePresentation(
 				// unloads the document, provided the backing file still exists.
 				if (!(await documentFileExists(documentName))) {
 					throw new PresentationToolError(
-						"Presentation was renamed, moved or deleted during the edit. List files and try again.",
+						"File was renamed, moved or deleted during the edit. List files and try again.",
 					);
 				}
 				await flushProjectFileDocument(projectId, fileId);
@@ -123,7 +136,5 @@ export async function writePresentation(
 			}
 		}
 		return { projectId, fileId, revision: contentRevision(content) };
-	} finally {
-		release();
-	}
+	});
 }

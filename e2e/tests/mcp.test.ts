@@ -49,7 +49,9 @@ test("authorizes an AI client through existing login and consent", async ({ page
 		page.getByText("Presentation assistant is requesting access to your presentations."),
 	).toBeVisible();
 	await expect(
-		page.getByText("Create and edit presentations in projects where you have write access."),
+		page.getByText(
+			"Create, edit, move and delete files and folders, and sync with Git, in projects where you have write access.",
+		),
 	).toBeVisible();
 	await page.getByRole("button", { name: "Allow access" }).click();
 	await page.waitForURL(`${redirectUri}*`);
@@ -78,7 +80,16 @@ test("authorizes an AI client through existing login and consent", async ({ page
 		data: { jsonrpc: "2.0", id: 1, method: "tools/list" },
 	});
 	expect(tools.ok(), `${tools.status()}: ${await tools.text()}`).toBeTruthy();
-	expect(await tools.text()).toContain("create_presentation");
+	const available = await tools.text();
+	for (const name of [
+		"create_presentation",
+		"edit_file",
+		"move_entry",
+		"delete_entry",
+		"preview_presentation",
+	]) {
+		expect(available).toContain(name);
+	}
 });
 
 test("lets a signed-in user deny an AI connection", async ({ page }) => {

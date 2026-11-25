@@ -1,10 +1,20 @@
-import { glob, mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import {
+	glob,
+	lstat,
+	mkdir,
+	readdir,
+	readFile,
+	rename,
+	rm,
+	rmdir,
+	stat,
+	writeFile,
+} from "node:fs/promises";
 import { createReadStream, type Stats } from "node:fs";
 import { dirname, extname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { Readable } from "node:stream";
 import { ZipArchive } from "archiver";
 import { getFileType, MARKDOWN_EXTENSIONS } from "../helpers/file-allowlist.ts";
-import { logger } from "../helpers/logger.ts";
 import { parseProjectDocumentName } from "../../../shared/collaboration.ts";
 import { DOCUMENT_STATE_SUFFIX, documentStatePath } from "./document-state-path.ts";
 
@@ -239,7 +249,7 @@ export async function documentFileExists(documentName: string): Promise<boolean>
 		return false;
 	}
 
-	return (await getFileStatsSafe(filePath)) !== undefined;
+	return (await getFileStatsSafe(filePath))?.isFile() ?? false;
 }
 
 export async function saveDocumentContent(documentName: string, content: string): Promise<void> {
@@ -274,6 +284,15 @@ export async function saveDocumentBinary(documentName: string, data: Uint8Array)
 
 export function isValidProjectFileLocation(projectId: string, fileId: string): boolean {
 	return resolveProjectFilePath(projectId, fileId) !== null;
+}
+
+export async function getProjectFileSize(
+	projectId: string,
+	fileId: string,
+): Promise<number | undefined> {
+	const filePath = resolveProjectFilePath(projectId, fileId);
+	const info = filePath ? await getFileStatsSafe(filePath) : undefined;
+	return info?.isFile() ? info.size : undefined;
 }
 
 export async function readProjectFile(
@@ -355,7 +374,7 @@ function getRenamedSiblingId(fileId: string, name: string): string | null {
 
 async function getFileStatsSafe(path: string): Promise<Stats | undefined> {
 	try {
-		return await stat(path);
+		return await lstat(path);
 	} catch {
 		return undefined;
 	}
@@ -393,6 +412,7 @@ export async function saveProjectFile(
 	projectId: string,
 	fileId: string,
 	data: Uint8Array,
+	flag?: "wx",
 ): Promise<void> {
 	const filePath = resolveProjectFilePath(projectId, fileId);
 	if (!filePath) {
@@ -400,132 +420,114 @@ export async function saveProjectFile(
 	}
 
 	await mkdir(dirname(filePath), { recursive: true });
-	await writeFile(filePath, data);
+	await writeFile(filePath, data, { flag });
 }
 
-export async function moveProjectFile(
+export async function relocateProjectEntry(
+	projectId: string,
+	sourceId: string,
+	destinationId: string,
+	kind: "file" | "dir",
+): Promise<string | null> {
+	const sourcePath = resolveProjectFilePath(projectId, sourceId);
+	const destPath = resolveProjectFilePath(projectId, destinationId);
+	if (!sourcePath || !destPath || destPath.startsWith(sourcePath + sep)) {
+		return null;
+	}
+
+	if (!(await isRenamePossible(sourcePath, destPath, kind))) {
+		return null;
+	}
+	if (sourcePath === destPath) {
+		return destinationId;
+	}
+
+	const sourceState = documentStatePath(sourcePath);
+	const destState = documentStatePath(destPath);
+	const hasState = kind === "file" && (await getFileStatsSafe(sourceState)) !== undefined;
+	if (kind === "file" && (await getFileStatsSafe(destState))) {
+		if (!hasState || !(await isRenamePossible(sourceState, destState, "file"))) {
+			return null;
+		}
+	}
+	try {
+		await rename(sourcePath, destPath);
+	} catch (error) {
+		if (
+			isMissingFileError(error) ||
+			(error instanceof Error && "code" in error && error.code === "ENOTDIR")
+		) {
+			return null;
+		}
+		throw error;
+	}
+	if (hasState) {
+		try {
+			await rename(sourceState, destState);
+		} catch (error) {
+			await rename(destPath, sourcePath);
+			throw error;
+		}
+	}
+	return destinationId;
+}
+
+export function moveProjectFile(
 	projectId: string,
 	fileId: string,
 	destinationFolder: string,
 ): Promise<string | null> {
-	const sourcePath = resolveProjectFilePath(projectId, fileId);
-	if (!sourcePath) {
-		return null;
-	}
-
-	const basename = fileId.split("/").pop()!;
-	const newFileId = destinationFolder ? `${destinationFolder}/${basename}` : basename;
-
-	const destPath = resolveProjectFilePath(projectId, newFileId);
-	if (!destPath) {
-		return null;
-	}
-
-	await rename(sourcePath, destPath);
-
-	try {
-		await rename(documentStatePath(sourcePath), documentStatePath(destPath));
-	} catch (error) {
-		if (!isMissingFileError(error)) {
-			// The .yjs companion is orphaned at the old path. The renamed file can still load as plain text.
-			logger.error({ err: error, sourcePath, destPath }, "Failed to move .yjs companion file");
-		}
-	}
-
-	return newFileId;
+	const basename = fileId.split("/").at(-1)!;
+	const destinationId = destinationFolder ? `${destinationFolder}/${basename}` : basename;
+	return relocateProjectEntry(projectId, fileId, destinationId, "file");
 }
 
-export async function renameProjectFile(
+export function renameProjectFile(
 	projectId: string,
 	fileId: string,
 	name: string,
 ): Promise<string | null> {
-	if (!getFileType(name)) {
-		return null;
+	const id = getRenamedSiblingId(fileId, name);
+	if (!id || !getFileType(name) || extname(name).toLowerCase() !== extname(fileId).toLowerCase()) {
+		return Promise.resolve(null);
 	}
-
-	if (extname(name).toLowerCase() !== extname(fileId).toLowerCase()) {
-		return null;
-	}
-
-	const sourcePath = resolveProjectFilePath(projectId, fileId);
-	const newFileId = getRenamedSiblingId(fileId, name);
-	if (!sourcePath || !newFileId) {
-		return null;
-	}
-
-	const destPath = resolveProjectFilePath(projectId, newFileId);
-	if (!destPath) {
-		return null;
-	}
-
-	if (newFileId === fileId) {
-		return newFileId;
-	}
-
-	if (!(await isRenamePossible(sourcePath, destPath, "file"))) {
-		return null;
-	}
-
-	const sourceYjsPath = documentStatePath(sourcePath);
-	const destYjsPath = documentStatePath(destPath);
-	const hasSourceYjs = (await getFileStatsSafe(sourceYjsPath)) !== undefined;
-
-	const canRenameYjs = await isRenamePossible(sourceYjsPath, destYjsPath, "file");
-	if (hasSourceYjs && !canRenameYjs) {
-		return null;
-	}
-
-	await rename(sourcePath, destPath);
-
-	if (hasSourceYjs) {
-		await rename(sourceYjsPath, destYjsPath);
-	}
-
-	return newFileId;
+	return relocateProjectEntry(projectId, fileId, id, "file");
 }
 
-export async function renameProjectFolder(
+export function renameProjectFolder(
 	projectId: string,
 	folderPath: string,
 	name: string,
 ): Promise<string | null> {
-	const sourcePath = resolveProjectFilePath(projectId, folderPath);
-	const newFolderPath = getRenamedSiblingId(folderPath, name);
-	if (!sourcePath || !newFolderPath) {
-		return null;
-	}
-
-	const destPath = resolveProjectFilePath(projectId, newFolderPath);
-	if (!destPath) {
-		return null;
-	}
-
-	if (newFolderPath === folderPath) {
-		return newFolderPath;
-	}
-
-	const canRename = await isRenamePossible(sourcePath, destPath, "dir");
-	if (!canRename) {
-		return null;
-	}
-
-	await rename(sourcePath, destPath);
-
-	return newFolderPath;
+	const id = getRenamedSiblingId(folderPath, name);
+	return id ? relocateProjectEntry(projectId, folderPath, id, "dir") : Promise.resolve(null);
 }
 
-export async function deleteProjectFolder(projectId: string, folderPath: string): Promise<boolean> {
+export async function deleteProjectFolder(
+	projectId: string,
+	folderPath: string,
+	recursive = true,
+): Promise<boolean> {
 	const dirPath = resolveProjectFilePath(projectId, folderPath);
 	if (!dirPath) {
 		return false;
 	}
 
 	try {
-		await rm(dirPath, { recursive: true });
+		if (recursive) {
+			if (!(await lstat(dirPath)).isDirectory()) {
+				return false;
+			}
+			await rm(dirPath, { recursive: true });
+		} else {
+			await rmdir(dirPath);
+		}
 		return true;
 	} catch (error) {
-		if (isMissingFileError(error)) {
+		if (
+			isMissingFileError(error) ||
+			(error instanceof Error && "code" in error && error.code === "ENOTDIR")
+		) {
 			return false;
 		}
 		throw error;

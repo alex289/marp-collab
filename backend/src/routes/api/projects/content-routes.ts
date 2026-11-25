@@ -1,6 +1,8 @@
 import { extname } from "node:path";
 import { Readable } from "node:stream";
 import { Hono } from "hono";
+import { createMiddleware } from "hono/factory";
+import { withProjectContentMutation } from "../../../projects/project-operations.ts";
 import { stream } from "hono/streaming";
 import z from "zod";
 import { ASSET_TOKEN_TTL_SECONDS, signAssetToken } from "../../../helpers/asset-token.ts";
@@ -41,6 +43,9 @@ import {
 } from "./content-schemas.ts";
 
 const app = new Hono<{ Variables: ProjectRouteVariables }>();
+const requireContentWrite = createMiddleware<{ Variables: ProjectRouteVariables }>((c, next) =>
+	requireProjectWriteAccess(c, () => withProjectContentMutation(c.req.param("projectId")!, next)),
+);
 
 function isFresh(ifNoneMatch: string | undefined, etag: string): boolean {
 	if (!ifNoneMatch) {
@@ -66,7 +71,7 @@ app.get("/:projectId/asset-token", async (c) => {
 	});
 });
 
-app.post("/:projectId/files", requireProjectWriteAccess, async (c) => {
+app.post("/:projectId/files", requireContentWrite, async (c) => {
 	const { projectId } = c.req.param();
 
 	const body = await c.req.json();
@@ -78,7 +83,7 @@ app.post("/:projectId/files", requireProjectWriteAccess, async (c) => {
 	return c.json({ file: await createEditableProjectFile(projectId, parseResult.data.name) });
 });
 
-app.post("/:projectId/folders", requireProjectWriteAccess, async (c) => {
+app.post("/:projectId/folders", requireContentWrite, async (c) => {
 	const { projectId } = c.req.param();
 
 	const body = await c.req.json();
@@ -92,7 +97,7 @@ app.post("/:projectId/folders", requireProjectWriteAccess, async (c) => {
 	return c.json({ success: true });
 });
 
-app.post("/:projectId/files/upload", requireProjectWriteAccess, async (c) => {
+app.post("/:projectId/files/upload", requireContentWrite, async (c) => {
 	const { projectId } = c.req.param();
 
 	const body = await c.req.parseBody();
@@ -204,7 +209,7 @@ app.get("/:projectId/files/:fileId{.+}", async (c) => {
 	});
 });
 
-app.patch("/:projectId/files/rename/:fileId{.+}", requireProjectWriteAccess, async (c) => {
+app.patch("/:projectId/files/rename/:fileId{.+}", requireContentWrite, async (c) => {
 	const { projectId } = c.req.param();
 
 	const fileId = decodeURIComponent(c.req.param("fileId"));
@@ -222,7 +227,7 @@ app.patch("/:projectId/files/rename/:fileId{.+}", requireProjectWriteAccess, asy
 	return c.json({ newFileId: result.id });
 });
 
-app.patch("/:projectId/files/:fileId{.+}", requireProjectWriteAccess, async (c) => {
+app.patch("/:projectId/files/:fileId{.+}", requireContentWrite, async (c) => {
 	const { projectId } = c.req.param();
 
 	const fileId = decodeURIComponent(c.req.param("fileId"));
@@ -241,7 +246,7 @@ app.patch("/:projectId/files/:fileId{.+}", requireProjectWriteAccess, async (c) 
 	return c.json({ newFileId: result.id });
 });
 
-app.patch("/:projectId/folders/:folderPath{.+}/rename", requireProjectWriteAccess, async (c) => {
+app.patch("/:projectId/folders/:folderPath{.+}/rename", requireContentWrite, async (c) => {
 	const { projectId } = c.req.param();
 
 	const folderPath = decodeURIComponent(c.req.param("folderPath"));
@@ -259,7 +264,7 @@ app.patch("/:projectId/folders/:folderPath{.+}/rename", requireProjectWriteAcces
 	return c.json({ newFolderPath: result.id });
 });
 
-app.delete("/:projectId/folders/:folderPath{.+}", requireProjectWriteAccess, async (c) => {
+app.delete("/:projectId/folders/:folderPath{.+}", requireContentWrite, async (c) => {
 	const { projectId } = c.req.param();
 
 	const folderPath = decodeURIComponent(c.req.param("folderPath"));
@@ -271,7 +276,7 @@ app.delete("/:projectId/folders/:folderPath{.+}", requireProjectWriteAccess, asy
 	return c.json({ success: true });
 });
 
-app.delete("/:projectId/files/:fileId{.+}", requireProjectWriteAccess, async (c) => {
+app.delete("/:projectId/files/:fileId{.+}", requireContentWrite, async (c) => {
 	const { projectId } = c.req.param();
 
 	const fileId = decodeURIComponent(c.req.param("fileId"));

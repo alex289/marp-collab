@@ -271,7 +271,13 @@ test("lists only permitted projects and enforces OAuth write scopes", async () =
 	deepEqual(listed.structuredContent.projects, [
 		{ id: "training", name: "Training", readOnly: false },
 	]);
-	for (const name of ["create_presentation", "edit_presentation", "pull_from_git", "push_to_git"]) {
+	const { WRITE_TOOL_NAMES } = await import("./server.ts");
+	const readTools = await rpc("tools/list", {}, readToken);
+	const toolList = await readTools.text();
+	match(toolList, /check_references/);
+	match(toolList, /preview_presentation/);
+	for (const name of Object.values(WRITE_TOOL_NAMES)) {
+		ok(!toolList.includes(`"${name}"`));
 		const denied = await rpc(
 			"tools/call",
 			{
@@ -511,6 +517,177 @@ test("persists an admitted edit when Git sync reserves the project during the tr
 		releaseSync?.();
 		await connection.disconnect();
 	}
+});
+
+test("manages project files, folders and collaborative CSS through MCP", async () => {
+	const projectId = "training";
+	const project = { projectId };
+	const fileId = "mcp-files/theme.css";
+	const content = "/* @theme custom */\nsection { color: red; }";
+	const css = { projectId, fileId };
+	const folder = { projectId, path: "mcp-files" };
+
+	ok(!(await call("create_folder", folder)).isError);
+	ok(!(await call("create_file", { ...css, content })).isError);
+	equal((await call("create_file", { ...css, content: "overwrite" })).isError, true);
+	const { revision } = (await call("read_file", css, readToken)).structuredContent;
+	const edited = content.replace("red", "blue");
+	ok(!(await call("edit_file", { ...css, content: edited, expectedRevision: revision })).isError);
+	equal((await call("edit_file", { ...css, content, expectedRevision: revision })).isError, true);
+
+	const png = "mcp-files/banner.png";
+	const base64 = "iVBORw0KGgo=";
+	const asset = { projectId, path: png, base64 };
+	equal((await call("upload_asset", asset)).structuredContent.size, 8);
+	equal((await call("upload_asset", asset)).isError, true);
+	equal((await call("upload_asset", { ...asset, path: "mcp-files/bad.exe" })).isError, true);
+	equal(
+		(await call("upload_asset", { ...asset, path: "mcp-files/bad.png", base64: "!!!!" })).isError,
+		true,
+	);
+	equal((await storage.readProjectFile(projectId, png))?.length, 8);
+
+	for (const path of ["../escape", ".git/config", "__presence", "mcp-files/theme.css.yjs"]) {
+		equal((await call("delete_entry", { projectId, path, recursive: true })).isError, true);
+	}
+	equal((await call("move_entry", { ...folder, destination: "mcp-files/child" })).isError, true);
+	ok(!(await call("create_folder", { projectId, path: "mcp-archive" })).isError);
+	const renamedFolder = "mcp-archive/contents";
+	equal(
+		(await call("move_entry", { ...folder, destination: renamedFolder })).structuredContent.newPath,
+		renamedFolder,
+	);
+	const renamedCss = "mcp-archive/design.css";
+	const newCss = { ...project, fileId: renamedCss };
+	equal(
+		(
+			await call("move_entry", {
+				...project,
+				path: `${renamedFolder}/theme.css`,
+				destination: renamedCss,
+			})
+		).structuredContent.newPath,
+		renamedCss,
+	);
+	equal((await call("read_file", css, readToken)).isError, true);
+	equal((await call("read_file", newCss, readToken)).structuredContent.content, edited);
+	ok(await storage.getDocumentBinary(`project/${projectId}/${renamedCss}`));
+	equal(
+		(
+			await call("move_entry", {
+				...project,
+				path: renamedCss,
+				destination: `${renamedFolder}/banner.png`,
+			})
+		).isError,
+		true,
+	);
+
+	const collision = "mcp-archive/collision.css";
+	ok(!(await call("create_file", { ...project, fileId: collision, content })).isError);
+	equal(
+		(await call("move_entry", { ...project, path: renamedCss, destination: collision })).isError,
+		true,
+	);
+	equal(
+		(await call("read_file", { ...project, fileId: collision }, readToken)).structuredContent
+			.content,
+		content,
+	);
+	equal(
+		(await call("delete_entry", { ...project, path: collision })).structuredContent.deleted,
+		true,
+	);
+
+	const competingPaths = ["one.css", "two.css"].map((name) => `mcp-archive/${name}`);
+	for (const path of competingPaths) {
+		ok(!(await call("create_file", { ...project, fileId: path, content })).isError);
+	}
+	const races = await Promise.all(
+		competingPaths.map((path) => call("move_entry", { ...project, path, destination: collision })),
+	);
+	equal(races.filter((result) => !result.isError).length, 1);
+	ok(!(await call("delete_entry", { ...project, path: collision })).isError);
+	for (const path of competingPaths) {
+		if ((await storage.getDocumentContent(`project/${projectId}/${path}`)) !== undefined) {
+			ok(!(await call("delete_entry", { ...project, path })).isError);
+		}
+	}
+
+	const target = { projectId, path: "mcp-archive" };
+	deepEqual((await call("delete_entry", { ...target, dryRun: true })).structuredContent, {
+		path: target.path,
+		deleted: false,
+		requiresRecursive: true,
+		affectedPaths: ["mcp-archive", renamedFolder, `${renamedFolder}/banner.png`, renamedCss],
+	});
+	equal((await call("delete_entry", target)).isError, true);
+	equal(
+		(await call("delete_entry", { ...target, recursive: true })).structuredContent.deleted,
+		true,
+	);
+	equal(await storage.getDocumentContent(`project/${projectId}/${renamedCss}`), undefined);
+	ok(!(await call("create_folder", folder)).isError);
+	equal((await call("delete_entry", folder)).structuredContent.deleted, true);
+});
+
+test("diagnoses missing project references and renders a deck with includes", async () => {
+	const projectId = "training";
+	const fileId = "mcp-preview/deck.md";
+	const deck = { projectId, fileId };
+	for (const [path, content] of [
+		[
+			fileId,
+			"---\nmarp: true\ntheme: local\n---\n# First\n\n![logo](logo.png)\n\n<img src='html.png'>\n\n<!-- @include: slides/next.md -->\n\n<!-- @include: missing.md -->",
+		],
+		["mcp-preview/slides/next.md", "---\n\n# Second\n\n![diagram](diagram.png)"],
+		[
+			"mcp-preview/local.css",
+			"/* @theme local */\nsection { background-image: url('pattern.png'); }",
+		],
+	] as const) {
+		ok(!(await call("create_file", { projectId, fileId: path, content })).isError);
+	}
+	ok(
+		!(
+			await call("upload_asset", {
+				projectId,
+				path: "mcp-preview/logo.png",
+				base64: "iVBORw0KGgo=",
+			})
+		).isError,
+	);
+	const references = (await call("check_references", { projectId, path: "mcp-preview" }, readToken))
+		.structuredContent.references;
+	ok(
+		references.some(
+			(ref: { kind: string; target: string; missing: boolean }) =>
+				ref.kind === "include" && ref.target === "mcp-preview/slides/next.md" && !ref.missing,
+		),
+	);
+	ok(
+		references.some(
+			(ref: { kind: string; target: string; missing: boolean }) =>
+				ref.kind === "css-url" && ref.target === "mcp-preview/pattern.png" && ref.missing,
+		),
+	);
+	ok(
+		references.some(
+			(ref: { kind: string; target: string; missing: boolean }) =>
+				ref.kind === "image" && ref.target === "mcp-preview/html.png" && ref.missing,
+		),
+	);
+	const usedBy = (
+		await call("check_references", { projectId, path: "mcp-preview/logo.png" }, readToken)
+	).structuredContent.references;
+	equal(usedBy[0]?.source, fileId);
+	equal(usedBy[0]?.missing, false);
+	const preview = (await call("preview_presentation", deck, readToken)).structuredContent;
+	equal(preview.slideCount, 2);
+	ok(preview.issues.some((issue: string) => issue.includes("missing.md")));
+	ok(preview.issues.some((issue: string) => issue.includes("diagram.png")));
+	ok(preview.issues.some((issue: string) => issue.includes("html.png")));
+	ok(!(await call("delete_entry", { projectId, path: "mcp-preview", recursive: true })).isError);
 });
 
 test("rechecks collaborator permissions and excludes writes during Git synchronization", async () => {

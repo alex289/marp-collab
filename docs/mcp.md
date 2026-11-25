@@ -13,16 +13,34 @@ clients that require Dynamic Client Registration (DCR), explicitly set
 registration to unauthenticated clients; accessing presentations still requires
 user login and consent. Registration is disabled by default.
 
-Available tools are `list_projects`, `list_files`, `read_presentation`,
-`create_presentation`, `edit_presentation`, `pull_from_git`, and `push_to_git`. Create a project in the app first,
-then ask your assistant, for example: “Create a ten-slide introduction to Kubernetes
-in my Training project.” The server also exposes a Marp authoring guide.
+| Tool                                    | What it does                                                                                                                                                                                                        |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `list_projects`, `list_files`           | Discover accessible projects, files, folders, and assets.                                                                                                                                                           |
+| `read_file`, `create_file`, `edit_file` | Work with Markdown and CSS. Reads include live edits. Pass the returned `revision` as `expectedRevision` when editing. Creation rejects an existing file.                                                           |
+| `create_folder`                         | Create a folder and any missing parents.                                                                                                                                                                            |
+| `move_entry`                            | Move or rename a file or folder. Supply its current `path` and full new `destination` within the project. The destination's parent must exist. Files keep their extensions, and moves reject existing destinations. |
+| `delete_entry`                          | Delete a file or empty folder. Use `dryRun: true` to list affected project paths. Use `recursive: true` to delete a non-empty folder.                                                                               |
+| `upload_asset`                          | Create an image, font, or video from standard `base64` data up to 2 MiB. The path must use an extension supported by the app.                                                                                       |
+| `check_references`                      | Report local Markdown includes, images, and CSS URLs. Pass an entry's `path` to see references to or from it before moving or deleting it.                                                                          |
+| `preview_presentation`                  | Render the current Markdown with includes and themes, returning slide count and issues.                                                                                                                             |
+| `pull_from_git`, `push_to_git`          | Synchronize a project with its connected Git repository.                                                                                                                                                            |
+
+Existing clients can continue using `read_presentation`, `create_presentation`,
+and `edit_presentation` for Markdown. The server also exposes a Marp authoring
+guide. Create a project in the app first.
 
 The OAuth scopes are `presentations:read`, `presentations:write`, and optional
-`offline_access` for refresh tokens. Request both presentation scopes to create or
-edit decks; read-only tokens expose only the reading tools. Access covers owned and
-shared projects and is checked against current project permissions on every call.
-The server exposes no project deletion or collaborator-management tools.
+`offline_access` for refresh tokens. File and folder mutations and Git operations
+require the write scope and current project write access. Read-only tokens expose
+listing, text reads, and diagnostics. Project creation, project deletion, and
+collaborator management are available through the app.
+
+Reference checks resolve relative paths from each source file. Preview checks
+images in expanded Markdown relative to the root deck, just as MarpCollab does
+when rendering includes. Check references again after moves or deletions and
+update links in the affected files. Render checks run on the server and report
+Marp rendering and include issues, without a browser layout check or remote URL
+fetches.
 
 When the project owner has connected a Git repository in the app, the assistant can
 pull remote changes and push commits with its own one-line commit message, for
@@ -33,10 +51,9 @@ the remote has newer changes; the assistant then pulls with its commit message, 
 pending edits are committed under that message, and pushes again. The Git tools need the `presentations:write` scope and
 write access to the project; connecting or changing the repository stays in the app.
 
-Edits synchronize with open editors and require the revision returned by
-`read_presentation`. Stale revisions are rejected so the assistant can reread and
-reapply its changes. New files never overwrite existing files. OAuth and signing
-key tables are added automatically by the database migration on startup.
+Edits synchronize with open editors. Stale revisions are rejected so the
+assistant can reread and reapply its changes. OAuth and signing key tables are
+added automatically by the database migration on startup.
 
 Reverse proxies must forward `/mcp`, `/.well-known/*`, and `/api/v1/auth/*` to the
 backend. The development Vite proxy already forwards these paths. MCP requests use

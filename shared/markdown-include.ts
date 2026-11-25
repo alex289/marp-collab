@@ -4,10 +4,6 @@ const MAX_CHARACTERS = 1_000_000;
 const marker = /^ {0,3}<!--\s*@include:[\t ]*([^\r\n]+?)\s*-->[\t ]*\r?$/;
 const frontmatter = /^\uFEFF?---\r?\n(?:[^\r\n]*\r?\n)*?(?:---[\t ]*|\.\.\.)(?:\r?\n|$)/;
 
-function error(message: string): string {
-	return `> ⚠️ **Include error:** ${message}`;
-}
-
 /** Include directives must be standalone and outside fenced code blocks. */
 function includeLines(markdown: string): Map<number, string> {
 	const includes = new Map<number, string>();
@@ -36,11 +32,15 @@ function includeLines(markdown: string): Map<number, string> {
 	return includes;
 }
 
+export function markdownIncludePaths(markdown: string): string[] {
+	return [...includeLines(markdown).values()];
+}
+
 export function hasMarkdownIncludes(markdown: string): boolean {
 	return includeLines(markdown).size > 0;
 }
 
-function resolveIncludePath(parent: string, path: string): string | undefined {
+export function resolveIncludePath(parent: string, path: string): string | undefined {
 	if (/^(?:\/|[a-z][a-z\d+.-]*:)/i.test(path) || /[\\?#]/.test(path) || path.includes("\0")) {
 		return;
 	}
@@ -64,6 +64,7 @@ export async function expandMarkdownIncludes(
 	currentFileId: string,
 	readFile: (fileId: string) => Promise<string | undefined>,
 	onSourceLines?: (lines: number[]) => void,
+	onIncludeError?: (issue: { source: string; path: string; message: string }) => void,
 ): Promise<string> {
 	let count = 0;
 	let characters = markdown.length;
@@ -77,6 +78,10 @@ export async function expandMarkdownIncludes(
 		const includes = includeLines(source);
 		const lines = source.split("\n");
 		for (const [index, path] of includes) {
+			const error = (message: string) => {
+				onIncludeError?.({ source: parent, path, message });
+				return `> ⚠️ **Include error:** ${message}`;
+			};
 			const fileId = resolveIncludePath(parent, path);
 			if (!fileId) {
 				lines[index] = error("invalid include path");

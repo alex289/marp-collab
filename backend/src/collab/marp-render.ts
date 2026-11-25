@@ -1,9 +1,6 @@
 import { expandMarkdownIncludes } from "../../../shared/markdown-include.ts";
-import {
-	MARP_IMAGE_RULE,
-	prepareMarpTheme,
-	rewriteMarpImages,
-} from "../../../shared/marp-dialect.ts";
+import { prepareMarpTheme } from "../../../shared/marp-dialect.ts";
+import { createMarpWithImageRewriter } from "./marp-images.ts";
 import { TAILWIND_DIRECTIVE } from "../../../shared/slide-tailwind.ts";
 import { Marp } from "@marp-team/marp-core";
 import { createHash } from "node:crypto";
@@ -150,24 +147,9 @@ export async function renderMarkdownForPdf(
 		);
 	}
 
-	const marp = new Marp({
-		html: {
-			...Marp.html,
-			img: {
-				...(Marp.html.img as Record<string, boolean>),
-				src: (value: string) => rewriteAssetRef(markdownDir, value),
-			},
-		},
+	const marp = createMarpWithImageRewriter((src) => rewriteAssetRef(markdownDir, src), {
 		inlineSVG: true,
 		printable: true,
-	});
-
-	marp.use((md) => {
-		md.inline.ruler2.after(
-			MARP_IMAGE_RULE,
-			"rewrite_image_urls_flat",
-			rewriteMarpImages((src) => rewriteAssetRef(markdownDir, src)),
-		);
 	});
 
 	const deckFiles = await getDeckFiles(projectId);
