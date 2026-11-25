@@ -23,6 +23,7 @@ let cookie: string;
 let accessToken: string;
 let readToken: string;
 let clientId: string;
+let jwksHttpRequests = 0;
 const secret = "mcp-integration-tests-secret-at-least-32-characters";
 const verifier = "mcp-test-code-verifier-with-at-least-forty-three-characters";
 
@@ -37,8 +38,6 @@ before(async () => {
 	ok(address && typeof address !== "string");
 	origin = `http://127.0.0.1:${address.port}`;
 	process.env.URL = origin;
-	process.env.PORT = String(address.port);
-	process.env.HOSTNAME = "127.0.0.1";
 	process.env.DATA_PATH = tempDir;
 	process.env.AUTH_SECRET = secret;
 	process.env.MCP_ALLOW_DYNAMIC_CLIENT_REGISTRATION = "true";
@@ -50,6 +49,10 @@ before(async () => {
 	const { mcpRouter, mcpConsentRouter } = await import("./routes.ts");
 	app.route("/", mcpRouter);
 	app.route("/api/v1/mcp", mcpConsentRouter);
+	app.use("/api/v1/auth/jwks", (_c, next) => {
+		jwksHttpRequests++;
+		return next();
+	});
 	app.on(["GET", "POST"], "/api/v1/auth/*", (c) => auth.handler(c.req.raw));
 	const now = new Date().toISOString();
 	for (const id of ["owner", "reader", "outsider"]) {
@@ -95,8 +98,6 @@ after(async () => {
 	await rm(tempDir, { recursive: true, force: true });
 	for (const name of [
 		"URL",
-		"PORT",
-		"HOSTNAME",
 		"DATA_PATH",
 		"AUTH_SECRET",
 		"MCP_ALLOW_DYNAMIC_CLIENT_REGISTRATION",
@@ -225,6 +226,7 @@ test("denies consent and rejects missing or tampered consent queries", async () 
 });
 
 test("supports the current stateless MCP envelope", async () => {
+	const previousJwksHttpRequests = jwksHttpRequests;
 	const { PROTOCOL_VERSION_META_KEY, CLIENT_INFO_META_KEY, CLIENT_CAPABILITIES_META_KEY } =
 		await import("@modelcontextprotocol/server");
 	const response = await fetch(`${origin}/mcp`, {
@@ -251,6 +253,11 @@ test("supports the current stateless MCP envelope", async () => {
 	});
 	equal(response.status, 200, await response.clone().text());
 	match(await response.text(), /create_presentation/);
+	equal(
+		jwksHttpRequests,
+		previousJwksHttpRequests,
+		"MCP should verify JWTs without a local HTTP request",
+	);
 });
 
 test("rejects JWTs intended for browser sessions", async () => {

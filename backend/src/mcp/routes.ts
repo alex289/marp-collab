@@ -6,7 +6,7 @@ import { createInsufficientScopeError } from "better-auth/oauth2";
 import { z } from "zod";
 import { auth } from "../auth.ts";
 import { db } from "../db/db.ts";
-import { MCP_READ_SCOPE, MCP_WRITE_SCOPE, MCP_SCOPES, mcpResource, mcpJwksUrl } from "./config.ts";
+import { MCP_READ_SCOPE, MCP_WRITE_SCOPE, MCP_SCOPES, mcpResource } from "./config.ts";
 import { createPresentationServer, WRITE_TOOL_NAMES } from "./server.ts";
 
 export const mcpRouter = new Hono();
@@ -41,7 +41,6 @@ const handleMcp = requireMcpAuth(
 	},
 	{
 		resource: mcpResource,
-		jwksUrl: mcpJwksUrl,
 		requiredScopes: [MCP_READ_SCOPE],
 		// New connections need editing tools by default; clients can still request read-only access.
 		challengeScopes: [MCP_READ_SCOPE, MCP_WRITE_SCOPE],
