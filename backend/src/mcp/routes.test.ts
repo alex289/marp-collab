@@ -682,6 +682,12 @@ test("diagnoses missing project references and renders a deck with includes", as
 	).structuredContent.references;
 	equal(usedBy[0]?.source, fileId);
 	equal(usedBy[0]?.missing, false);
+	ok(
+		references.some(
+			(ref: { source: string; kind: string; target: string }) =>
+				ref.source === fileId && ref.kind === "image" && ref.target === "mcp-preview/diagram.png",
+		),
+	);
 	const preview = (await call("preview_presentation", deck, readToken)).structuredContent;
 	equal(preview.slideCount, 2);
 	ok(preview.issues.some((issue: string) => issue.includes("missing.md")));

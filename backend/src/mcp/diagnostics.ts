@@ -76,36 +76,45 @@ async function projectSources(projectId: string, userId: string) {
 	);
 	const sources = [...files].filter(isEditableExtension);
 	let scanned = 0;
+	const cache = new Map<string, Promise<string | undefined>>();
 	const skipped: string[] = [];
+	const read = async (path: string) => {
+		if (!files.has(path) || !isEditableExtension(path)) {
+			return undefined;
+		}
+		const size = await getProjectFileSize(projectId, path);
+		if (size === undefined) {
+			return undefined;
+		}
+		if (size > MAX_SOURCE_CHARACTERS * 4) {
+			skipped.push(path);
+			return undefined;
+		}
+		const content = await getCurrentDocumentContent(toDocumentName(projectId, path));
+		if (content !== undefined) {
+			if (
+				content.length > MAX_SOURCE_CHARACTERS ||
+				scanned + content.length > MAX_PROJECT_SCAN_CHARACTERS
+			) {
+				skipped.push(path);
+				return undefined;
+			}
+			scanned += content.length;
+		}
+		return content;
+	};
 	return {
 		entries,
 		files,
 		sources,
 		skipped,
-		read: async (path: string) => {
-			if (!files.has(path) || !isEditableExtension(path)) {
-				return undefined;
+		read: (path: string) => {
+			let pending = cache.get(path);
+			if (!pending) {
+				pending = read(path);
+				cache.set(path, pending);
 			}
-			const size = await getProjectFileSize(projectId, path);
-			if (size === undefined) {
-				return undefined;
-			}
-			if (size > MAX_SOURCE_CHARACTERS * 4) {
-				skipped.push(path);
-				return undefined;
-			}
-			const content = await getCurrentDocumentContent(toDocumentName(projectId, path));
-			if (content !== undefined) {
-				if (
-					content.length > MAX_SOURCE_CHARACTERS ||
-					scanned + content.length > MAX_PROJECT_SCAN_CHARACTERS
-				) {
-					skipped.push(path);
-					return undefined;
-				}
-				scanned += content.length;
-			}
-			return content;
+			return pending;
 		},
 	};
 }
@@ -118,6 +127,7 @@ export async function checkReferences(projectId: string, userId: string, path?: 
 	const references: Reference[] = [];
 	let truncated = false;
 	let source = "";
+	let renderedCharacters = 0;
 	const seen = new Set<string>();
 	const collect = (kind: ReferenceKind, value: string) => {
 		const ref = reference(project.files, source, kind, value);
@@ -156,8 +166,19 @@ export async function checkReferences(projectId: string, userId: string, path?: 
 			for (const value of markdownIncludePaths(content)) {
 				collect("include", value);
 			}
+			const remaining = MAX_PROJECT_SCAN_CHARACTERS - renderedCharacters;
+			if (content.length > remaining) {
+				project.skipped.push(fileId);
+				continue;
+			}
+			const expanded = await expandMarkdownIncludes(content, fileId, project.read);
+			if (expanded.length > remaining) {
+				project.skipped.push(fileId);
+				continue;
+			}
+			renderedCharacters += expanded.length;
 			try {
-				marp.render(content);
+				marp.render(expanded);
 			} catch {
 				project.skipped.push(fileId);
 			}

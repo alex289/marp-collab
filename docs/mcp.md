@@ -35,9 +35,8 @@ require the write scope and current project write access. Read-only tokens expos
 listing, text reads, and diagnostics. Project creation, project deletion, and
 collaborator management are available through the app.
 
-Reference checks resolve relative paths from each source file. Preview checks
-images in expanded Markdown relative to the root deck, just as MarpCollab does
-when rendering includes. Check references again after moves or deletions and
+Include paths resolve relative to the file containing the directive. Both
+checks resolve images in expanded Markdown relative to the deck being rendered. Check references again after moves or deletions and
 update links in the affected files. Render checks run on the server and report
 Marp rendering and include issues, without a browser layout check or remote URL
 fetches.
