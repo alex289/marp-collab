@@ -731,9 +731,95 @@ test("diagnoses missing project references and renders a deck with includes", as
 	);
 	const preview = (await call("preview_presentation", deck, readToken)).structuredContent;
 	equal(preview.slideCount, 2);
+	equal(preview.renderedSlides, undefined);
 	ok(preview.issues.some((issue: string) => issue.includes("missing.md")));
 	ok(preview.issues.some((issue: string) => issue.includes("diagram.png")));
 	ok(preview.issues.some((issue: string) => issue.includes("html.png")));
+
+	const originalFetch = globalThis.fetch;
+	const originalGotenbergUrl = process.env.GOTENBERG_URL;
+	process.env.GOTENBERG_URL = "http://gotenberg.mcp.test:3000";
+	const screenshotRequests: { url: string; width: string | null; height: string | null }[] = [];
+	const fakePng = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+	globalThis.fetch = (input, init) => {
+		const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+		if (url.startsWith("http://gotenberg.mcp.test:3000/")) {
+			const form = init?.body as FormData;
+			screenshotRequests.push({
+				url,
+				width: form.get("width") as string | null,
+				height: form.get("height") as string | null,
+			});
+			return Promise.resolve(new Response(fakePng, { status: 200 }));
+		}
+		return originalFetch(input, init);
+	};
+	try {
+		const visual = await call(
+			"preview_presentation",
+			{ ...deck, slides: [2, 1, 2], format: "png" },
+			readToken,
+		);
+		ok(!visual.isError);
+		equal(screenshotRequests.length, 2);
+		equal(
+			screenshotRequests[0]?.url,
+			"http://gotenberg.mcp.test:3000/forms/chromium/screenshot/html",
+		);
+		equal(screenshotRequests[0]?.width, "1280");
+		equal(screenshotRequests[0]?.height, "720");
+		deepEqual(visual.structuredContent.renderedSlides, [
+			{ slide: 2, width: 1280, height: 720, mimeType: "image/png" },
+			{ slide: 1, width: 1280, height: 720, mimeType: "image/png" },
+		]);
+		const imageBlocks = visual.content.filter(
+			(item: { type: string }) => item.type === "image",
+		) as Array<{ type: "image"; data: string; mimeType: string }>;
+		equal(imageBlocks.length, 2);
+		equal(imageBlocks[0]?.mimeType, "image/png");
+		equal(imageBlocks[0]?.data, Buffer.from(fakePng).toString("base64"));
+
+		const outOfRange = await call("preview_presentation", { ...deck, slides: [3] }, readToken);
+		equal(outOfRange.isError, true);
+		match(outOfRange.content[0].text, /Slide 3 is out of range/);
+
+		const tooMany = await call(
+			"preview_presentation",
+			{ ...deck, slides: [1, 2, 3, 4, 5, 6] },
+			readToken,
+		);
+		equal(tooMany.isError, true);
+
+		globalThis.fetch = (input, init) => {
+			const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+			if (url.startsWith("http://gotenberg.mcp.test:3000/")) {
+				return Promise.resolve(new Response("boom", { status: 500 }));
+			}
+			return originalFetch(input, init);
+		};
+		const failed = await call("preview_presentation", { ...deck, slides: [1] }, readToken);
+		equal(failed.isError, true);
+		match(failed.content[0].text, /Visual slide preview failed/);
+
+		globalThis.fetch = (input, init) => {
+			const url = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+			if (url.startsWith("http://gotenberg.mcp.test:3000/")) {
+				return Promise.reject(new Error("connect ECONNREFUSED"));
+			}
+			return originalFetch(input, init);
+		};
+		const unavailable = await call("preview_presentation", { ...deck, slides: [1] }, readToken);
+		equal(unavailable.isError, true);
+		match(unavailable.content[0].text, /Visual slide preview service is unavailable/);
+	} finally {
+		globalThis.fetch = originalFetch;
+		if (originalGotenbergUrl === undefined) {
+			delete process.env.GOTENBERG_URL;
+		} else {
+			process.env.GOTENBERG_URL = originalGotenbergUrl;
+		}
+	}
+
 	ok(!(await call("delete_entry", { projectId, path: "mcp-preview", recursive: true })).isError);
 });
 

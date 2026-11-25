@@ -41,6 +41,7 @@ function marpScriptContent(): string | undefined {
 }
 
 const marpScript = marpScriptContent();
+export const MARP_INLINE_SCRIPT = marpScript;
 // If the script cannot be isolated, export PDFs with scripting disabled.
 export const MARP_SCRIPT_CSP_SOURCE = marpScript
 	? `'sha256-${createHash("sha256").update(marpScript).digest("base64")}'`
@@ -99,11 +100,47 @@ export type RenderedPdfInput = {
 	keywords: string[] | undefined;
 };
 
-export async function renderMarkdownForPdf(
+export type RenderedSlide = {
+	html: string;
+	width: number;
+	height: number;
+};
+
+export type RenderedSlidesInput = {
+	slides: RenderedSlide[];
+	css: string;
+	assets: Map<string, string>;
+};
+
+const DEFAULT_SLIDE_WIDTH = 1280;
+const DEFAULT_SLIDE_HEIGHT = 720;
+const MAX_SLIDE_DIMENSION = 1280;
+
+function parseSlideDimensions(svgHtml: string): { width: number; height: number } {
+	const match = /<svg\b[^>]*\bviewBox="[^"]*?\b([\d.]+)\s+([\d.]+)\s*"/i.exec(svgHtml);
+	let width = match ? Number.parseFloat(match[1]!) : DEFAULT_SLIDE_WIDTH;
+	let height = match ? Number.parseFloat(match[2]!) : DEFAULT_SLIDE_HEIGHT;
+	if (!Number.isFinite(width) || !Number.isFinite(height) || width <= 0 || height <= 0) {
+		return { width: DEFAULT_SLIDE_WIDTH, height: DEFAULT_SLIDE_HEIGHT };
+	}
+	const maxSide = Math.max(width, height);
+	if (maxSide > MAX_SLIDE_DIMENSION) {
+		const scale = MAX_SLIDE_DIMENSION / maxSide;
+		width *= scale;
+		height *= scale;
+	}
+	return {
+		width: Math.max(1, Math.round(width)),
+		height: Math.max(1, Math.round(height)),
+	};
+}
+
+async function prepareMarpRenderContext(
 	projectId: string,
 	markdownFileId: string,
-	readDocument = getDocumentContent,
-): Promise<RenderedPdfInput | undefined> {
+	readDocument: typeof getDocumentContent,
+	marpOptions: { inlineSVG: true; printable: true; script?: false },
+) {
 	const rawMarkdown = await readDocument(toDocumentName(projectId, markdownFileId));
 	if (rawMarkdown === undefined) {
 		return undefined;
@@ -147,10 +184,7 @@ export async function renderMarkdownForPdf(
 		);
 	}
 
-	const marp = createMarpWithImageRewriter((src) => rewriteAssetRef(markdownDir, src), {
-		inlineSVG: true,
-		printable: true,
-	});
+	const marp = createMarpWithImageRewriter((src) => rewriteAssetRef(markdownDir, src), marpOptions);
 
 	const deckFiles = await getDeckFiles(projectId);
 	for (const file of deckFiles) {
@@ -158,7 +192,7 @@ export async function renderMarkdownForPdf(
 			continue;
 		}
 
-		const css = await getDocumentContent(toDocumentName(projectId, file.id));
+		const css = await readDocument(toDocumentName(projectId, file.id));
 		if (css === undefined) {
 			continue;
 		}
@@ -178,20 +212,73 @@ export async function renderMarkdownForPdf(
 		return {};
 	};
 
-	const { html, css: themeCss } = marp.render(markdown);
+	return {
+		markdown,
+		markdownDir,
+		assets,
+		marp,
+		isTailwindEnabled: () => tailwindEnabled,
+		rewriteCssUrls,
+	};
+}
+
+export async function renderMarkdownForPdf(
+	projectId: string,
+	markdownFileId: string,
+	readDocument = getDocumentContent,
+): Promise<RenderedPdfInput | undefined> {
+	const context = await prepareMarpRenderContext(projectId, markdownFileId, readDocument, {
+		inlineSVG: true,
+		printable: true,
+	});
+	if (!context) {
+		return undefined;
+	}
+
+	const { html, css: themeCss } = context.marp.render(context.markdown);
 	let css = themeCss;
-	if (tailwindEnabled) {
+	if (context.isTailwindEnabled()) {
 		// Arbitrary values such as bg-[url(...)] resolve project assets like theme CSS.
 		// Remote URLs hidden in other syntax are blocked by the PDF's CSP (gotenberg.ts).
 		const tailwind = await createSlideTailwind();
-		css += `\n${rewriteCssUrls(tailwind(html), markdownDir)}`;
+		css += `\n${context.rewriteCssUrls(tailwind(html), context.markdownDir)}`;
 	}
-	const title = getFrontmatterField(markdown, "title") ?? basenameWithoutExt(markdownFileId);
-	const author = getFrontmatterField(markdown, "author");
-	const description = getFrontmatterField(markdown, "description");
-	const keywords = getFrontmatterField(markdown, "keywords")
+	const title =
+		getFrontmatterField(context.markdown, "title") ?? basenameWithoutExt(markdownFileId);
+	const author = getFrontmatterField(context.markdown, "author");
+	const description = getFrontmatterField(context.markdown, "description");
+	const keywords = getFrontmatterField(context.markdown, "keywords")
 		?.split(",")
 		.map((keyword) => keyword.trim())
 		.filter(Boolean);
-	return { html, css, assets, title, author, description, keywords };
+	return { html, css, assets: context.assets, title, author, description, keywords };
+}
+
+export async function renderMarkdownForSlides(
+	projectId: string,
+	markdownFileId: string,
+	readDocument = getDocumentContent,
+): Promise<RenderedSlidesInput | undefined> {
+	const context = await prepareMarpRenderContext(projectId, markdownFileId, readDocument, {
+		inlineSVG: true,
+		printable: true,
+		script: false,
+	});
+	if (!context) {
+		return undefined;
+	}
+
+	const { html: slideHtmls, css: themeCss } = context.marp.render(context.markdown, {
+		htmlAsArray: true,
+	});
+	let css = themeCss;
+	if (context.isTailwindEnabled()) {
+		const tailwind = await createSlideTailwind();
+		css += `\n${context.rewriteCssUrls(tailwind(slideHtmls.join("\n")), context.markdownDir)}`;
+	}
+	const slides = slideHtmls.map((html) => ({
+		html,
+		...parseSlideDimensions(html),
+	}));
+	return { slides, css, assets: context.assets };
 }
