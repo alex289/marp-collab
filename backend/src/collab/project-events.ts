@@ -106,3 +106,11 @@ export function closeProjectFolderDocuments(projectId: string, folderPath: strin
 		collabServer.closeConnections(documentName);
 	}
 }
+
+export function closeProjectDocuments(projectId: string): void {
+	for (const documentName of collabServer.documents.keys()) {
+		if (documentBelongsToProject(documentName, projectId)) {
+			collabServer.closeConnections(documentName);
+		}
+	}
+}
