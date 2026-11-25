@@ -444,7 +444,7 @@ export async function relocateProjectEntry(
 
 	const sourceState = documentStatePath(sourcePath);
 	const destState = documentStatePath(destPath);
-	const hasState = kind === "file" && (await getFileStatsSafe(sourceState)) !== undefined;
+	const hasState = kind === "file" && ((await getFileStatsSafe(sourceState))?.isFile() ?? false);
 	if (kind === "file" && (await getFileStatsSafe(destState))) {
 		if (!hasState || !(await isRenamePossible(sourceState, destState, "file"))) {
 			return null;
@@ -455,7 +455,9 @@ export async function relocateProjectEntry(
 	} catch (error) {
 		if (
 			isMissingFileError(error) ||
-			(error instanceof Error && "code" in error && error.code === "ENOTDIR")
+			(error instanceof Error &&
+				"code" in error &&
+				(error.code === "ENOTDIR" || error.code === "EINVAL"))
 		) {
 			return null;
 		}
@@ -501,6 +503,28 @@ export function renameProjectFolder(
 ): Promise<string | null> {
 	const id = getRenamedSiblingId(folderPath, name);
 	return id ? relocateProjectEntry(projectId, folderPath, id, "dir") : Promise.resolve(null);
+}
+
+export async function isProjectFolderEmpty(
+	projectId: string,
+	folderPath: string,
+): Promise<boolean> {
+	const dirPath = resolveProjectFilePath(projectId, folderPath);
+	if (!dirPath) {
+		return true;
+	}
+
+	try {
+		return (await readdir(dirPath)).length === 0;
+	} catch (error) {
+		if (
+			isMissingFileError(error) ||
+			(error instanceof Error && "code" in error && error.code === "ENOTDIR")
+		) {
+			return true;
+		}
+		throw error;
+	}
 }
 
 export async function deleteProjectFolder(

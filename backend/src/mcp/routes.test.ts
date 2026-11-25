@@ -547,8 +547,22 @@ test("manages project files, folders and collaborative CSS through MCP", async (
 	);
 	equal((await storage.readProjectFile(projectId, png))?.length, 8);
 
-	for (const path of ["../escape", ".git/config", "__presence", "mcp-files/theme.css.yjs"]) {
+	for (const path of [
+		"../escape",
+		".git/config",
+		"__presence",
+		"__presence/nested",
+		"mcp-files/theme.css.yjs",
+	]) {
 		equal((await call("delete_entry", { projectId, path, recursive: true })).isError, true);
+	}
+	equal((await call("create_folder", { projectId, path: "__presence/sub" })).isError, true);
+	for (const reservedFileId of ["__presence/deck.md", "reserved.yjs/deck.md"]) {
+		equal(
+			(await call("create_presentation", { projectId, fileId: reservedFileId, content: "# Bad" }))
+				.isError,
+			true,
+		);
 	}
 	equal((await call("move_entry", { ...folder, destination: "mcp-files/child" })).isError, true);
 	ok(!(await call("create_folder", { projectId, path: "mcp-archive" })).isError);
@@ -628,6 +642,26 @@ test("manages project files, folders and collaborative CSS through MCP", async (
 	);
 	equal(await storage.getDocumentContent(`project/${projectId}/${renamedCss}`), undefined);
 	ok(!(await call("create_folder", folder)).isError);
+	const hiddenDir = join(await storage.getProjectDirectory(projectId), folder.path);
+	await writeFile(join(hiddenDir, ".gitkeep"), "");
+	deepEqual((await call("delete_entry", { ...folder, dryRun: true })).structuredContent, {
+		path: folder.path,
+		deleted: false,
+		requiresRecursive: true,
+		affectedPaths: [folder.path],
+	});
+	equal((await call("delete_entry", folder)).isError, true);
+	equal(
+		(await call("delete_entry", { ...folder, recursive: true })).structuredContent.deleted,
+		true,
+	);
+	ok(!(await call("create_folder", folder)).isError);
+	deepEqual((await call("delete_entry", { ...folder, dryRun: true })).structuredContent, {
+		path: folder.path,
+		deleted: false,
+		requiresRecursive: false,
+		affectedPaths: [folder.path],
+	});
 	equal((await call("delete_entry", folder)).structuredContent.deleted, true);
 });
 

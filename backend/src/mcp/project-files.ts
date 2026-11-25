@@ -8,6 +8,7 @@ import {
 	saveBinaryProjectFile,
 } from "../projects/project-content.ts";
 import { getMimeType, isAllowedUpload } from "../helpers/file-allowlist.ts";
+import { isProjectFolderEmpty } from "../projects/storage.ts";
 import { PresentationToolError, withProjectToolWrite } from "./presentations.ts";
 
 export const MAX_MCP_ASSET_BYTES = 2 * 1024 * 1024;
@@ -78,7 +79,8 @@ export function deleteEntry(
 				path,
 				affectedPaths,
 				deleted: false,
-				requiresRecursive: folder && affectedPaths.length > 1,
+				requiresRecursive:
+					folder && (affectedPaths.length > 1 || !(await isProjectFolderEmpty(projectId, path))),
 			};
 		}
 		try {
