@@ -63,7 +63,7 @@ describe("projects routes", () => {
 		for (const [id, name, email] of [
 			["route-writer", "Route Writer", "route-writer@example.com"],
 			["route-reader", "Route Reader", "route-reader@example.com"],
-			["route-outsider", "Route Outsider", "route-outsider@example.com"],
+			["route-outsider", "Route Öutsider", "route-outsider@example.com"],
 		]) {
 			db.prepare(
 				"insert into user (id, name, email, emailVerified, createdAt, updatedAt) values (?, ?, ?, ?, ?, ?)",
@@ -494,6 +494,47 @@ describe("projects routes", () => {
 			userImage: "owner.png",
 		});
 		deepEqual(body.collaborators, []);
+	});
+
+	test("lets only the owner search for eligible collaborators and add a match", async () => {
+		const path = "/upload-proj/collaborators";
+		const search = `${path}/candidates`;
+		const owner = { "x-test-user-id": "user-1" };
+		for (const userId of ["route-writer", "route-reader", "route-outsider"]) {
+			const denied = await app.request(`${search}?q=route`, {
+				headers: { "x-test-user-id": userId },
+			});
+			equal(denied.status, 403);
+		}
+		equal((await app.request(`${search}?q=route`)).status, 401);
+		equal((await app.request(`${search}?q=r`, { headers: owner })).status, 400);
+
+		const matches = [{ name: "Route Öutsider", email: "route-outsider@example.com" }];
+		for (const query of ["ROUTE OUT", "EXAMPLE.COM"]) {
+			const response = await app.request(`${search}?${new URLSearchParams({ q: query })}`, {
+				headers: owner,
+			});
+			equal(response.status, 200);
+			equal(response.headers.get("cache-control"), "no-store");
+			deepEqual(await response.json(), matches);
+		}
+
+		const response = await app.request(path, {
+			method: "POST",
+			headers: { ...owner, "content-type": "application/json" },
+			body: JSON.stringify({ email: matches[0]!.email, readOnly: true }),
+		});
+		equal(response.status, 200);
+		try {
+			const afterAdd = await app.request(`${search}?q=outsider`, { headers: owner });
+			deepEqual(await afterAdd.json(), []);
+		} finally {
+			const removed = await app.request(`${path}/route-outsider`, {
+				method: "DELETE",
+				headers: owner,
+			});
+			equal(removed.status, 200);
+		}
 	});
 
 	test("lists stored collaborator avatars", async () => {

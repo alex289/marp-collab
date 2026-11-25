@@ -1,6 +1,9 @@
 import { Hono } from "hono";
 import z from "zod";
-import { getProjectOwnerByProjectId } from "../../../db/models/project-collaborator.ts";
+import {
+	getProjectOwnerByProjectId,
+	searchCollaboratorCandidates,
+} from "../../../db/models/project-collaborator.ts";
 import {
 	addProjectCollaborator,
 	listProjectCollaborators,
@@ -21,6 +24,8 @@ const updateCollaboratorSchema = z.object({
 	readOnly: z.boolean(),
 });
 
+const searchCandidatesSchema = z.string().trim().min(2).max(254);
+
 const app = new Hono<{ Variables: ProjectRouteVariables }>();
 
 app.get("/:projectId/collaborators", (c) => {
@@ -31,6 +36,16 @@ app.get("/:projectId/collaborators", (c) => {
 	}
 
 	return c.json({ owner, collaborators: listProjectCollaborators(projectId) });
+});
+
+app.get("/:projectId/collaborators/candidates", requireProjectOwner, (c) => {
+	const query = searchCandidatesSchema.safeParse(c.req.query("q"));
+	if (!query.success) {
+		return c.json({ error: "Enter between 2 and 254 characters to search" }, 400);
+	}
+
+	c.header("Cache-Control", "no-store");
+	return c.json(searchCollaboratorCandidates(c.req.param("projectId"), query.data));
 });
 
 app.post("/:projectId/collaborators", requireProjectOwner, async (c) => {

@@ -8,13 +8,13 @@ import {
 	DialogTitle,
 	DialogTrigger,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { API_URL } from "@/lib/config";
 import { fetcher } from "@/lib/fetcher";
 import type { ProjectCollaboratorsResponse } from "@/lib/types";
 import { PlusIcon, Share, Trash } from "lucide-react";
 import { useState } from "react";
 import useSWR, { useSWRConfig } from "swr";
+import { z } from "zod";
 import {
 	Table,
 	TableBody,
@@ -33,6 +33,9 @@ import {
 	SelectValue,
 } from "../ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/tooltip";
+import { CollaboratorPicker } from "./collaborator-picker";
+
+const emailSchema = z.email();
 
 const accessLevelSelectItems = [
 	{ value: "read-only", label: "Read Only" },
@@ -42,13 +45,14 @@ const accessLevelSelectItems = [
 export function ManageProjectCollaborator({ projectId }: { projectId: string }) {
 	const { mutate } = useSWRConfig();
 	const [open, setOpen] = useState(false);
-	const [collaboratorEmail, setCollaboratorEmail] = useState("");
+	const [collaboratorQuery, setCollaboratorQuery] = useState("");
 	const [accessLevel, setAccessLevel] = useState("read-only");
 	const [error, setError] = useState<string | null>(null);
 	const [isSubmitting, setIsSubmitting] = useState(false);
 	const [isRemoving, setIsRemoving] = useState(false);
 	const [updatingUserId, setUpdatingUserId] = useState<string | null>(null);
-	const [isEmailValid, setIsEmailValid] = useState(false);
+	const collaboratorEmail = collaboratorQuery.trim();
+	const isEmailValid = emailSchema.safeParse(collaboratorEmail).success;
 
 	const collaboratorsKey = `${API_URL}/projects/${projectId}/collaborators`;
 	const { data: projectData } = useSWR<{ isOwner: boolean }>(
@@ -60,10 +64,9 @@ export function ManageProjectCollaborator({ projectId }: { projectId: string }) 
 	function handleOpenChange(next: boolean) {
 		setOpen(next);
 		if (!next) {
-			setCollaboratorEmail("");
+			setCollaboratorQuery("");
 			setAccessLevel("read-only");
 			setError(null);
-			setIsEmailValid(false);
 		}
 	}
 
@@ -74,8 +77,9 @@ export function ManageProjectCollaborator({ projectId }: { projectId: string }) 
 
 	async function handleAddCollaborator() {
 		setIsSubmitting(true);
+		setError(null);
 		try {
-			const res = await fetch(`${API_URL}/projects/${projectId}/collaborators`, {
+			const res = await fetch(collaboratorsKey, {
 				method: "POST",
 
 				headers: { "Content-Type": "application/json" },
@@ -88,9 +92,8 @@ export function ManageProjectCollaborator({ projectId }: { projectId: string }) 
 				return;
 			}
 
-			setCollaboratorEmail("");
+			setCollaboratorQuery("");
 			setAccessLevel("read-only");
-			setIsEmailValid(false);
 			await mutate(collaboratorsKey);
 		} catch {
 			setError("An unexpected error occurred. Please try again.");
@@ -236,18 +239,12 @@ export function ManageProjectCollaborator({ projectId }: { projectId: string }) 
 					<TableFooter>
 						<TableRow>
 							<TableCell>
-								<Input
-									id="collaborator-email"
-									name="collaborator-email"
-									type="email"
-									placeholder="Collaborator's email"
-									value={collaboratorEmail}
-									onChange={(e) => {
-										setCollaboratorEmail(e.target.value);
-										setIsEmailValid(e.target.validity.valid);
-									}}
-									disabled={!isOwner}
-									required
+								<CollaboratorPicker
+									projectId={projectId}
+									value={collaboratorQuery}
+									onValueChange={setCollaboratorQuery}
+									disabled={!isOwner || isSubmitting}
+									searchEnabled={!isEmailValid}
 								/>
 							</TableCell>
 							<TableCell>

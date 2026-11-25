@@ -1,6 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
-import { AUTH_STATE_PATH } from "../test-environment.ts";
+import { APP_URL, AUTH_STATE_PATH } from "../test-environment.ts";
 
 const { version: APP_VERSION } = JSON.parse(
 	readFileSync(new URL("../../package.json", import.meta.url), "utf8"),
@@ -1657,16 +1657,20 @@ test.describe("Editor: search panel", () => {
 
 test.describe("Editor: collaboration", () => {
 	test.beforeEach(async ({ page }) => {
-		await page.goto("/");
-		await createPresentation(page, "Collab Test");
-		await page.waitForURL(/\/presentations\/.+/);
+		const project = await page.request.post("/api/v1/projects", {
+			data: { name: "Collab Test" },
+			headers: { Origin: APP_URL },
+		});
+		await expect(project).toBeOK();
+		const { projectId } = (await project.json()) as { projectId: string };
+		await page.goto(`/presentations/${projectId}`);
 		await waitForSidebar(page);
 	});
 
 	test("opens the Manage Collaboration dialog", async ({ page }) => {
 		await page.getByRole("button", { name: "Share document" }).click();
 		await expect(page.getByRole("heading", { name: "Manage Collaboration" })).toBeVisible();
-		await expect(page.getByPlaceholder("Collaborator's email")).toBeVisible();
+		await expect(page.getByRole("combobox", { name: "Search by name or email" })).toBeVisible();
 	});
 
 	test("Add button is disabled with invalid email and enabled with valid email", async ({
@@ -1678,11 +1682,48 @@ test.describe("Editor: collaboration", () => {
 		const addButton = page.getByRole("button", { name: "Add" });
 		await expect(addButton).toBeDisabled();
 
-		await page.getByPlaceholder("Collaborator's email").fill("not-an-email");
+		const picker = page.getByRole("combobox", { name: "Search by name or email" });
+		await picker.pressSequentially("not-an-email");
+		await expect(page.getByText("No matching people")).toBeVisible();
+		await picker.press("Escape");
 		await expect(addButton).toBeDisabled();
 
-		await page.getByPlaceholder("Collaborator's email").fill("valid@example.com");
+		await picker.press("ControlOrMeta+A");
+		await picker.press("Backspace");
+		await picker.pressSequentially("valid@example.com");
 		await expect(addButton).toBeEnabled();
+	});
+
+	test("searches by name and adds the selected collaborator", async ({ page }) => {
+		const candidate = { name: "Taylor Nguyen", email: "taylor@example.com" };
+		await page.route("**/collaborators/candidates?*", async (route) => {
+			const query = new URL(route.request().url()).searchParams.get("q");
+			await route.fulfill({ json: query === "Taylor" ? [candidate] : [] });
+		});
+		await page.route("**/collaborators", async (route) => {
+			if (route.request().method() !== "POST") {
+				await route.continue();
+				return;
+			}
+			await route.fulfill({ json: { success: true } });
+		});
+
+		await page.getByRole("button", { name: "Share document" }).click();
+		const picker = page.getByRole("combobox", { name: "Search by name or email" });
+		await picker.pressSequentially("Taylor");
+		await expect(
+			page.getByRole("option", { name: /Taylor Nguyen.*taylor@example.com/ }),
+		).toBeVisible();
+		await picker.press("ArrowDown");
+		await picker.press("Enter");
+		await expect(picker).toHaveValue(candidate.email);
+
+		const added = page.waitForRequest(
+			(request) => request.method() === "POST" && request.url().endsWith("/collaborators"),
+		);
+		await page.getByRole("button", { name: "Add", exact: true }).click();
+		expect((await added).postDataJSON()).toEqual({ email: candidate.email, readOnly: true });
+		await expect(picker).toHaveValue("");
 	});
 
 	test("does not show the current user's own file presence in the sidebar", async ({
