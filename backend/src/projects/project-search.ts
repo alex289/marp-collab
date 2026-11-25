@@ -2,10 +2,15 @@ import { collabServer } from "../collab/hocuspocus.ts";
 import { getCollabDocumentContent } from "../collab/document-content.ts";
 import { flushProjectFileDocument } from "../collab/project-events.ts";
 import { isEditableExtension } from "../helpers/file-allowlist.ts";
+import { DOCUMENT_STATE_SUFFIX } from "./document-state-path.ts";
 import { listProjectContent } from "./project-content.ts";
 import { beginProjectWrite, withProjectContentMutation } from "./project-operations.ts";
 import { documentFileExists, getProjectFileSize, isValidProjectFileLocation } from "./storage.ts";
-import { DOCUMENT_CONTENT_KEY, toDocumentName } from "../../../shared/collaboration.ts";
+import {
+	DOCUMENT_CONTENT_KEY,
+	PROJECT_PRESENCE_DOCUMENT_ID,
+	toDocumentName,
+} from "../../../shared/collaboration.ts";
 import {
 	findTextMatches,
 	isCurrentTextMatch,
@@ -20,9 +25,9 @@ export const MAX_TOTAL_SEARCH_MATCHES = 500;
 const MAX_MATCHES_PER_FILE = 100;
 
 export class ProjectSearchError extends Error {
-	status: 400 | 404 | 409;
+	status: 400 | 403 | 404 | 409;
 
-	constructor(message: string, status: 400 | 404 | 409) {
+	constructor(message: string, status: 400 | 403 | 404 | 409) {
 		super(message);
 		this.name = "ProjectSearchError";
 		this.status = status;
@@ -44,7 +49,22 @@ export type ProjectSearchResult = {
 };
 
 function assertValidEditableFileId(projectId: string, fileId: string): void {
-	if (!isValidProjectFileLocation(projectId, fileId) || !isEditableExtension(fileId)) {
+	const segments = fileId.split("/");
+	const hasUnsafeSegment =
+		fileId.includes("\\") ||
+		segments.some(
+			(segment) =>
+				segment.length === 0 ||
+				segment.startsWith(".") ||
+				segment.toLowerCase().endsWith(DOCUMENT_STATE_SUFFIX),
+		) ||
+		segments[0] === PROJECT_PRESENCE_DOCUMENT_ID;
+
+	if (
+		hasUnsafeSegment ||
+		!isValidProjectFileLocation(projectId, fileId) ||
+		!isEditableExtension(fileId)
+	) {
 		throw new ProjectSearchError("Invalid editable file path.", 400);
 	}
 }
@@ -173,11 +193,13 @@ export async function replaceProjectMatch(
 		fileId: string;
 		match: Pick<TextSearchMatch, "startOffset" | "endOffset" | "matchedText">;
 		replacement: string;
+		verifyWriteAccess?: () => void;
 	},
 ): Promise<{ fileId: string; replacedMatches: number }> {
 	assertValidEditableFileId(projectId, input.fileId);
 
 	return await withSearchWriteLock(projectId, async () => {
+		input.verifyWriteAccess?.();
 		const documentName = toDocumentName(projectId, input.fileId);
 		if (!(await documentFileExists(documentName))) {
 			throw new ProjectSearchError("File not found.", 404);
@@ -186,6 +208,7 @@ export async function replaceProjectMatch(
 		const connection = await collabServer.openDirectConnection(documentName, { userId });
 		try {
 			await connection.transact((document) => {
+				input.verifyWriteAccess?.();
 				const text = document.getText(DOCUMENT_CONTENT_KEY);
 				const current = text.toJSON();
 				if (!isCurrentTextMatch(current, input.match)) {
@@ -222,6 +245,7 @@ export async function replaceAllProjectMatches(
 		replacement: string;
 		caseSensitive?: boolean;
 		fileId?: string;
+		verifyWriteAccess?: () => void;
 	},
 ): Promise<{ replacedMatches: number; updatedFiles: string[] }> {
 	const caseSensitive = input.caseSensitive ?? false;
@@ -230,6 +254,7 @@ export async function replaceAllProjectMatches(
 	}
 
 	return await withSearchWriteLock(projectId, async () => {
+		input.verifyWriteAccess?.();
 		const targetFileIds =
 			input.fileId !== undefined ? [input.fileId] : await listEditableProjectFileIds(projectId);
 
@@ -244,6 +269,7 @@ export async function replaceAllProjectMatches(
 		const updatedFiles: string[] = [];
 
 		for (const fileId of targetFileIds) {
+			input.verifyWriteAccess?.();
 			const documentName = toDocumentName(projectId, fileId);
 			const previewContent = await getCollabDocumentContent(documentName);
 			if (previewContent === undefined || previewContent.length > MAX_SEARCH_FILE_CHARACTERS) {
@@ -262,6 +288,7 @@ export async function replaceAllProjectMatches(
 			const connection = await collabServer.openDirectConnection(documentName, { userId });
 			try {
 				await connection.transact((document) => {
+					input.verifyWriteAccess?.();
 					const text = document.getText(DOCUMENT_CONTENT_KEY);
 					const current = text.toJSON();
 					const matches = findTextMatches(current, input.query, { caseSensitive });

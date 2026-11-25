@@ -16,6 +16,7 @@ type SearchState = {
 	files: ProjectSearchFileResult[];
 	totalMatches: number;
 	truncated: boolean;
+	skippedFiles: string[];
 	error: string | null;
 };
 
@@ -25,6 +26,7 @@ const emptyState: SearchState = {
 	files: [],
 	totalMatches: 0,
 	truncated: false,
+	skippedFiles: [],
 	error: null,
 };
 
@@ -34,6 +36,7 @@ type ProjectSearchResponse = {
 	files: ProjectSearchFileResult[];
 	totalMatches: number;
 	truncated: boolean;
+	skippedFiles?: string[];
 	error?: string;
 };
 
@@ -43,6 +46,16 @@ type ProjectReplaceResponse = {
 	fileId?: string;
 	error?: string;
 };
+
+async function readJsonPayload<T extends { error?: string }>(
+	response: Response,
+): Promise<T | null> {
+	try {
+		return (await response.json()) as T;
+	} catch {
+		return null;
+	}
+}
 
 function replaceMatchInYText(text: Text, match: TextSearchMatch, replacement: string): void {
 	text.delete(match.startOffset, match.endOffset - match.startOffset);
@@ -85,15 +98,21 @@ export function useProjectSearch({
 
 	useEffect(() => {
 		return () => {
+			searchRequestRef.current += 1;
 			abortRef.current?.abort();
 		};
 	}, [projectId]);
 
 	const runSearch = useCallback(
-		async (query: string, caseSensitive: boolean): Promise<void> => {
+		async (
+			query: string,
+			caseSensitive: boolean,
+			options?: { skipLocalActiveFileMerge?: boolean },
+		): Promise<void> => {
 			abortRef.current?.abort();
 
 			if (query.length === 0) {
+				searchRequestRef.current += 1;
 				setState({ ...emptyState, caseSensitive });
 				setIsSearching(false);
 				return;
@@ -112,18 +131,32 @@ export function useProjectSearch({
 					body: JSON.stringify({ query, caseSensitive }),
 					signal: controller.signal,
 				});
-				const payload = (await response.json()) as ProjectSearchResponse;
+				const payload = await readJsonPayload<ProjectSearchResponse>(response);
 				if (searchRequestRef.current !== requestId) {
 					return;
 				}
-				if (!response.ok) {
+				if (!response.ok || !payload) {
 					setState({
 						query,
 						caseSensitive,
 						files: [],
 						totalMatches: 0,
 						truncated: false,
-						error: payload.error ?? "Search failed.",
+						skippedFiles: [],
+						error: payload?.error ?? `Search failed (${response.status}).`,
+					});
+					return;
+				}
+
+				if (options?.skipLocalActiveFileMerge) {
+					setState({
+						query,
+						caseSensitive,
+						files: payload.files,
+						totalMatches: payload.totalMatches,
+						truncated: payload.truncated,
+						skippedFiles: payload.skippedFiles ?? [],
+						error: null,
 					});
 					return;
 				}
@@ -142,6 +175,7 @@ export function useProjectSearch({
 					files: merged.files,
 					totalMatches: merged.totalMatches,
 					truncated: payload.truncated || merged.activeFileTruncated,
+					skippedFiles: payload.skippedFiles ?? [],
 					error: null,
 				});
 			} catch (error) {
@@ -154,6 +188,7 @@ export function useProjectSearch({
 					files: [],
 					totalMatches: 0,
 					truncated: false,
+					skippedFiles: [],
 					error: error instanceof Error ? error.message : "Search failed.",
 				});
 			} finally {
@@ -185,7 +220,29 @@ export function useProjectSearch({
 					return;
 				}
 				currentYText.doc.transact(() => replaceMatchInYText(currentYText, match, replacement));
-				await runSearch(state.query, state.caseSensitive);
+				if (state.truncated) {
+					setIsReplacing(true);
+					try {
+						await runSearch(state.query, state.caseSensitive);
+					} finally {
+						setIsReplacing(false);
+					}
+				} else {
+					const merged = mergeActiveFileSearchResults(
+						state.files,
+						fileId,
+						currentYText.toJSON(),
+						state.query,
+						state.caseSensitive,
+					);
+					setState((previous) => ({
+						...previous,
+						files: merged.files,
+						totalMatches: merged.totalMatches,
+						truncated: merged.activeFileTruncated,
+						error: null,
+					}));
+				}
 				return;
 			}
 
@@ -206,11 +263,11 @@ export function useProjectSearch({
 						replacement,
 					}),
 				});
-				const payload = (await response.json()) as ProjectReplaceResponse;
+				const payload = await readJsonPayload<ProjectReplaceResponse>(response);
 				if (!response.ok) {
 					setState((previous) => ({
 						...previous,
-						error: payload.error ?? "Could not replace match.",
+						error: payload?.error ?? `Could not replace match (${response.status}).`,
 					}));
 					return;
 				}
@@ -224,7 +281,16 @@ export function useProjectSearch({
 				setIsReplacing(false);
 			}
 		},
-		[isReplacing, projectId, readOnly, runSearch, state.caseSensitive, state.query],
+		[
+			isReplacing,
+			projectId,
+			readOnly,
+			runSearch,
+			state.caseSensitive,
+			state.files,
+			state.query,
+			state.truncated,
+		],
 	);
 
 	const onReplaceInFile = useCallback(
@@ -246,7 +312,31 @@ export function useProjectSearch({
 						`Replaced ${matches.length} ${matches.length === 1 ? "match" : "matches"} in ${fileId}.`,
 					);
 				}
-				await runSearch(query, caseSensitive);
+				if (state.truncated) {
+					setIsReplacing(true);
+					try {
+						await runSearch(query, caseSensitive);
+					} finally {
+						setIsReplacing(false);
+					}
+				} else {
+					const merged = mergeActiveFileSearchResults(
+						state.files,
+						fileId,
+						currentYText.toJSON(),
+						query,
+						caseSensitive,
+					);
+					setState((previous) => ({
+						...previous,
+						query,
+						caseSensitive,
+						files: merged.files,
+						totalMatches: merged.totalMatches,
+						truncated: merged.activeFileTruncated,
+						error: null,
+					}));
+				}
 				return;
 			}
 
@@ -264,11 +354,11 @@ export function useProjectSearch({
 						fileId,
 					}),
 				});
-				const payload = (await response.json()) as ProjectReplaceResponse;
-				if (!response.ok) {
+				const payload = await readJsonPayload<ProjectReplaceResponse>(response);
+				if (!response.ok || !payload) {
 					setState((previous) => ({
 						...previous,
-						error: payload.error ?? "Could not replace matches.",
+						error: payload?.error ?? `Could not replace matches (${response.status}).`,
 					}));
 					return;
 				}
@@ -287,7 +377,7 @@ export function useProjectSearch({
 				setIsReplacing(false);
 			}
 		},
-		[isReplacing, projectId, readOnly, runSearch],
+		[isReplacing, projectId, readOnly, runSearch, state.files, state.truncated],
 	);
 
 	const onReplaceAll = useCallback(
@@ -309,11 +399,11 @@ export function useProjectSearch({
 						caseSensitive,
 					}),
 				});
-				const payload = (await response.json()) as ProjectReplaceResponse;
-				if (!response.ok) {
+				const payload = await readJsonPayload<ProjectReplaceResponse>(response);
+				if (!response.ok || !payload) {
 					setState((previous) => ({
 						...previous,
-						error: payload.error ?? "Could not replace matches.",
+						error: payload?.error ?? `Could not replace matches (${response.status}).`,
 					}));
 					return;
 				}
@@ -324,7 +414,9 @@ export function useProjectSearch({
 						`Replaced ${payload.replacedMatches} ${payload.replacedMatches === 1 ? "match" : "matches"} across ${fileCount} ${fileCount === 1 ? "file" : "files"}.`,
 					);
 				}
-				await runSearch(query, caseSensitive);
+				// Use the authoritative server state right after server-side replace so a lagging
+				// WebSocket Yjs update on the active file cannot resurrect replaced matches.
+				await runSearch(query, caseSensitive, { skipLocalActiveFileMerge: true });
 			} catch (error) {
 				setState((previous) => ({
 					...previous,
@@ -338,9 +430,12 @@ export function useProjectSearch({
 	);
 
 	return {
+		searchedQuery: state.query,
+		searchedCaseSensitive: state.caseSensitive,
 		files: state.files,
 		totalMatches: state.totalMatches,
 		truncated: state.truncated,
+		skippedFiles: state.skippedFiles,
 		error: state.error,
 		isSearching,
 		isReplacing,

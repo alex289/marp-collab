@@ -49,6 +49,14 @@ test("splits preview lines around a match and trims long leading context", () =>
 		match: "TARGET",
 		after: " suffix",
 	});
+
+	const longLine = `${"x".repeat(300)}😀TARGET${"y".repeat(300)}`;
+	const clipped = findTextMatches(longLine, "target")[0]!;
+	assert.ok(clipped.linePreview.length < 250);
+	assert.ok(clipped.linePreview.startsWith("…"));
+	assert.ok(clipped.linePreview.endsWith("…"));
+	assert.equal(getMatchPreviewSegments(clipped, 5).match, "TARGET");
+	assert.ok(!getMatchPreviewSegments(clipped, 1).before.includes("\uFFFD"));
 });
 
 test("merges live active file matches into server project search results", () => {

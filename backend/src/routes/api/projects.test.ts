@@ -914,5 +914,37 @@ describe("projects routes", () => {
 		});
 		equal(await files.getDocumentContent("project/upload-proj/search-a.md"), "# Global pin");
 		equal(await files.getDocumentContent("project/upload-proj/search-b.css"), "/* pin style */");
+
+		const singleReplace = await app.request("/upload-proj/search/replace", {
+			method: "POST",
+			headers: { "content-type": "application/json", "x-test-user-id": "user-1" },
+			body: JSON.stringify({
+				mode: "one",
+				fileId: "search-a.md",
+				match: { startOffset: 9, endOffset: 12, matchedText: "pin" },
+				replacement: "hook",
+			}),
+		});
+		equal(singleReplace.status, 200);
+		equal(await files.getDocumentContent("project/upload-proj/search-a.md"), "# Global hook");
+
+		const staleSingle = await app.request("/upload-proj/search/replace", {
+			method: "POST",
+			headers: { "content-type": "application/json", "x-test-user-id": "user-1" },
+			body: JSON.stringify({
+				mode: "one",
+				fileId: "search-a.md",
+				match: { startOffset: 9, endOffset: 12, matchedText: "pin" },
+				replacement: "stale",
+			}),
+		});
+		equal(staleSingle.status, 409);
+
+		const emptyQuery = await app.request("/upload-proj/search", {
+			method: "POST",
+			headers: { "content-type": "application/json", "x-test-user-id": "user-1" },
+			body: JSON.stringify({ query: "" }),
+		});
+		equal(emptyQuery.status, 400);
 	});
 });

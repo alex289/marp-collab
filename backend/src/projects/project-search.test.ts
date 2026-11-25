@@ -149,29 +149,43 @@ describe("project global search and replace", () => {
 		equal(await storage.getDocumentContent(`project/${projectId}/theme.css`), "/* qux */");
 	});
 
-	test("rejects invalid file paths and blocks replacements during Git sync", async () => {
+	test("rejects invalid or reserved file paths, enforces write re-checks, and blocks replacements during Git sync", async () => {
 		const projectId = "search-guards";
 		await storage.saveDocumentContent(`project/${projectId}/deck.md`, "Hello");
 
-		await rejects(
-			() =>
-				projectSearch.replaceAllProjectMatches(projectId, "user-1", {
-					query: "Hello",
-					replacement: "Hi",
-					fileId: "../escape.md",
-				}),
-			(error: unknown) => error instanceof projectSearch.ProjectSearchError && error.status === 400,
-		);
+		for (const fileId of [
+			"../escape.md",
+			"assets/photo.png",
+			"__presence/deck.md",
+			"reserved.yjs/deck.md",
+			"chapters//deck.md",
+			"chapters\\deck.md",
+		]) {
+			await rejects(
+				() =>
+					projectSearch.replaceAllProjectMatches(projectId, "user-1", {
+						query: "Hello",
+						replacement: "Hi",
+						fileId,
+					}),
+				(error: unknown) =>
+					error instanceof projectSearch.ProjectSearchError && error.status === 400,
+				fileId,
+			);
+		}
 
 		await rejects(
 			() =>
 				projectSearch.replaceAllProjectMatches(projectId, "user-1", {
 					query: "Hello",
 					replacement: "Hi",
-					fileId: "assets/photo.png",
+					verifyWriteAccess: () => {
+						throw new projectSearch.ProjectSearchError("Write access denied.", 403);
+					},
 				}),
-			(error: unknown) => error instanceof projectSearch.ProjectSearchError && error.status === 400,
+			(error: unknown) => error instanceof projectSearch.ProjectSearchError && error.status === 403,
 		);
+		equal(await storage.getDocumentContent(`project/${projectId}/deck.md`), "Hello");
 
 		const sync = projectOperations.beginProjectSync(projectId);
 		ok(sync);

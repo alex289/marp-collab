@@ -4,6 +4,7 @@ import {
 	requireProjectWriteAccess,
 	type ProjectRouteVariables,
 } from "../../../middleware/project-access-middleware.ts";
+import { getProjectAuthorization } from "../../../projects/access-policy.ts";
 import {
 	MAX_REPLACEMENT_LENGTH,
 	MAX_SEARCH_QUERY_LENGTH,
@@ -76,12 +77,19 @@ app.post("/:projectId/search/replace", requireProjectWriteAccess, async (c) => {
 		return c.json({ error: z.prettifyError(parseResult.error) }, 400);
 	}
 
+	const verifyWriteAccess = () => {
+		if (!getProjectAuthorization(projectId, user.id, "write").allowed) {
+			throw new ProjectSearchError("Project not found or write access denied.", 403);
+		}
+	};
+
 	try {
 		if (parseResult.data.mode === "one") {
 			const result = await replaceProjectMatch(projectId, user.id, {
 				fileId: parseResult.data.fileId,
 				match: parseResult.data.match,
 				replacement: parseResult.data.replacement,
+				verifyWriteAccess,
 			});
 			return c.json(result);
 		}
@@ -91,6 +99,7 @@ app.post("/:projectId/search/replace", requireProjectWriteAccess, async (c) => {
 			replacement: parseResult.data.replacement,
 			caseSensitive: parseResult.data.caseSensitive,
 			fileId: parseResult.data.fileId,
+			verifyWriteAccess,
 		});
 		return c.json(result);
 	} catch (error) {

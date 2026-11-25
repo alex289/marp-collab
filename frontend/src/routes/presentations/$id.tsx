@@ -583,6 +583,10 @@ function PresentationWorkspace({ id }: { id: string }) {
 		[files, selectedFile?.id],
 	);
 
+	if (pendingSearchJump && selectedFile?.id && selectedFile.id !== pendingSearchJump.fileId) {
+		setPendingSearchJump(null);
+	}
+
 	useEffect(() => {
 		if (!pendingSearchJump || selectedFile?.id !== pendingSearchJump.fileId || !syncedYText) {
 			return;
@@ -1490,7 +1494,7 @@ function PresentationWorkspace({ id }: { id: string }) {
 					onProjectDeleted={() => {
 						void navigate({ to: "/", replace: true });
 					}}
-					searchPanel={<SearchPanel {...projectSearch} />}
+					searchPanel={<SearchPanel key={id} {...projectSearch} />}
 					outlinePanel={
 						<OutlinePanel
 							items={outlineItems}

@@ -10,9 +10,12 @@ import { getMatchPreviewSegments } from "@/lib/text-search";
 import type { useProjectSearch } from "@/hooks/use-project-search";
 
 export function SearchPanel({
+	searchedQuery,
+	searchedCaseSensitive,
 	files,
 	totalMatches,
 	truncated,
+	skippedFiles,
 	readOnly,
 	isSearching,
 	isReplacing,
@@ -29,6 +32,8 @@ export function SearchPanel({
 	const [collapsedFiles, setCollapsedFiles] = useState<ReadonlySet<string>>(new Set());
 
 	const busy = isSearching || isReplacing;
+	const resultsMatchInput =
+		query.length > 0 && query === searchedQuery && caseSensitive === searchedCaseSensitive;
 
 	const toggleFileCollapsed = (fileId: string) => {
 		setCollapsedFiles((previous) => {
@@ -85,6 +90,7 @@ export function SearchPanel({
 									type="button"
 									size="icon"
 									variant={caseSensitive ? "secondary" : "outline"}
+									className="shrink-0"
 									aria-label="Match case"
 									aria-pressed={caseSensitive}
 									onClick={toggleCaseSensitive}
@@ -122,8 +128,8 @@ export function SearchPanel({
 					<Button
 						type="button"
 						size="sm"
-						onClick={() => void onReplaceAll(query, replacement, caseSensitive)}
-						disabled={readOnly || query.length === 0 || totalMatches === 0 || busy}
+						onClick={() => void onReplaceAll(searchedQuery, replacement, searchedCaseSensitive)}
+						disabled={readOnly || !resultsMatchInput || totalMatches === 0 || busy}
 					>
 						{isReplacing ? <Loader2 className="animate-spin" /> : <Replace />}
 						Replace all
@@ -131,6 +137,11 @@ export function SearchPanel({
 				</div>
 				{error ? <p className="text-xs text-destructive">{error}</p> : null}
 				<p className="text-xs text-muted-foreground">{summaryText}</p>
+				{skippedFiles.length > 0 ? (
+					<p className="text-[11px] text-muted-foreground">
+						{skippedFiles.length} large {skippedFiles.length === 1 ? "file" : "files"} skipped.
+					</p>
+				) : null}
 				<div className="min-h-0 flex-1 overflow-y-auto pr-1">
 					{files.map((fileResult) => {
 						const collapsed = collapsedFiles.has(fileResult.fileId);
@@ -141,7 +152,7 @@ export function SearchPanel({
 										type="button"
 										onClick={() => toggleFileCollapsed(fileResult.fileId)}
 										aria-expanded={!collapsed}
-										className="flex min-w-0 flex-1 items-center gap-1 rounded px-1 py-0.5 text-left text-xs font-medium hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+										className="flex min-w-0 flex-1 items-center gap-1 rounded px-1 py-0.5 text-left text-xs font-medium hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 									>
 										{collapsed ? (
 											<ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />
@@ -164,13 +175,13 @@ export function SearchPanel({
 														size="icon-xs"
 														variant="ghost"
 														aria-label={`Replace all in ${fileResult.fileId}`}
-														disabled={busy || query.length === 0}
+														disabled={busy || !resultsMatchInput}
 														onClick={() =>
 															void onReplaceInFile(
 																fileResult.fileId,
-																query,
+																searchedQuery,
 																replacement,
-																caseSensitive,
+																searchedCaseSensitive,
 															)
 														}
 													>
@@ -194,7 +205,7 @@ export function SearchPanel({
 													<button
 														type="button"
 														onClick={() => onSelectMatch(fileResult.fileId, match)}
-														className="min-w-0 text-left focus-visible:outline-none"
+														className="min-w-0 rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 													>
 														<span className="mb-0.5 block text-[11px] text-muted-foreground">
 															Line {match.line}, column {match.column}
