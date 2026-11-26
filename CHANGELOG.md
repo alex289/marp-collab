@@ -1,5 +1,27 @@
 # marp-collab
 
+## 0.6.0
+
+### Minor Changes
+
+- [#113](https://github.com/alex289/marp-collab/pull/113) [`102f61e`](https://github.com/alex289/marp-collab/commit/102f61eedcc13c042227eada3779c85c9b5e7db7) Thanks [@alex289](https://github.com/alex289)! - Find people by name or email in Manage Collaboration and select a match to add them to a presentation.
+
+- [#116](https://github.com/alex289/marp-collab/pull/116) [`6780255`](https://github.com/alex289/marp-collab/commit/6780255f647c4573358eea89a4a5f6918c180c76) Thanks [@alex289](https://github.com/alex289)! - Upgrade the workspace Search panel to search and replace across all Markdown and CSS files in a project, with match-case filtering, highlighted match previews, per-file or project-wide replace, and click-to-jump navigation across files.
+
+- [#106](https://github.com/alex289/marp-collab/pull/106) [`a3b32fe`](https://github.com/alex289/marp-collab/commit/a3b32fe1dd3b76436ca53c3b1e22a4c7b92aa08f) Thanks [@alex289](https://github.com/alex289)! - Share a browser tab or app window directly to the fullscreen audience view during live demos. Use L to return to the slides from the presenter, audience, or floating controls, and F to toggle fullscreen from the presenter.
+
+- [#112](https://github.com/alex289/marp-collab/pull/112) [`d3f3d8b`](https://github.com/alex289/marp-collab/commit/d3f3d8bb004d3432c81abb39090d701bb74bdac8) Thanks [@alex289](https://github.com/alex289)! - Let MCP clients manage project files and folders, edit CSS themes, upload assets, check references, and verify that Markdown decks render.
+
+- [#117](https://github.com/alex289/marp-collab/pull/117) [`101331a`](https://github.com/alex289/marp-collab/commit/101331ad90a48f59a008a329405e1050e3525d4f) Thanks [@alex289](https://github.com/alex289)! - Let MCP clients create, rename, and delete owned presentation projects, and return ownership, Git connection status, and timestamps from `list_projects`.
+
+- [#115](https://github.com/alex289/marp-collab/pull/115) [`cc54a01`](https://github.com/alex289/marp-collab/commit/cc54a01ab8edd14e99f324be44155d421ff57365) Thanks [@alex289](https://github.com/alex289)! - Add visual slide previews to the MCP `preview_presentation` tool so AI assistants can request Chromium-rendered slide images (`png`, `jpeg`, or `webp`) via Gotenberg to inspect layout, spacing, and styling.
+
+- [#109](https://github.com/alex289/marp-collab/pull/109) [`2c65b71`](https://github.com/alex289/marp-collab/commit/2c65b7105adb58ac5f9c570208d566c828d61743) Thanks [@alex289](https://github.com/alex289)! - The sign-in page marks the most recently used provider with a **Last used** badge. A browser cookie remembers the provider for 30 days, including after sign-out.
+
+### Patch Changes
+
+- [#114](https://github.com/alex289/marp-collab/pull/114) [`84434fc`](https://github.com/alex289/marp-collab/commit/84434fc2686d5dc0176858f5a944080a85528762) Thanks [@alex289](https://github.com/alex289)! - Remove the backend startup warning about Node Web Storage and the client-IP warning caused by MCP fetching its own signing keys. Self-hosted deployments can now configure the trusted client IP header and proxy hops for auth rate limits.
+
 ## 0.5.0
 
 ### Minor Changes
