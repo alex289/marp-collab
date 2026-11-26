@@ -20,7 +20,8 @@ export const Route = createFileRoute("/consent")({ component: ConsentRoute });
 
 type ConsentDetails = { name: string; redirectHost: string; scopes: string[]; oauthQuery: string };
 const permissions: Record<string, string> = {
-	"presentations:read": "Read and check presentation files in projects you can access.",
+	"presentations:read":
+		"Read, check and visually preview presentation files in projects you can access.",
 	"presentations:write":
 		"Create, edit, move and delete files and folders, and sync with Git, in projects where you have write access.",
 	offline_access: "Keep access until the connection expires or its authorization is revoked.",

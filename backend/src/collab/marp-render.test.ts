@@ -8,12 +8,13 @@ describe("Marp PDF rendering", () => {
 	let tempDir: string;
 	let storage: typeof import("../projects/storage.ts");
 	let renderMarkdownForPdf: typeof import("./marp-render.ts").renderMarkdownForPdf;
+	let renderMarkdownForSlides: typeof import("./marp-render.ts").renderMarkdownForSlides;
 
 	before(async () => {
 		tempDir = await mkdtemp(join(tmpdir(), "marp-render-test-"));
 		process.env.DATA_PATH = tempDir;
 		storage = await import("../projects/storage.ts");
-		({ renderMarkdownForPdf } = await import("./marp-render.ts"));
+		({ renderMarkdownForPdf, renderMarkdownForSlides } = await import("./marp-render.ts"));
 	});
 
 	after(async () => {
@@ -173,5 +174,44 @@ title: Should be stripped
 		ok(!rendered.html.includes("Should be stripped"));
 		ok(rendered.html.includes("file not found"));
 		ok(rendered.html.includes("circular include"));
+	});
+
+	test("renders individual slides with dimensions, Tailwind CSS, and live CSS themes", async () => {
+		await storage.saveDocumentContent("project/slide-render/custom.css", "/* @theme custom */");
+		await storage.saveDocumentContent(
+			"project/slide-render/deck.md",
+			`---
+marp: true
+size: 4:3
+theme: custom
+tailwind: true
+---
+
+# Slide one
+
+<div class="grid grid-cols-2"></div>
+
+---
+
+# Slide two
+`,
+		);
+
+		const rendered = await renderMarkdownForSlides("slide-render", "deck.md", (name) => {
+			if (name.endsWith("/custom.css")) {
+				return Promise.resolve("/* @theme custom */\n@import 'default';\nsection { color: teal; }");
+			}
+			return storage.getDocumentContent(name);
+		});
+
+		ok(rendered);
+		equal(rendered.slides.length, 2);
+		equal(rendered.slides[0]?.width, 960);
+		equal(rendered.slides[0]?.height, 720);
+		ok(rendered.slides[0]?.html.includes("Slide one"));
+		ok(!rendered.slides[0]?.html.includes("<script>"));
+		ok(!rendered.slides[1]?.html.includes("<script>"));
+		ok(/color:\s*teal/.test(rendered.css));
+		ok(rendered.css.includes("grid-template-columns: repeat(2, minmax(0, 1fr)) !important"));
 	});
 });

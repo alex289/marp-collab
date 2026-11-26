@@ -1,10 +1,17 @@
 import { posix } from "node:path";
 import { getCurrentDocumentContent } from "../collab/document-content.ts";
 import { createMarpWithImageRewriter } from "../collab/marp-images.ts";
+import { renderMarkdownForSlides } from "../collab/marp-render.ts";
 import { isEditableExtension } from "../helpers/file-allowlist.ts";
+import {
+	renderSlideScreenshotViaGotenberg,
+	SCREENSHOT_MIME_TYPES,
+	type ScreenshotFormat,
+} from "../helpers/gotenberg.ts";
+import { logger } from "../helpers/logger.ts";
 import { listProjectContent } from "../projects/project-content.ts";
 import { getProjectFileSize, isMarkdownFileId } from "../projects/storage.ts";
-import { toDocumentName } from "../../../shared/collaboration.ts";
+import { parseProjectDocumentName, toDocumentName } from "../../../shared/collaboration.ts";
 import { prepareMarpTheme } from "../../../shared/marp-dialect.ts";
 import {
 	expandMarkdownIncludes,
@@ -17,6 +24,16 @@ import { PresentationToolError, requirePresentationAccess } from "./presentation
 const MAX_SOURCE_CHARACTERS = 1_000_000;
 const MAX_PROJECT_SCAN_CHARACTERS = 8_000_000;
 const MAX_REPORTED_REFERENCES = 500;
+export const MAX_VISUAL_PREVIEW_SLIDES = 5;
+const MAX_SCREENSHOT_BYTES = 5 * 1024 * 1024;
+
+export type RenderedSlidePreview = {
+	slide: number;
+	width: number;
+	height: number;
+	mimeType: string;
+	base64: string;
+};
 
 type ReferenceKind = "include" | "image" | "css-url";
 type Reference = {
@@ -192,7 +209,53 @@ export async function checkReferences(projectId: string, userId: string, path?: 
 	return { path, references, skippedFiles: project.skipped, truncated };
 }
 
-export async function previewPresentation(projectId: string, userId: string, fileId: string) {
+async function readResponseBytesWithLimit(
+	response: Response,
+	maxBytes: number,
+): Promise<Buffer | null> {
+	const declaredLength = response.headers.get("content-length");
+	if (declaredLength !== null) {
+		const parsed = Number.parseInt(declaredLength, 10);
+		if (Number.isFinite(parsed) && parsed > maxBytes) {
+			await response.body?.cancel();
+			return null;
+		}
+	}
+
+	if (!response.body) {
+		const buffer = Buffer.from(await response.arrayBuffer());
+		return buffer.byteLength > 0 && buffer.byteLength <= maxBytes ? buffer : null;
+	}
+
+	const reader = response.body.getReader();
+	const chunks: Uint8Array[] = [];
+	let totalBytes = 0;
+	try {
+		for (;;) {
+			const { done, value } = await reader.read();
+			if (done) {
+				break;
+			}
+			totalBytes += value.byteLength;
+			if (totalBytes > maxBytes) {
+				await reader.cancel();
+				return null;
+			}
+			chunks.push(value);
+		}
+	} finally {
+		reader.releaseLock();
+	}
+
+	return totalBytes > 0 ? Buffer.concat(chunks, totalBytes) : null;
+}
+
+export async function previewPresentation(
+	projectId: string,
+	userId: string,
+	fileId: string,
+	options?: { slides?: number[]; format?: ScreenshotFormat },
+) {
 	const project = await projectSources(projectId, userId);
 	const source = await project.read(fileId);
 	if (source === undefined) {
@@ -242,12 +305,97 @@ export async function previewPresentation(projectId: string, userId: string, fil
 	} catch {
 		issues.add("Marp could not render the presentation.");
 	}
+
+	const images: RenderedSlidePreview[] = [];
+	const requestedSlides = options?.slides ? Array.from(new Set(options.slides)) : [];
+	if (requestedSlides.length > 0) {
+		if (slideCount === null) {
+			throw new PresentationToolError("Marp could not render the presentation for visual preview.");
+		}
+		const outOfRange = requestedSlides.find((slide) => slide < 1 || slide > slideCount);
+		if (outOfRange !== undefined) {
+			throw new PresentationToolError(
+				`Slide ${outOfRange} is out of range (presentation has ${slideCount} ${slideCount === 1 ? "slide" : "slides"}).`,
+			);
+		}
+
+		const format = options?.format ?? "png";
+		const renderedDeck = await renderMarkdownForSlides(projectId, fileId, (documentName) => {
+			const parsed = parseProjectDocumentName(documentName);
+			if (!parsed || parsed.projectId !== projectId) {
+				return Promise.resolve(undefined);
+			}
+			return project.read(parsed.fileId);
+		});
+		if (!renderedDeck) {
+			throw new PresentationToolError("Presentation not found.");
+		}
+
+		for (const slideNumber of requestedSlides) {
+			requirePresentationAccess(projectId, userId);
+			const targetSlide = renderedDeck.slides[slideNumber - 1];
+			if (!targetSlide) {
+				throw new PresentationToolError(
+					`Slide ${slideNumber} is out of range (presentation has ${renderedDeck.slides.length} ${renderedDeck.slides.length === 1 ? "slide" : "slides"}).`,
+				);
+			}
+
+			let response: Response;
+			try {
+				response = await renderSlideScreenshotViaGotenberg(
+					projectId,
+					targetSlide,
+					renderedDeck.css,
+					renderedDeck.assets,
+					{ format },
+				);
+			} catch (error) {
+				logger.error(error, "Failed to reach Gotenberg for visual slide preview");
+				throw new PresentationToolError("Visual slide preview service is unavailable.");
+			}
+
+			if (!response.ok) {
+				logger.error(
+					{ status: response.status, body: await response.text() },
+					"Visual slide preview failed",
+				);
+				throw new PresentationToolError("Visual slide preview failed.");
+			}
+
+			const buffer = await readResponseBytesWithLimit(response, MAX_SCREENSHOT_BYTES);
+			if (!buffer) {
+				throw new PresentationToolError("Rendered slide image is empty or exceeds the size limit.");
+			}
+
+			images.push({
+				slide: slideNumber,
+				width: targetSlide.width,
+				height: targetSlide.height,
+				mimeType: SCREENSHOT_MIME_TYPES[format],
+				base64: buffer.toString("base64"),
+			});
+		}
+	}
+
 	requirePresentationAccess(projectId, userId);
 	return {
-		fileId,
-		slideCount,
-		issues: [...issues].slice(0, MAX_REPORTED_REFERENCES),
-		truncated: issues.size > MAX_REPORTED_REFERENCES,
-		skippedFiles: project.skipped,
+		data: {
+			fileId,
+			slideCount,
+			issues: [...issues].slice(0, MAX_REPORTED_REFERENCES),
+			truncated: issues.size > MAX_REPORTED_REFERENCES,
+			skippedFiles: project.skipped,
+			...(images.length > 0
+				? {
+						renderedSlides: images.map(({ slide, width, height, mimeType }) => ({
+							slide,
+							width,
+							height,
+							mimeType,
+						})),
+					}
+				: {}),
+		},
+		images,
 	};
 }
