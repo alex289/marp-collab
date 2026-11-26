@@ -9,6 +9,7 @@ import { useEffect, useMemo, type SyntheticEvent } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import marpitSvgPolyfillScript from "@marp-team/marpit-svg-polyfill/lib/polyfill.browser.js?raw";
+import builtinTransitionKeyframes from "@/lib/marp-transition-keyframes.css?raw";
 import { ArrowRightIcon, LaptopIcon, Mic2Icon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { DemoControls } from "@/components/demo-controls";
@@ -70,7 +71,34 @@ const staticSrcDoc = `<!doctype html>
         max-width: 100%;
       }
     </style>
+    <style>
+      ${builtinTransitionKeyframes}
+
+      @keyframes __marp_collab_transition_reduced_outgoing__ {
+        from { opacity: 1; }
+        to { opacity: 0; }
+      }
+      @keyframes __marp_collab_transition_reduced_incoming__ {
+        from { opacity: 0; mix-blend-mode: plus-lighter; }
+        to { opacity: 1; mix-blend-mode: plus-lighter; }
+      }
+      ::view-transition-group(root) {
+        animation-duration: var(--marp-collab-transition-duration, 0.5s);
+        animation-timing-function: ease;
+      }
+      ::view-transition-old(root),
+      ::view-transition-new(root) {
+        animation-name: var(--marp-collab-transition-name, __marp_collab_transition_no_animation__);
+        animation-duration: var(--marp-collab-transition-duration, 0.5s);
+        animation-delay: 0s;
+        animation-direction: var(--marp-collab-transition-direction, normal);
+        animation-fill-mode: both;
+        animation-timing-function: linear;
+        mix-blend-mode: normal;
+      }
+    </style>
     <style id="marp-theme"></style>
+    <style id="marp-transition"></style>
     <script>
       ${marpitSvgPolyfillScript}
     </script>
@@ -93,6 +121,25 @@ const staticSrcDoc = `<!doctype html>
         var lastHtml = null;
         var lastCss = null;
         var interactive = true;
+
+        // Slide transitions follow Marp CLI: the slide being left forward (data-transition) or
+        // backward (data-transition-back) picks keyframes named marp-[incoming-|outgoing-]
+        // transition[-backward]-<name> from the theme, falling back to the built-in ones.
+        var transitionStyle = document.getElementById('marp-transition');
+        var transitionKeyframes = null;
+        var currentTransition = null;
+        var reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
+        var TRANSITION_TYPES = { both: '', outgoing: 'outgoing-', incoming: 'incoming-' };
+        var TRANSITION_DIRECTIONS = { forward: '', backward: '-backward' };
+        var REDUCED_TRANSITION = {
+          forward: {
+            incoming: { name: '__marp_collab_transition_reduced_incoming__' },
+            outgoing: { name: '__marp_collab_transition_reduced_outgoing__' },
+          },
+          backward: {},
+        };
+        var NAME_PATTERN = /^[\\w-]+$/;
+        var DURATION_PATTERN = /^(?:\\d+\\.?\\d*|\\.\\d+)m?s$/;
 
         function collectSlides() {
           var found = Array.from(content.querySelectorAll('svg[data-marpit-svg]'));
@@ -200,6 +247,159 @@ const staticSrcDoc = `<!doctype html>
           if (zoomReset) reportZoom();
         }
 
+        function collectKeyframes(rules, found) {
+          for (var i = 0; i < rules.length; i++) {
+            var rule = rules[i];
+            if (rule.type === 7) {
+              found[rule.name] = rule;
+              continue;
+            }
+            try {
+              if (rule.styleSheet) collectKeyframes(rule.styleSheet.cssRules, found);
+              else if (rule.cssRules) collectKeyframes(rule.cssRules, found);
+            } catch (e) {
+              // Cross-origin imports hide their rules.
+            }
+          }
+        }
+
+        function findKeyframes(name) {
+          if (!transitionKeyframes) {
+            transitionKeyframes = {};
+            for (var i = 0; i < document.styleSheets.length; i++) {
+              try {
+                collectKeyframes(document.styleSheets[i].cssRules, transitionKeyframes);
+              } catch (e) {
+                // Skip sheets whose rules are not readable.
+              }
+            }
+          }
+          return Object.prototype.hasOwnProperty.call(transitionKeyframes, name)
+            ? transitionKeyframes[name]
+            : null;
+        }
+
+        // Themes set a default duration with --marp-transition-duration in the first keyframe.
+        function keyframesDuration(rule) {
+          for (var i = 0; i < rule.cssRules.length; i++) {
+            var keyframe = rule.cssRules[i];
+            if (!/(^|,)\\s*(from|0%)\\s*(,|$)/.test(keyframe.keyText)) continue;
+            var value = keyframe.style.getPropertyValue('--marp-transition-duration').trim();
+            if (DURATION_PATTERN.test(value)) return value;
+          }
+          return undefined;
+        }
+
+        function resolveTransitionKeyframes(name) {
+          var resolved = { forward: {}, backward: {} };
+          var found = false;
+          Object.keys(TRANSITION_TYPES).forEach(function (type) {
+            Object.keys(TRANSITION_DIRECTIONS).forEach(function (direction) {
+              var keyframeName =
+                'marp-' + TRANSITION_TYPES[type] + 'transition' + TRANSITION_DIRECTIONS[direction] + '-' + name;
+              var rule = findKeyframes(keyframeName);
+              if (!rule) return;
+              resolved[direction][type] = { name: keyframeName, duration: keyframesDuration(rule) };
+              found = true;
+            });
+          });
+          return found ? resolved : null;
+        }
+
+        function transitionAnimation(keyframes, type, backward) {
+          var target = keyframes[backward ? 'backward' : 'forward'];
+          if (target[type]) return { name: target[type].name };
+          // A single keyframe animates the outgoing slide and plays in reverse for the incoming one.
+          if (target.both) return { name: target.both.name, reverse: type === 'incoming' };
+          if (backward) return transitionAnimation(keyframes, type, false);
+          return { name: '__marp_collab_transition_no_animation__' };
+        }
+
+        function transitionDefaultDuration(keyframes, direction) {
+          var target = keyframes[direction];
+          var duration =
+            (target.both && target.both.duration) ||
+            (target.outgoing && target.outgoing.duration) ||
+            (target.incoming && target.incoming.duration);
+          if (duration || direction === 'forward') return duration;
+          return transitionDefaultDuration(keyframes, 'forward');
+        }
+
+        function slideTransition(slide, backward) {
+          if (!slide) return null;
+          var attribute = backward ? 'data-transition-back' : 'data-transition';
+          var section = slide.matches('section[' + attribute + ']')
+            ? slide
+            : slide.querySelector('section[' + attribute + ']');
+          if (!section) return null;
+          var data;
+          try {
+            data = JSON.parse(section.getAttribute(attribute));
+          } catch (e) {
+            return null;
+          }
+          if (!data || typeof data.name !== 'string' || !NAME_PATTERN.test(data.name)) return null;
+          if (data.name === 'none') return null;
+          var keyframes =
+            resolveTransitionKeyframes(data.name) ||
+            (data.builtinFallback ? resolveTransitionKeyframes('__builtin__' + data.name) : null);
+          if (!keyframes) return null;
+          if (reducedMotion.matches) keyframes = REDUCED_TRANSITION;
+          var duration =
+            typeof data.duration === 'string' && DURATION_PATTERN.test(data.duration)
+              ? data.duration
+              : transitionDefaultDuration(keyframes, backward ? 'backward' : 'forward');
+          return { keyframes: keyframes, duration: duration };
+        }
+
+        function transitionRule(selector, animation) {
+          return (
+            selector + '{--marp-collab-transition-name:' + animation.name + ';' +
+            '--marp-collab-transition-direction:' + (animation.reverse ? 'reverse' : 'normal') + ';}'
+          );
+        }
+
+        function navigate(index) {
+          var next = clamp(index);
+          var backward = next < active;
+          var transition =
+            interactive && next !== active && typeof document.startViewTransition === 'function'
+              ? slideTransition(slides[active], backward)
+              : null;
+          if (!transition) {
+            if (currentTransition) currentTransition.skipTransition();
+            apply(index);
+            return;
+          }
+
+          transitionStyle.textContent =
+            ':root{--marp-transition-direction:' + (backward ? -1 : 1) + ';}' +
+            (transition.duration
+              ? '::view-transition-group(root){--marp-collab-transition-duration:' + transition.duration + ';}'
+              : '') +
+            transitionRule('::view-transition-old(root)', transitionAnimation(transition.keyframes, 'outgoing', backward)) +
+            transitionRule('::view-transition-new(root)', transitionAnimation(transition.keyframes, 'incoming', backward));
+
+          var viewTransition;
+          try {
+            // Starting a new transition skips one that is still running. A skipped transition
+            // still runs its update late, so apply the latest requested slide, not this one.
+            viewTransition = document.startViewTransition(function () {
+              apply(desired);
+            });
+          } catch (e) {
+            transitionStyle.textContent = '';
+            apply(index);
+            return;
+          }
+          currentTransition = viewTransition;
+          viewTransition.finished.finally(function () {
+            if (currentTransition !== viewTransition) return;
+            currentTransition = null;
+            transitionStyle.textContent = '';
+          });
+        }
+
         function updateContent(html, css) {
           // Rebuilding the deck recreates its image elements. Skip identical updates.
           if (html === lastHtml && css === lastCss) {
@@ -210,6 +410,7 @@ const staticSrcDoc = `<!doctype html>
           if (css !== lastCss) {
             lastCss = css;
             document.getElementById('marp-theme').textContent = css;
+            transitionKeyframes = null;
           }
           content.innerHTML = html;
           slides = collectSlides();
@@ -375,7 +576,7 @@ const staticSrcDoc = `<!doctype html>
             return;
           }
           desired = Number(data.index) || 0;
-          apply(desired);
+          navigate(desired);
         }
 
         ${SLIDE_FRAME_BRIDGE_SCRIPT}
