@@ -8,6 +8,7 @@ import {
 import { TAILWIND_DIRECTIVE, type SlideTailwind } from "../../../shared/slide-tailwind.ts";
 import type { TailwindCatalog } from "../features/editor/completions.ts";
 import type { SlideSource } from "./slide-blocks.ts";
+import { installSlideTransitions } from "./marp-transition.ts";
 
 function assetQuery(version: number, token: string): string {
 	const params = new URLSearchParams();
@@ -178,6 +179,7 @@ export function createMarpRenderer(projectId: string) {
 			rewriteMarpImages((src) => rewriteImageSrc(src)),
 		);
 	});
+	installSlideTransitions(marp);
 	marp.customDirectives.global[TAILWIND_DIRECTIVE] = (value) => {
 		marp.tailwindEnabled = value === "true";
 		return {};

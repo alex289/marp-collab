@@ -12,6 +12,7 @@ import type { DeckFile } from "../../lib/types.ts";
 import type { ProjectTheme } from "../../lib/project-themes.ts";
 import { defaultMarpThemeName } from "../../../../shared/marp-dialect.ts";
 import { MARP_ALLOWED_HTML_TAGS } from "../../lib/marp-html.ts";
+import { BUILTIN_TRANSITIONS } from "../../lib/marp-transition.ts";
 
 export type EditorCompletionConfig = {
 	fileKind: "markdown" | "css";
@@ -152,6 +153,12 @@ const directives: DirectiveDefinition[] = [
 		name: "backgroundSize",
 		detail: "background size",
 		info: "Controls how the slide background image is sized.",
+		scope: "local",
+	},
+	{
+		name: "transition",
+		detail: "slide transition",
+		info: "Animates moving on from this slide while presenting, e.g. fade 1s. Themes can add their own with marp-transition-<name> keyframes.",
 		scope: "local",
 	},
 ];
@@ -356,6 +363,10 @@ function valueOptions(name: string, config: EditorCompletionConfig): Completion[
 			);
 		case "backgroundSize":
 			return ["cover", "contain", "auto"].map((value) => option(value, "CSS size"));
+		case "transition":
+			return [...BUILTIN_TRANSITIONS, "none"].map((value) =>
+				option(value, value === "none" ? "no transition" : "built-in transition"),
+			);
 		case "backgroundColor":
 		case "color":
 			return ["black", "white", "transparent", "currentColor"].map((value) =>
