@@ -24,6 +24,7 @@ const CLIENT_OPTIONS: { id: ClientId; label: string }[] = [
 ];
 
 const CAPABILITIES = [
+	"List projects & files",
 	"Create, rename & delete projects",
 	"Read & edit Markdown/CSS live",
 	"Manage files & folders",
