@@ -4,6 +4,7 @@ import contentRoutes from "./projects/content-routes.ts";
 import exportRoutes from "./projects/export-routes.ts";
 import importRoutes from "./projects/import-routes.ts";
 import gitRoutes from "./projects/git-routes.ts";
+import searchRoutes from "./projects/search-routes.ts";
 import {
 	requireProjectAccess,
 	type ProjectRouteVariables,
@@ -20,6 +21,7 @@ app.route("/", projectRoutes);
 app.route("/", collaboratorRoutes);
 app.route("/", exportRoutes);
 app.route("/", gitRoutes);
+app.route("/", searchRoutes);
 app.route("/", contentRoutes);
 
 export default app;

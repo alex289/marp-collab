@@ -1,83 +1,53 @@
-export type TextSearchMatch = {
-	line: number;
-	column: number;
-	startOffset: number;
-	endOffset: number;
-	matchedText: string;
-	linePreview: string;
+export {
+	findTextMatches,
+	getMatchPreviewSegments,
+	isCurrentTextMatch,
+	type MatchPreviewSegments,
+	type TextSearchMatch,
+	type TextSearchOptions,
+} from "../../../shared/text-search.ts";
+import { findTextMatches, type TextSearchMatch } from "../../../shared/text-search.ts";
+
+export type ProjectSearchFileResult = {
+	fileId: string;
+	matches: TextSearchMatch[];
 };
 
-type LineSpan = {
-	startOffset: number;
-	endOffset: number;
-};
+const MAX_ACTIVE_FILE_MATCHES = 100;
 
-function getLineSpans(content: string): LineSpan[] {
-	const lines: LineSpan[] = [];
-	let lineStart = 0;
-	let offset = 0;
-
-	while (offset < content.length) {
-		const char = content[offset];
-
-		if (char === "\r" || char === "\n") {
-			lines.push({ startOffset: lineStart, endOffset: offset });
-
-			if (char === "\r" && content[offset + 1] === "\n") {
-				offset += 2;
-			} else {
-				offset += 1;
-			}
-
-			lineStart = offset;
-			continue;
-		}
-
-		offset += 1;
+/**
+ * Replaces the active file's entry in server search results with matches computed
+ * directly from the local Yjs text, so unsynced keystrokes are reflected immediately.
+ */
+export function mergeActiveFileSearchResults(
+	serverFiles: readonly ProjectSearchFileResult[],
+	activeFileId: string | null,
+	activeContent: string | null,
+	query: string,
+	caseSensitive: boolean,
+): { files: ProjectSearchFileResult[]; totalMatches: number; activeFileTruncated: boolean } {
+	if (!activeFileId || activeContent === null || query.length === 0) {
+		const files = [...serverFiles];
+		const totalMatches = files.reduce((sum, file) => sum + file.matches.length, 0);
+		return { files, totalMatches, activeFileTruncated: false };
 	}
 
-	lines.push({ startOffset: lineStart, endOffset: content.length });
-	return lines;
-}
-
-export function findTextMatches(content: string, query: string): TextSearchMatch[] {
-	if (query === "") {
-		return [];
+	const activeMatches = findTextMatches(activeContent, query, {
+		caseSensitive,
+		maxMatches: MAX_ACTIVE_FILE_MATCHES + 1,
+	});
+	const activeFileTruncated = activeMatches.length > MAX_ACTIVE_FILE_MATCHES;
+	if (activeFileTruncated) {
+		activeMatches.length = MAX_ACTIVE_FILE_MATCHES;
 	}
 
-	const matches: TextSearchMatch[] = [];
-	const lines = getLineSpans(content);
-	const pattern = new RegExp(query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "giu");
-	let lineIndex = 0;
-
-	for (const { 0: matchedText, index: startOffset } of content.matchAll(pattern)) {
-		while (lineIndex < lines.length - 1 && startOffset >= lines[lineIndex + 1].startOffset) {
-			lineIndex += 1;
-		}
-
-		const line = lines[lineIndex];
-		matches.push({
-			line: lineIndex + 1,
-			column: startOffset - line.startOffset + 1,
-			startOffset,
-			endOffset: startOffset + matchedText.length,
-			matchedText,
-			linePreview: content.slice(line.startOffset, line.endOffset),
-		});
-	}
-
-	return matches;
-}
-
-export function isCurrentTextMatch(content: string, match: TextSearchMatch): boolean {
-	const { startOffset, endOffset, matchedText } = match;
-	return (
-		Number.isInteger(startOffset) &&
-		Number.isInteger(endOffset) &&
-		startOffset >= 0 &&
-		endOffset <= content.length &&
-		endOffset - startOffset === matchedText.length &&
-		matchedText.length > 0 &&
-		content.slice(startOffset, endOffset) === matchedText
-	);
+	const withoutActive = serverFiles.filter((file) => file.fileId !== activeFileId);
+	const files =
+		activeMatches.length > 0
+			? [...withoutActive, { fileId: activeFileId, matches: activeMatches }].sort((left, right) =>
+					left.fileId.localeCompare(right.fileId),
+				)
+			: withoutActive;
+	const totalMatches = files.reduce((sum, file) => sum + file.matches.length, 0);
+	return { files, totalMatches, activeFileTruncated };
 }

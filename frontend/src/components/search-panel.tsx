@@ -1,23 +1,64 @@
 import { useState } from "react";
-import { Replace, Search } from "lucide-react";
+import { CaseSensitive, ChevronDown, ChevronRight, Loader2, Replace, Search } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SidebarGroup, SidebarGroupContent, SidebarGroupLabel } from "@/components/ui/sidebar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import type { useActiveFileSearch } from "@/hooks/use-active-file-search";
+import { getMatchPreviewSegments } from "@/lib/text-search";
+import type { useProjectSearch } from "@/hooks/use-project-search";
 
 export function SearchPanel({
-	fileId,
-	matches,
+	searchedQuery,
+	searchedCaseSensitive,
+	files,
+	totalMatches,
+	truncated,
+	skippedFiles,
 	readOnly,
+	isSearching,
+	isReplacing,
 	error,
 	onSearch,
 	onReplaceOne,
+	onReplaceInFile,
 	onReplaceAll,
-}: ReturnType<typeof useActiveFileSearch>) {
+	onSelectMatch,
+}: ReturnType<typeof useProjectSearch>) {
 	const [query, setQuery] = useState("");
 	const [replacement, setReplacement] = useState("");
+	const [caseSensitive, setCaseSensitive] = useState(false);
+	const [collapsedFiles, setCollapsedFiles] = useState<ReadonlySet<string>>(new Set());
+
+	const busy = isSearching || isReplacing;
+	const resultsMatchInput =
+		query.length > 0 && query === searchedQuery && caseSensitive === searchedCaseSensitive;
+
+	const toggleFileCollapsed = (fileId: string) => {
+		setCollapsedFiles((previous) => {
+			const next = new Set(previous);
+			if (next.has(fileId)) {
+				next.delete(fileId);
+			} else {
+				next.add(fileId);
+			}
+			return next;
+		});
+	};
+
+	const toggleCaseSensitive = () => {
+		const next = !caseSensitive;
+		setCaseSensitive(next);
+		if (query.length > 0) {
+			onSearch(query, next);
+		}
+	};
+
+	const summaryText =
+		totalMatches === 0
+			? "0 matches"
+			: `${totalMatches} ${totalMatches === 1 ? "match" : "matches"} in ${files.length} ${files.length === 1 ? "file" : "files"}${truncated ? " (limit reached)" : ""}`;
 
 	return (
 		<SidebarGroup className="h-full">
@@ -26,31 +67,49 @@ export function SearchPanel({
 				<span>Search</span>
 			</SidebarGroupLabel>
 			<SidebarGroupContent className="flex h-full min-h-0 flex-col gap-2">
-				<Label
-					className="text-xs font-medium text-muted-foreground"
-					htmlFor="active-file-search-query"
-				>
+				<Label className="text-xs font-medium text-muted-foreground" htmlFor="project-search-query">
 					Find
 				</Label>
-				<Input
-					id="active-file-search-query"
-					value={query}
-					onChange={(event) => setQuery(event.target.value)}
-					onKeyDown={(event) => {
-						if (event.key === "Enter") {
-							onSearch(query);
-						}
-					}}
-					aria-label="Find"
-				/>
+				<div className="flex min-w-0 items-center gap-1">
+					<Input
+						id="project-search-query"
+						value={query}
+						onChange={(event) => setQuery(event.target.value)}
+						onKeyDown={(event) => {
+							if (event.key === "Enter") {
+								onSearch(query, caseSensitive);
+							}
+						}}
+						placeholder="Search across all project files…"
+						aria-label="Find"
+					/>
+					<Tooltip>
+						<TooltipTrigger
+							render={
+								<Button
+									type="button"
+									size="icon"
+									variant={caseSensitive ? "secondary" : "outline"}
+									className="shrink-0"
+									aria-label="Match case"
+									aria-pressed={caseSensitive}
+									onClick={toggleCaseSensitive}
+								>
+									<CaseSensitive />
+								</Button>
+							}
+						/>
+						<TooltipContent>Match case</TooltipContent>
+					</Tooltip>
+				</div>
 				<Label
 					className="text-xs font-medium text-muted-foreground"
-					htmlFor="active-file-search-replacement"
+					htmlFor="project-search-replacement"
 				>
 					Replace
 				</Label>
 				<Input
-					id="active-file-search-replacement"
+					id="project-search-replacement"
 					value={replacement}
 					onChange={(event) => setReplacement(event.target.value)}
 					aria-label="Replace"
@@ -60,62 +119,132 @@ export function SearchPanel({
 						type="button"
 						size="sm"
 						variant="outline"
-						onClick={() => onSearch(query)}
-						disabled={query.length === 0}
+						onClick={() => onSearch(query, caseSensitive)}
+						disabled={query.length === 0 || busy}
 					>
-						<Search />
+						{isSearching ? <Loader2 className="animate-spin" /> : <Search />}
 						Find
 					</Button>
 					<Button
 						type="button"
 						size="sm"
-						onClick={() => onReplaceAll(query, replacement)}
-						disabled={readOnly || query.length === 0 || matches.length === 0}
+						onClick={() => void onReplaceAll(searchedQuery, replacement, searchedCaseSensitive)}
+						disabled={readOnly || !resultsMatchInput || totalMatches === 0 || busy}
 					>
-						<Replace />
+						{isReplacing ? <Loader2 className="animate-spin" /> : <Replace />}
 						Replace all
 					</Button>
 				</div>
 				{error ? <p className="text-xs text-destructive">{error}</p> : null}
-				<p className="text-xs text-muted-foreground">{matches.length} matches</p>
+				<p className="text-xs text-muted-foreground">{summaryText}</p>
+				{skippedFiles.length > 0 ? (
+					<p className="text-[11px] text-muted-foreground">
+						{skippedFiles.length} large {skippedFiles.length === 1 ? "file" : "files"} skipped.
+					</p>
+				) : null}
 				<div className="min-h-0 flex-1 overflow-y-auto pr-1">
-					{matches.length > 0 && (
-						<div key={fileId} className="mb-3 min-w-0">
-							<p className="mb-1 truncate text-xs font-medium">{fileId}</p>
-							<div className="grid gap-1">
-								{matches.map((match) => (
-									<div
-										key={`${match.startOffset}:${match.endOffset}`}
-										className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-2 rounded-md border border-sidebar-border p-2 text-xs"
+					{files.map((fileResult) => {
+						const collapsed = collapsedFiles.has(fileResult.fileId);
+						return (
+							<div key={fileResult.fileId} className="mb-3 min-w-0">
+								<div className="mb-1 flex min-w-0 items-center gap-1">
+									<button
+										type="button"
+										onClick={() => toggleFileCollapsed(fileResult.fileId)}
+										aria-expanded={!collapsed}
+										className="flex min-w-0 flex-1 items-center gap-1 rounded px-1 py-0.5 text-left text-xs font-medium hover:bg-sidebar-accent hover:text-sidebar-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
 									>
-										<div className="min-w-0">
-											<span className="mb-1 block text-muted-foreground">
-												Line {match.line}, column {match.column}
-											</span>
-											<span className="block truncate font-mono">{match.linePreview}</span>
-										</div>
+										{collapsed ? (
+											<ChevronRight className="size-3.5 shrink-0 text-muted-foreground" />
+										) : (
+											<ChevronDown className="size-3.5 shrink-0 text-muted-foreground" />
+										)}
+										<span className="truncate" title={fileResult.fileId}>
+											{fileResult.fileId}
+										</span>
+										<Badge variant="secondary" className="ml-auto h-4 px-1.5 text-[10px]">
+											{fileResult.matches.length}
+										</Badge>
+									</button>
+									{!readOnly ? (
 										<Tooltip>
 											<TooltipTrigger
 												render={
 													<Button
 														type="button"
-														size="icon"
+														size="icon-xs"
 														variant="ghost"
-														aria-label="Replace this match"
-														disabled={readOnly}
-														onClick={() => onReplaceOne(match, replacement)}
+														aria-label={`Replace all in ${fileResult.fileId}`}
+														disabled={busy || !resultsMatchInput}
+														onClick={() =>
+															void onReplaceInFile(
+																fileResult.fileId,
+																searchedQuery,
+																replacement,
+																searchedCaseSensitive,
+															)
+														}
 													>
 														<Replace />
 													</Button>
 												}
 											/>
-											<TooltipContent>Replace this match</TooltipContent>
+											<TooltipContent>Replace all in file</TooltipContent>
 										</Tooltip>
+									) : null}
+								</div>
+								{!collapsed ? (
+									<div className="grid gap-1">
+										{fileResult.matches.map((match) => {
+											const segments = getMatchPreviewSegments(match);
+											return (
+												<div
+													key={`${fileResult.fileId}:${match.startOffset}:${match.endOffset}`}
+													className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-1 rounded-md border border-sidebar-border p-1.5 text-xs transition-colors hover:bg-sidebar-accent/50"
+												>
+													<button
+														type="button"
+														onClick={() => onSelectMatch(fileResult.fileId, match)}
+														className="min-w-0 rounded-sm text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+													>
+														<span className="mb-0.5 block text-[11px] text-muted-foreground">
+															Line {match.line}, column {match.column}
+														</span>
+														<span className="block truncate font-mono">
+															{segments.before}
+															<mark className="rounded-xs bg-primary/25 px-0.5 text-foreground">
+																{segments.match}
+															</mark>
+															{segments.after}
+														</span>
+													</button>
+													<Tooltip>
+														<TooltipTrigger
+															render={
+																<Button
+																	type="button"
+																	size="icon-xs"
+																	variant="ghost"
+																	aria-label="Replace this match"
+																	disabled={readOnly || busy}
+																	onClick={() =>
+																		void onReplaceOne(fileResult.fileId, match, replacement)
+																	}
+																>
+																	<Replace />
+																</Button>
+															}
+														/>
+														<TooltipContent>Replace this match</TooltipContent>
+													</Tooltip>
+												</div>
+											);
+										})}
 									</div>
-								))}
+								) : null}
 							</div>
-						</div>
-					)}
+						);
+					})}
 				</div>
 			</SidebarGroupContent>
 		</SidebarGroup>
