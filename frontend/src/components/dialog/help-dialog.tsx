@@ -112,6 +112,13 @@ const SYNTAX_TIPS: SyntaxTip[] = [
 		docs: "tailwind.md",
 	},
 	{
+		title: "Slide transitions",
+		description:
+			"Animates leaving a slide while presenting. Use a built-in name or keyframes from your theme.",
+		code: "<!-- transition: fade 1s -->",
+		docs: "slide-transitions.md",
+	},
+	{
 		title: "Images",
 		description:
 			"Paste or drop images into the editor, or drag files onto the file tree to upload.",
