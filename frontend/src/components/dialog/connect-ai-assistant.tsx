@@ -25,9 +25,11 @@ const CLIENT_OPTIONS: { id: ClientId; label: string }[] = [
 
 const CAPABILITIES = [
 	"List projects & files",
-	"Read decks",
-	"Create decks",
-	"Edit live",
+	"Read & edit Markdown/CSS live",
+	"Manage files & folders",
+	"Upload assets",
+	"Check references",
+	"Preview slides visually",
 	"Pull & push Git",
 ];
 

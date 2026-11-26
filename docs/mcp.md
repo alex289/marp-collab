@@ -13,17 +13,17 @@ clients that require Dynamic Client Registration (DCR), explicitly set
 registration to unauthenticated clients; accessing presentations still requires
 user login and consent. Registration is disabled by default.
 
-| Tool                                    | What it does                                                                                                                                                                                                        |
-| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `list_projects`, `list_files`           | Discover accessible projects, files, folders, and assets.                                                                                                                                                           |
-| `read_file`, `create_file`, `edit_file` | Work with Markdown and CSS. Reads include live edits. Pass the returned `revision` as `expectedRevision` when editing. Creation rejects an existing file.                                                           |
-| `create_folder`                         | Create a folder and any missing parents.                                                                                                                                                                            |
-| `move_entry`                            | Move or rename a file or folder. Supply its current `path` and full new `destination` within the project. The destination's parent must exist. Files keep their extensions, and moves reject existing destinations. |
-| `delete_entry`                          | Delete a file or empty folder. Use `dryRun: true` to list affected project paths. Use `recursive: true` to delete a non-empty folder.                                                                               |
-| `upload_asset`                          | Create an image, font, or video from standard `base64` data up to 2 MiB. The path must use an extension supported by the app.                                                                                       |
-| `check_references`                      | Report local Markdown includes, images, and CSS URLs. Pass an entry's `path` to see references to or from it before moving or deleting it.                                                                          |
-| `preview_presentation`                  | Render the current Markdown with includes and themes, returning slide count and issues.                                                                                                                             |
-| `pull_from_git`, `push_to_git`          | Synchronize a project with its connected Git repository.                                                                                                                                                            |
+| Tool                                    | What it does                                                                                                                                                                                                                         |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `list_projects`, `list_files`           | Discover accessible projects, files, folders, and assets.                                                                                                                                                                            |
+| `read_file`, `create_file`, `edit_file` | Work with Markdown and CSS. Reads include live edits. Pass the returned `revision` as `expectedRevision` when editing. Creation rejects an existing file.                                                                            |
+| `create_folder`                         | Create a folder and any missing parents.                                                                                                                                                                                             |
+| `move_entry`                            | Move or rename a file or folder. Supply its current `path` and full new `destination` within the project. The destination's parent must exist. Files keep their extensions, and moves reject existing destinations.                  |
+| `delete_entry`                          | Delete a file or empty folder. Use `dryRun: true` to list affected project paths. Use `recursive: true` to delete a non-empty folder.                                                                                                |
+| `upload_asset`                          | Create an image, font, or video from standard `base64` data up to 2 MiB. The path must use an extension supported by the app.                                                                                                        |
+| `check_references`                      | Report local Markdown includes, images, and CSS URLs. Pass an entry's `path` to see references to or from it before moving or deleting it.                                                                                           |
+| `preview_presentation`                  | Render the current Markdown with includes and themes, returning slide count and issues. Pass `slides` (1-based numbers, up to 5) and optional `format` (`png`, `jpeg`, `webp`) to render visual slide images via Gotenberg Chromium. |
+| `pull_from_git`, `push_to_git`          | Synchronize a project with its connected Git repository.                                                                                                                                                                             |
 
 Existing clients can continue using `read_presentation`, `create_presentation`,
 and `edit_presentation` for Markdown. The server also exposes a Marp authoring
@@ -37,9 +37,9 @@ collaborator management are available through the app.
 
 Include paths resolve relative to the file containing the directive. Both
 checks resolve images in expanded Markdown relative to the deck being rendered. Check references again after moves or deletions and
-update links in the affected files. Render checks run on the server and report
-Marp rendering and include issues, without a browser layout check or remote URL
-fetches.
+update links in the affected files. By default, `preview_presentation` runs a fast server-side Marp check without a browser or remote URL
+fetches. When `slides` are requested, Gotenberg renders those slides in headless Chromium using the same strict Content-Security-Policy and
+local asset bundling as PDF export, returning images so multimodal AI clients can inspect layout, overflow, and styling.
 
 When the project owner has connected a Git repository in the app, the assistant can
 pull remote changes and push commits with its own one-line commit message, for
