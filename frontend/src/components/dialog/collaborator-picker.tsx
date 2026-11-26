@@ -107,11 +107,12 @@ export function CollaboratorPicker({
 			<Autocomplete.Portal>
 				<Autocomplete.Positioner sideOffset={4} align="start" className="isolate z-50">
 					<Autocomplete.Popup className="w-(--anchor-width) max-h-(--available-height) min-w-52 max-w-(--available-width) overflow-y-auto rounded-lg bg-popover text-popover-foreground shadow-md ring-1 ring-foreground/10">
-						<Autocomplete.Status
-							className={status ? "px-3 py-2 text-xs text-muted-foreground" : "sr-only"}
-						>
-							{status ?? `${candidates.length} matching accounts`}
+						<Autocomplete.Status className="sr-only">
+							{candidates.length > 0 ? `${candidates.length} matching accounts` : null}
 						</Autocomplete.Status>
+						<Autocomplete.Empty>
+							{status ? <p className="px-3 py-2 text-xs text-muted-foreground">{status}</p> : null}
+						</Autocomplete.Empty>
 						<Autocomplete.List className="p-1 empty:hidden">
 							{(candidate: Candidate) => (
 								<Autocomplete.Item

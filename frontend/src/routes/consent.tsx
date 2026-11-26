@@ -23,7 +23,7 @@ const permissions: Record<string, string> = {
 	"presentations:read":
 		"Read, check and visually preview presentation files in projects you can access.",
 	"presentations:write":
-		"Create, edit, move and delete files and folders, and sync with Git, in projects where you have write access.",
+		"Create, rename and delete projects you own; create, edit, move and delete files and folders, and sync with Git, in projects where you have write access.",
 	offline_access: "Keep access until the connection expires or its authorization is revoked.",
 };
 

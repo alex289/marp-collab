@@ -25,6 +25,7 @@ const CLIENT_OPTIONS: { id: ClientId; label: string }[] = [
 
 const CAPABILITIES = [
 	"List projects & files",
+	"Create, rename & delete projects",
 	"Read & edit Markdown/CSS live",
 	"Manage files & folders",
 	"Upload assets",
@@ -163,8 +164,8 @@ export function ConnectAiAssistantDialog({
 						))}
 					</div>
 					<p className="text-muted-foreground">
-						No API key needed: your assistant writes the Markdown. It cannot delete projects or
-						change collaborators, and every call is checked against your current permissions.
+						No API key needed: your assistant writes the Markdown. It cannot change collaborators or
+						Git repository settings, and every call is checked against your current permissions.
 					</p>
 				</div>
 

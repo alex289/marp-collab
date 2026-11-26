@@ -275,9 +275,15 @@ test("rejects JWTs intended for browser sessions", async () => {
 
 test("lists only permitted projects and enforces OAuth write scopes", async () => {
 	const listed = await call("list_projects", {}, readToken);
-	deepEqual(listed.structuredContent.projects, [
-		{ id: "training", name: "Training", readOnly: false },
-	]);
+	equal(listed.structuredContent.projects.length, 1);
+	const [training] = listed.structuredContent.projects;
+	equal(training.id, "training");
+	equal(training.name, "Training");
+	equal(training.isOwner, true);
+	equal(training.readOnly, false);
+	equal(training.gitConfigured, false);
+	ok(typeof training.createdAt === "string" && !Number.isNaN(Date.parse(training.createdAt)));
+	ok(typeof training.updatedAt === "string" && !Number.isNaN(Date.parse(training.updatedAt)));
 	const { WRITE_TOOL_NAMES } = await import("./server.ts");
 	const readTools = await rpc("tools/list", {}, readToken);
 	const toolList = await readTools.text();
@@ -926,6 +932,13 @@ test("pulls from and pushes to the project's Git repository with a commit messag
 		credentials: {},
 	});
 
+	const listedWithGit = await call("list_projects", {}, readToken);
+	equal(
+		listedWithGit.structuredContent.projects.find((p: { id: string }) => p.id === "training")
+			?.gitConfigured,
+		true,
+	);
+
 	const pulled = await call("pull_from_git", { projectId: "training" });
 	ok(!pulled.isError, pulled.content[0].text);
 	equal(pulled.structuredContent.pulled, true);
@@ -1022,4 +1035,176 @@ test("pulls from and pushes to the project's Git repository with a commit messag
 		await openEditor.disconnect();
 	}
 	equal(run(remote, "rev-parse", "main"), head);
+});
+
+test("creates, renames, and deletes owned projects through MCP with owner checks and confirmation", async (t) => {
+	const createdDefault = await call("create_project", { name: "  Quarterly Review  " });
+	ok(!createdDefault.isError, createdDefault.content[0].text);
+	const defaultProject = createdDefault.structuredContent;
+	equal(defaultProject.name, "Quarterly Review");
+	equal(defaultProject.template, "default");
+	ok(defaultProject.files.some((file: { id: string }) => file.id === "presentation.md"));
+	match(
+		(await storage.getDocumentContent(`project/${defaultProject.id}/presentation.md`)) ?? "",
+		/Quarterly Review/,
+	);
+
+	const createdWhs = await call("create_project", { name: "Campus Talk", template: "whs" });
+	ok(!createdWhs.isError, createdWhs.content[0].text);
+	const whsProject = createdWhs.structuredContent;
+	equal(whsProject.template, "whs");
+	ok(whsProject.files.some((file: { id: string }) => file.id === "theme/theme.css"));
+
+	equal((await call("create_project", { name: "   " })).isError, true);
+
+	const renamed = await call("rename_project", {
+		projectId: defaultProject.id,
+		name: "Q4 Review",
+	});
+	ok(!renamed.isError, renamed.content[0].text);
+	deepEqual(renamed.structuredContent, { id: defaultProject.id, name: "Q4 Review" });
+
+	const listedAfterRename = await call("list_projects", {}, readToken);
+	const renamedEntry = listedAfterRename.structuredContent.projects.find(
+		(project: { id: string }) => project.id === defaultProject.id,
+	);
+	equal(renamedEntry?.name, "Q4 Review");
+	equal(renamedEntry?.isOwner, true);
+	equal(renamedEntry?.gitConfigured, false);
+
+	// Collaborators with write access and outsiders cannot rename or delete another owner's project.
+	db.prepare(
+		"insert into project_collaborator (projectId,userId,readOnly,createdAt) values (?, 'outsider', 0, ?)",
+	).run(defaultProject.id, new Date().toISOString());
+
+	const { createPresentationServer } = await import("./server.ts");
+	const { createMcpHandler } = await import("@modelcontextprotocol/server");
+	const callAs = async (userId: string, name: string, args: Record<string, unknown>) => {
+		const handler = createMcpHandler(() =>
+			createPresentationServer(userId, new Set(["presentations:read", "presentations:write"])),
+		);
+		const response = await handler.fetch(
+			new Request(`${origin}/mcp`, {
+				method: "POST",
+				headers: {
+					"content-type": "application/json",
+					accept: "application/json, text/event-stream",
+					"mcp-protocol-version": "2025-11-25",
+				},
+				body: JSON.stringify({
+					jsonrpc: "2.0",
+					id: 1,
+					method: "tools/call",
+					params: { name, arguments: args },
+				}),
+			}),
+		);
+		const text = await response.text();
+		const message = text.startsWith("event:")
+			? JSON.parse(text.split("data: ")[1].split("\n")[0])
+			: JSON.parse(text);
+		return message.result;
+	};
+
+	const collaboratorList = await callAs("outsider", "list_projects", {});
+	const sharedEntry = collaboratorList.structuredContent.projects.find(
+		(project: { id: string }) => project.id === defaultProject.id,
+	);
+	equal(sharedEntry?.isOwner, false);
+	equal(sharedEntry?.readOnly, false);
+
+	const collaboratorRename = await callAs("outsider", "rename_project", {
+		projectId: defaultProject.id,
+		name: "Hijacked",
+	});
+	equal(collaboratorRename.isError, true);
+	match(collaboratorRename.content[0].text, /Only the project owner/);
+
+	const collaboratorDelete = await callAs("outsider", "delete_project", {
+		projectId: defaultProject.id,
+		confirmName: "Q4 Review",
+	});
+	equal(collaboratorDelete.isError, true);
+	match(collaboratorDelete.content[0].text, /Only the project owner/);
+
+	const outsiderDelete = await callAs("reader", "delete_project", {
+		projectId: defaultProject.id,
+		confirmName: "Q4 Review",
+	});
+	equal(outsiderDelete.isError, true);
+	match(outsiderDelete.content[0].text, /Project not found or access denied/);
+
+	// Dry run reports impact without deleting.
+	const dryRun = await call("delete_project", {
+		projectId: defaultProject.id,
+		dryRun: true,
+	});
+	ok(!dryRun.isError, dryRun.content[0].text);
+	deepEqual(dryRun.structuredContent, {
+		id: defaultProject.id,
+		name: "Q4 Review",
+		fileCount: 1,
+		collaboratorCount: 1,
+		gitConfigured: false,
+		deleted: false,
+	});
+
+	// Missing or mismatched confirmName is rejected.
+	for (const confirmName of [undefined, "Quarterly Review", "q4 review"]) {
+		const rejected = await call("delete_project", {
+			projectId: defaultProject.id,
+			...(confirmName !== undefined ? { confirmName } : {}),
+		});
+		equal(rejected.isError, true);
+		match(rejected.content[0].text, /confirmName/);
+	}
+
+	// Deletion is blocked while Git sync holds the repository lock.
+	const { beginProjectSync } = await import("../projects/project-operations.ts");
+	const sync = beginProjectSync(defaultProject.id);
+	ok(sync);
+	try {
+		const blocked = await call("delete_project", {
+			projectId: defaultProject.id,
+			confirmName: "Q4 Review",
+		});
+		equal(blocked.isError, true);
+		match(blocked.content[0].text, /syncing with Git/);
+	} finally {
+		sync.release();
+	}
+
+	// Open collab connections are closed and files/records are removed on confirmed deletion.
+	const docName = `project/${defaultProject.id}/presentation.md`;
+	const openEditor = await collab.openDirectConnection(docName, { userId: "owner" });
+	const closeConnections = t.mock.method(collab, "closeConnections");
+	try {
+		const deleted = await call("delete_project", {
+			projectId: defaultProject.id,
+			confirmName: "Q4 Review",
+		});
+		ok(!deleted.isError, deleted.content[0].text);
+		deepEqual(deleted.structuredContent, {
+			id: defaultProject.id,
+			name: "Q4 Review",
+			deleted: true,
+		});
+		ok(
+			closeConnections.mock.calls.some((mockCall) => mockCall.arguments[0] === docName),
+			"expected open project documents to be closed",
+		);
+	} finally {
+		await openEditor.disconnect();
+	}
+
+	equal(await storage.getDocumentContent(docName), undefined);
+	equal(db.prepare("select id from project where id = ?").get(defaultProject.id), undefined);
+
+	// Clean up the WHS template project as well.
+	const deletedWhs = await call("delete_project", {
+		projectId: whsProject.id,
+		confirmName: "Campus Talk",
+	});
+	ok(!deletedWhs.isError, deletedWhs.content[0].text);
+	equal(deletedWhs.structuredContent.deleted, true);
 });

@@ -50,7 +50,7 @@ test("authorizes an AI client through existing login and consent", async ({ page
 	).toBeVisible();
 	await expect(
 		page.getByText(
-			"Create, edit, move and delete files and folders, and sync with Git, in projects where you have write access.",
+			"Create, rename and delete projects you own; create, edit, move and delete files and folders, and sync with Git, in projects where you have write access.",
 		),
 	).toBeVisible();
 	await page.getByRole("button", { name: "Allow access" }).click();
@@ -82,6 +82,9 @@ test("authorizes an AI client through existing login and consent", async ({ page
 	expect(tools.ok(), `${tools.status()}: ${await tools.text()}`).toBeTruthy();
 	const available = await tools.text();
 	for (const name of [
+		"create_project",
+		"rename_project",
+		"delete_project",
 		"create_presentation",
 		"edit_file",
 		"move_entry",
