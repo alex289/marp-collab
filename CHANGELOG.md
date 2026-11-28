@@ -1,5 +1,11 @@
 # marp-collab
 
+## 0.7.0
+
+### Minor Changes
+
+- [#118](https://github.com/alex289/marp-collab/pull/118) [`f536cc9`](https://github.com/alex289/marp-collab/commit/f536cc91e4115f0d0b2a299722921710493eec07) Thanks [@alex289](https://github.com/alex289)! - Play slide transitions in presentation and viewer mode. The `transition` directive works as in Marp CLI: the 33 built-in transitions (e.g. `transition: fade 1s`), custom transitions from project themes via `marp-transition-<name>` keyframes, backward-specific keyframes, `--marp-transition-duration` and `--marp-transition-direction`. Viewers who prefer reduced motion get a plain crossfade.
+
 ## 0.6.0
 
 ### Minor Changes
